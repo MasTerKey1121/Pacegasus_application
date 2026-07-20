@@ -82,15 +82,19 @@ CREATE TABLE IF NOT EXISTS otp_codes (
   id            UUID PRIMARY KEY DEFAULT gen_random_uuid(),
   email         VARCHAR(255) NOT NULL,
   otp_hash      VARCHAR(255) NOT NULL, -- bcrypt hash of the 6-digit code, never store plaintext
+  otp_ref       VARCHAR(8) NOT NULL,   -- reference code shown to the user (e.g. "K7X9QZ"); not secret,
+                                        -- used to look up + disambiguate which OTP transaction is being verified
   purpose       otp_purpose_enum NOT NULL DEFAULT 'login',
   attempts      SMALLINT NOT NULL DEFAULT 0,
   max_attempts  SMALLINT NOT NULL DEFAULT 5,
   is_used       BOOLEAN NOT NULL DEFAULT FALSE,
   expires_at    TIMESTAMPTZ NOT NULL,
-  created_at    TIMESTAMPTZ NOT NULL DEFAULT now()
+  created_at    TIMESTAMPTZ NOT NULL DEFAULT now(),
+  UNIQUE (otp_ref)
 );
 CREATE INDEX IF NOT EXISTS idx_otp_codes_email ON otp_codes(email);
 CREATE INDEX IF NOT EXISTS idx_otp_codes_email_created ON otp_codes(email, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_otp_codes_ref ON otp_codes(otp_ref);
 
 -- ---------------------------------------------------------------------
 -- AUTH: refresh tokens (for JWT session rotation)

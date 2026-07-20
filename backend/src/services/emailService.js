@@ -21,30 +21,37 @@ function getTransporter() {
 }
 
 /**
- * Sends a 6-digit OTP code to the given email address.
+ * Sends a 6-digit OTP code (with reference code) to the given email address.
  */
-async function sendOtpEmail(email, otp, purpose = 'login') {
+async function sendOtpEmail(email, otp, purpose = 'login', otpRef = '') {
   const subject =
     purpose === 'register'
       ? 'ยืนยันการสมัครสมาชิก Pacegasus'
       : 'รหัสยืนยันการเข้าสู่ระบบ Pacegasus';
+
+  const refLine = otpRef
+    ? `<p style="color:#6b7280; font-size: 13px;">รหัสอ้างอิง (Ref): <strong>${otpRef}</strong></p>`
+    : '';
 
   const html = `
     <div style="font-family: Arial, sans-serif; max-width: 420px; margin: 0 auto;">
       <h2 style="color:#2563eb;">Pacegasus</h2>
       <p>รหัส OTP ของคุณคือ:</p>
       <p style="font-size: 32px; font-weight: bold; letter-spacing: 8px;">${otp}</p>
+      ${refLine}
       <p>รหัสนี้จะหมดอายุใน ${env.otp.expiresMinutes} นาที</p>
       <p style="color:#6b7280; font-size: 12px;">หากคุณไม่ได้ทำรายการนี้ กรุณาเพิกเฉยต่ออีเมลฉบับนี้</p>
     </div>
   `;
+
+  const refText = otpRef ? ` | รหัสอ้างอิง: ${otpRef}` : '';
 
   await getTransporter().sendMail({
     from: `"${env.smtp.fromName}" <${env.smtp.fromEmail}>`,
     to: email,
     subject,
     html,
-    text: `รหัส OTP ของคุณคือ ${otp} (หมดอายุใน ${env.otp.expiresMinutes} นาที)`,
+    text: `รหัส OTP ของคุณคือ ${otp}${refText} (หมดอายุใน ${env.otp.expiresMinutes} นาที)`,
   });
 }
 

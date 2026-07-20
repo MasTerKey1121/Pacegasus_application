@@ -2,6 +2,7 @@ const Joi = require('joi');
 
 const emailSchema = Joi.string().trim().lowercase().email().required();
 const otpSchema = Joi.string().trim().length(6).pattern(/^\d+$/).required();
+const otpRefSchema = Joi.string().trim().uppercase().length(6).pattern(/^[A-Z0-9]+$/).required();
 
 const requestOtpSchema = Joi.object({
   email: emailSchema,
@@ -11,6 +12,7 @@ const requestOtpSchema = Joi.object({
 const verifyOtpSchema = Joi.object({
   email: emailSchema,
   otp: otpSchema,
+  otpRef: otpRefSchema,
   displayName: Joi.string().trim().max(150).optional(),
 });
 

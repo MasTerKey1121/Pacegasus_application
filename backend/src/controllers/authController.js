@@ -89,7 +89,11 @@ const requestOtp = asyncHandler(async (req, res) => {
   res.status(200).json({
     success: true,
     message: 'ส่งรหัส OTP ไปยังอีเมลของคุณแล้ว',
-    data: { email, expiresInMinutes: result.expiresInMinutes },
+    data: {
+      email,
+      expiresInMinutes: result.expiresInMinutes,
+      otpRef: result.otpRef,
+    },
   });
 });
 
@@ -98,9 +102,9 @@ const verifyOtp = asyncHandler(async (req, res) => {
   const { value, error } = verifyOtpSchema.validate(req.body);
   if (error) throw new ApiError(400, error.message);
 
-  const { email, otp, displayName } = value;
+  const { email, otp, otpRef, displayName } = value;
 
-  await otpService.verifyOtp(email, otp);
+  await otpService.verifyOtp(email, otp, otpRef);
 
   let user = await findUserByEmail(email);
   if (!user) {

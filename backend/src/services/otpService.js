@@ -13,6 +13,17 @@ function generateOtpCode(length) {
   return code;
 }
 
+// Generates a short reference code (e.g. "A1B2C3") shown to the user
+// alongside the OTP email, so they can confirm which request is which.
+function generateOtpRef(length = 6) {
+  const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
+  let ref = '';
+  for (let i = 0; i < length; i += 1) {
+    ref += chars[Math.floor(Math.random() * chars.length)];
+  }
+  return ref;
+}
+
 /**
  * Creates a new OTP for the given email, stores its hash, and emails it.
  * Enforces a resend cooldown to prevent spamming the mailbox.
@@ -39,32 +50,33 @@ async function requestOtp(email, purpose = 'login') {
   }
 
   const otp = generateOtpCode(env.otp.length);
+  const otpRef = generateOtpRef();
   const otpHash = await bcrypt.hash(otp, 10);
   const expiresAt = new Date(Date.now() + env.otp.expiresMinutes * 60 * 1000);
 
   await db.query(
-    `INSERT INTO otp_codes (email, otp_hash, purpose, max_attempts, expires_at)
-     VALUES ($1, $2, $3, $4, $5)`,
-    [email, otpHash, purpose, env.otp.maxAttempts, expiresAt]
+    `INSERT INTO otp_codes (email, otp_hash, otp_ref, purpose, max_attempts, expires_at)
+     VALUES ($1, $2, $3, $4, $5, $6)`,
+    [email, otpHash, otpRef, purpose, env.otp.maxAttempts, expiresAt]
   );
 
-  await sendOtpEmail(email, otp, purpose);
+  await sendOtpEmail(email, otp, purpose, otpRef);
 
-  return { expiresAt, expiresInMinutes: env.otp.expiresMinutes };
+  return { expiresAt, expiresInMinutes: env.otp.expiresMinutes, otpRef };
 }
 
 /**
- * Verifies the OTP for the given email. Throws ApiError on failure.
+ * Verifies the OTP for the given email + otpRef. Throws ApiError on failure.
  * Marks the code as used on success so it cannot be replayed.
  */
-async function verifyOtp(email, otp) {
+async function verifyOtp(email, otp, otpRef) {
   const { rows } = await db.query(
     `SELECT id, otp_hash, attempts, max_attempts, is_used, expires_at
      FROM otp_codes
-     WHERE email = $1 AND is_used = FALSE
+     WHERE email = $1 AND otp_ref = $2 AND is_used = FALSE
      ORDER BY created_at DESC
      LIMIT 1`,
-    [email]
+    [email, otpRef]
   );
 
   if (rows.length === 0) {
