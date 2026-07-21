@@ -2,6 +2,7 @@ const express = require('express');
 const authRoutes = require('./authRoutes');
 const onboardingRoutes = require('./onboardingRoutes');
 const userRoutes = require('./userRoutes');
+const wellnessCheckinRoutes = require('./wellnessCheckinRoutes');
 
 const router = express.Router();
 
@@ -10,5 +11,6 @@ router.get('/health', (req, res) => res.json({ success: true, message: 'Pacegasu
 router.use('/auth', authRoutes);
 router.use('/onboarding', onboardingRoutes);
 router.use('/users', userRoutes);
+router.use('/wellness-checkin', wellnessCheckinRoutes);
 
 module.exports = router;

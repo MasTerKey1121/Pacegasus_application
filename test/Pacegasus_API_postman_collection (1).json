@@ -934,6 +934,240 @@
           ]
         }
       ]
+    },
+    {
+      "name": "4. Daily Wellness Check-in",
+      "item": [
+        {
+          "name": "4.1 Get Today Status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin",
+                "today"
+              ]
+            },
+            "description": "**GET /api/wellness-checkin/today**\n\nเช็คสถานะว่าวันนี้ทำ Daily Wellness Check-in แล้วหรือยัง — เป็น informational เท่านั้น ไม่ gate flow อื่นในระบบ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK (ยังไม่ทำวันนี้)\n```json\n{ \"success\": true, \"data\": { \"status\": \"not_done\", \"record\": null } }\n```\n\n### Response 200 OK (ทำแล้ว)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"done\",\n    \"record\": {\n      \"checkin_id\": \"uuid\",\n      \"checkin_date\": \"2026-07-21\",\n      \"sleep_quality\": 4,\n      \"energy_level\": 3,\n      \"muscle_soreness\": 2,\n      \"stress_level\": 2,\n      \"motivation\": 4,\n      \"wellness_score\": 3.4,\n      \"note\": null,\n      \"created_at\": \"...\",\n      \"updated_at\": \"...\"\n    }\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่ได้ login |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has status field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('status');",
+                  "    pm.expect(['done', 'not_done']).to.include(json.data.status);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.2 Create Check-in",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin"
+              ]
+            },
+            "description": "**POST /api/wellness-checkin**\n\nสร้าง record Wellness Check-in ของวันนี้ (ทำได้ 1 ครั้ง/วัน) — ทั้ง 5 มิติสเกล 1-5\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| sleepQuality | integer 1-5 | ✅ | คุณภาพการนอน (1=แย่ที่สุด, 5=ดีที่สุด) |\n| energyLevel | integer 1-5 | ✅ | ระดับพลังงาน |\n| muscleSoreness | integer 1-5 | ✅ | อาการปวดกล้ามเนื้อ/DOMS (1=ไม่ปวดเลย, 5=ปวดมาก) |\n| stressLevel | integer 1-5 | ✅ | ระดับความเครียด (1=ผ่อนคลาย, 5=เครียดมาก) |\n| motivation | integer 1-5 | ✅ | แรงจูงใจในการซ้อมวันนี้ |\n| note | string ≤500 ตัวอักษร | ❌ | บันทึกเพิ่มเติม |\n\n### Response 201 Created\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 409 | ทำ check-in ของวันนี้ไปแล้ว — ให้เรียก `4.3 Update Check-in` แทน |",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sleepQuality\": 4,\n  \"energyLevel\": 3,\n  \"muscleSoreness\": 2,\n  \"stressLevel\": 2,\n  \"motivation\": 4,\n  \"note\": \"รู้สึกโอเค พร้อมซ้อม\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 or 409 (already checked in today)', function () {",
+                  "    pm.expect([201, 409]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 201) {",
+                  "    pm.test('Response has record with wellness_score', function () {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.data.record).to.have.property('wellness_score');",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.3 Update Check-in",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin"
+              ]
+            },
+            "description": "**PUT /api/wellness-checkin**\n\nแก้ไข record Wellness Check-in ของวันนี้ (ต้องสร้างด้วย `4.2 Create Check-in` ก่อนแล้วเท่านั้น)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\nโครงสร้างเดียวกับ `4.2 Create Check-in` (ทุกฟิลด์ required เหมือนเดิม เป็นการเขียนทับค่าทั้งหมด)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 404 | ยังไม่มี check-in ของวันนี้ — ให้เรียก `4.2 Create Check-in` ก่อน |",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sleepQuality\": 5,\n  \"energyLevel\": 4,\n  \"muscleSoreness\": 1,\n  \"stressLevel\": 1,\n  \"motivation\": 5,\n  \"note\": \"แก้ไข: นอนหลับดีขึ้นหลังตื่นมาทบทวน\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 or 404 (no check-in yet today)', function () {",
+                  "    pm.expect([200, 404]).to.include(pm.response.code);",
+                  "});",
+                  "",
+                  "if (pm.response.code === 200) {",
+                  "    pm.test('Record reflects updated values', function () {",
+                  "        const json = pm.response.json();",
+                  "        pm.expect(json.data.record.sleep_quality).to.eql(5);",
+                  "    });",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "4.4 Get History",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin/history?days=30",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin",
+                "history"
+              ],
+              "query": [
+                {
+                  "key": "days",
+                  "value": "30"
+                }
+              ]
+            },
+            "description": "**GET /api/wellness-checkin/history?days=30**\n\nดึงประวัติ Wellness Check-in ย้อนหลัง N วัน (default 30) เรียงจากล่าสุดไปเก่าสุด สำหรับใช้ทำกราฟ/แนวโน้มใน Dashboard\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| days | integer | ❌ (default 30) | จำนวนวันย้อนหลังที่จะดึง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"records\": [ { \"...\": \"...\" } ] } }\n```",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has records array', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.records).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
     }
   ]
 }
