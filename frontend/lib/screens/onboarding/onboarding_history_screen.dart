@@ -77,7 +77,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 .toList(),
                           ),
                           const SizedBox(height: 24),
-                          Text('วิ่งไกลสุดในสัปดาห์?',
+                          Text('วิ่งไกลสุต่อสัปดาห์?',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 10),
                           Wrap(

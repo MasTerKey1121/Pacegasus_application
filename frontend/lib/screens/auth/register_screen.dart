@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
 import '../onboarding/onboarding_basic_screen.dart';
+import '../home/daily_missions_screen.dart';
 
 class RegisterScreen extends StatelessWidget {
   const RegisterScreen({super.key});
@@ -15,7 +16,7 @@ class RegisterScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 50, 24, 24),
             child: Column(
               children: [
-                const PacegasusLogo(),
+                PacegasusLogo(),
                 const SizedBox(height: 18),
                 Text('Pacegasus', style: AppText.heading(size: 26, color: AppColors.gold1, weight: FontWeight.w700)),
                 const SizedBox(height: 6),
@@ -23,10 +24,6 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 const AppTextField(label: 'Email', hint: 'you@email.com'),
                 const SizedBox(height: 16),
-                const AppTextField(label: 'Password', hint: '••••••••', obscure: true),
-                const SizedBox(height: 16),
-                const AppTextField(label: 'Confirm Password', hint: '••••••••', obscure: true),
-                const SizedBox(height: 26),
                 GradientButton(
                   label: 'สมัครสมาชิก',
                   onTap: () {

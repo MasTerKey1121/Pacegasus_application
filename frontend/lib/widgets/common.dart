@@ -295,19 +295,19 @@ class AppTextField extends StatelessWidget {
 /// image asset was supplied, in the same gold as the original artwork.
 class PacegasusLogo extends StatelessWidget {
   final double size;
-  const PacegasusLogo({super.key, this.size = 64});
+
+  const PacegasusLogo({
+    super.key,
+    this.size = 64,
+  });
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      width: size,
-      height: size,
-      decoration: BoxDecoration(
-        shape: BoxShape.circle,
-        gradient: AppColors.goldGradient,
-        boxShadow: [BoxShadow(color: AppColors.gold1.withOpacity(.35), blurRadius: 26, spreadRadius: 2)],
-      ),
-      child: Icon(Icons.bolt_rounded, color: AppColors.bg1, size: size * .55),
+    return Image.asset(
+      'assets/images/logo.png',
+      width: size * 2,
+      height: size * 2,
+      fit: BoxFit.contain,
     );
   }
 }

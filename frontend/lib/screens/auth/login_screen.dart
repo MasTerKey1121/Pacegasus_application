@@ -2,7 +2,9 @@ import 'package:flutter/material.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
 import 'register_screen.dart';
+import '../home/daily_missions_screen.dart';
 import '../onboarding/onboarding_basic_screen.dart';
+import '../home/home_screen.dart';
 
 class LoginScreen extends StatelessWidget {
   const LoginScreen({super.key});
@@ -16,7 +18,7 @@ class LoginScreen extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(24, 60, 24, 24),
             child: Column(
               children: [
-                const PacegasusLogo(),
+                PacegasusLogo(),
                 const SizedBox(height: 18),
                 Text('Pacegasus', style: AppText.heading(size: 26, color: AppColors.gold1, weight: FontWeight.w700)),
                 const SizedBox(height: 6),
@@ -24,8 +26,6 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 32),
                 const AppTextField(label: 'Username', hint: 'ชื่อผู้ใช้ของคุณ'),
                 const SizedBox(height: 16),
-                const AppTextField(label: 'Password', hint: '••••••••', obscure: true),
-                const SizedBox(height: 10),
                 Align(
                   alignment: Alignment.centerRight,
                   child: Text('ลืมรหัสผ่าน?', style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
@@ -35,7 +35,7 @@ class LoginScreen extends StatelessWidget {
                   label: 'เข้าสู่ระบบ',
                   onTap: () {
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
                     );
                   },
                 ),
@@ -53,7 +53,7 @@ class LoginScreen extends StatelessWidget {
                   label: 'เข้าสู่ระบบด้วย Google',
                   onTap: () {
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
+                      MaterialPageRoute(builder: (_) => const HomeScreen()),
                     );
                   },
                 ),
