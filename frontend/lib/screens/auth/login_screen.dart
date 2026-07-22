@@ -1,13 +1,67 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
 import 'register_screen.dart';
-import '../home/daily_missions_screen.dart';
-import '../onboarding/onboarding_basic_screen.dart';
-import '../home/home_screen.dart';
+import 'otp_screen.dart';
+import '../home/main_shell.dart';
 
-class LoginScreen extends StatelessWidget {
+class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
+
+  @override
+  ConsumerState<LoginScreen> createState() => _LoginScreenState();
+}
+
+class _LoginScreenState extends ConsumerState<LoginScreen> {
+  final _emailController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _login() async {
+    final email = _emailController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      showAppToast(context, 'กรุณากรอกอีเมลให้ถูกต้อง');
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      final authApi = ref.read(authApiProvider);
+      final res = await authApi.requestOtp(email: email, purpose: 'login');
+      final otpRef = res['data']['otpRef'] as String;
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OtpScreen(
+            email: email,
+            otpRef: otpRef,
+            purpose: 'login',
+            onVerified: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const MainShell()),
+                (route) => false,
+              );
+            },
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      showAppToast(context, e.message);
+    } catch (_) {
+      showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -24,20 +78,16 @@ class LoginScreen extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text('เข้าสู่ระบบ', style: AppText.heading(size: 18)),
                 const SizedBox(height: 32),
-                const AppTextField(label: 'Username', hint: 'ชื่อผู้ใช้ของคุณ'),
-                const SizedBox(height: 16),
-                Align(
-                  alignment: Alignment.centerRight,
-                  child: Text('ลืมรหัสผ่าน?', style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                AppTextField(
+                  label: 'Email',
+                  hint: 'you@email.com',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
                 ),
                 const SizedBox(height: 22),
                 GradientButton(
-                  label: 'เข้าสู่ระบบ',
-                  onTap: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
-                    );
-                  },
+                  label: _loading ? 'กำลังส่งรหัส...' : 'เข้าสู่ระบบ',
+                  onTap: _loading ? null : _login,
                 ),
                 const SizedBox(height: 22),
                 Row(children: [
@@ -52,8 +102,10 @@ class LoginScreen extends StatelessWidget {
                 OutlineButton(
                   label: 'เข้าสู่ระบบด้วย Google',
                   onTap: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const HomeScreen()),
+                    // TODO: ยังไม่ต่อจริง — รอ google_sign_in + POST /api/auth/google
+                    Navigator.of(context).pushAndRemoveUntil(
+                      MaterialPageRoute(builder: (_) => const MainShell()),
+                      (route) => false,
                     );
                   },
                 ),

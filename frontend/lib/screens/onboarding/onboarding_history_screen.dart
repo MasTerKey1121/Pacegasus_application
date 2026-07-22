@@ -47,7 +47,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('เคยซ้อมหรือแข่งมาก่อนไหม?',
+                          Text('เคยซ้อมหรือแข่งวิ่งมาก่อนไหม?',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 10),
                           Wrap(
@@ -62,7 +62,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 .toList(),
                           ),
                           const SizedBox(height: 24),
-                          Text('เริ่มซ้อมมานานไหม?',
+                          Text('เริ่มวิ่งมานานหรือยัง?',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 10),
                           Wrap(
@@ -77,7 +77,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 .toList(),
                           ),
                           const SizedBox(height: 24),
-                          Text('วิ่งไกลสุต่อสัปดาห์?',
+                          Text('เคยวิ่งไกลสุดเท่าไหร?',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 10),
                           Wrap(
@@ -100,7 +100,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 const SizedBox(height: 12),
                                 _SummaryRow('ประสบการณ์', ob.data.pastExperience),
                                 _SummaryRow('เป้าหมาย', ob.data.goal),
-                                _SummaryRow('วิ่งไกลสุด', ob.data.longestDistance),
+                                _SummaryRow('ระยะวิ่งต่อสัปดาห์', ob.data.longestDistance),
                               ],
                             ),
                           ),

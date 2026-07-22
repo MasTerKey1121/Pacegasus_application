@@ -1,11 +1,74 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
+import 'otp_screen.dart';
 import '../onboarding/onboarding_basic_screen.dart';
-import '../home/daily_missions_screen.dart';
 
-class RegisterScreen extends StatelessWidget {
+class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
+
+  @override
+  ConsumerState<RegisterScreen> createState() => _RegisterScreenState();
+}
+
+class _RegisterScreenState extends ConsumerState<RegisterScreen> {
+  final _emailController = TextEditingController();
+  final _nameController = TextEditingController();
+  bool _loading = false;
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _nameController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _register() async {
+    final email = _emailController.text.trim();
+    final name = _nameController.text.trim();
+    if (email.isEmpty || !email.contains('@')) {
+      showAppToast(context, 'กรุณากรอกอีเมลให้ถูกต้อง');
+      return;
+    }
+    if (name.isEmpty) {
+      showAppToast(context, 'กรุณากรอกชื่อที่ใช้แสดง');
+      return;
+    }
+
+    setState(() => _loading = true);
+    try {
+      final authApi = ref.read(authApiProvider);
+      final res = await authApi.requestOtp(email: email, purpose: 'register');
+      final otpRef = res['data']['otpRef'] as String;
+
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => OtpScreen(
+            email: email,
+            otpRef: otpRef,
+            purpose: 'register',
+            displayName: name,
+            onVerified: () {
+              Navigator.of(context).pushAndRemoveUntil(
+                MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
+                (route) => false,
+              );
+            },
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      showAppToast(context, e.message);
+    } catch (_) {
+      showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -22,15 +85,18 @@ class RegisterScreen extends StatelessWidget {
                 const SizedBox(height: 6),
                 Text('สมัครสมาชิก', style: AppText.heading(size: 18)),
                 const SizedBox(height: 32),
-                const AppTextField(label: 'Email', hint: 'you@email.com'),
+                AppTextField(label: 'ชื่อที่แสดง', hint: 'ชื่อของคุณ', controller: _nameController),
+                const SizedBox(height: 16),
+                AppTextField(
+                  label: 'Email',
+                  hint: 'you@email.com',
+                  controller: _emailController,
+                  keyboardType: TextInputType.emailAddress,
+                ),
                 const SizedBox(height: 16),
                 GradientButton(
-                  label: 'สมัครสมาชิก',
-                  onTap: () {
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
-                    );
-                  },
+                  label: _loading ? 'กำลังส่งรหัส...' : 'สมัครสมาชิก',
+                  onTap: _loading ? null : _register,
                 ),
                 const SizedBox(height: 22),
                 Row(children: [
@@ -45,6 +111,7 @@ class RegisterScreen extends StatelessWidget {
                 OutlineButton(
                   label: 'สมัครสมาชิกด้วย Google',
                   onTap: () {
+                    // TODO: ยังไม่ต่อจริง — รอ google_sign_in + POST /api/auth/google
                     Navigator.of(context).pushReplacement(
                       MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
                     );
