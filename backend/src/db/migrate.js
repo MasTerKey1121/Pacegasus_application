@@ -1,23 +1,30 @@
-/**
- * Runs schema.sql (or an additive migration file passed as an argument)
- * against the configured DATABASE_URL. Safe to re-run (uses IF NOT EXISTS / DO blocks).
- *
- * Usage:
- *   npm run migrate                                  -> runs schema.sql (fresh install / re-sync)
- *   node src/db/migrate.js migrations/002_add_otp_ref.sql   -> runs one additive migration file
- */
 const fs = require('fs');
 const path = require('path');
 const { pool } = require('../config/db');
 
 async function migrate() {
-  const target = process.argv[2] || 'schema.sql';
-  const filePath = path.join(__dirname, target);
+  const arg = process.argv[2];
+  
+  const filePath = arg 
+    ? path.resolve(process.cwd(), arg)
+    : path.join(__dirname, 'schema.sql');
+
+  console.log(`[migrate] Resolved path: ${filePath}`);
+
+  if (!fs.existsSync(filePath)) {
+    console.error(`[migrate] File not found at: ${filePath}`);
+    process.exitCode = 1;
+    return;
+  }
+
   const sql = fs.readFileSync(filePath, 'utf8');
+
+  // PRINT FIRST 100 CHARS TO INSPECT WHAT IS BEING READ
+  console.log('[migrate] First 100 chars of file:\n', sql.slice(0, 100));
 
   const client = await pool.connect();
   try {
-    console.log(`[migrate] Running ${target} ...`);
+    console.log(`[migrate] Running ${path.basename(filePath)} ...`);
     await client.query(sql);
     console.log('[migrate] Done.');
   } catch (err) {
