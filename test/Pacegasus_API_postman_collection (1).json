@@ -41,6 +41,11 @@
       "key": "userId",
       "value": "",
       "type": "string"
+    },
+    {
+      "key": "questId",
+      "value": "",
+      "type": "string"
     }
   ],
   "item": [
@@ -1167,6 +1172,420 @@
                   "pm.test('Response has records array', function () {",
                   "    const json = pm.response.json();",
                   "    pm.expect(json.data.records).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "5. Main Quest (Program)",
+      "item": [
+        {
+          "name": "5.1 Start Program",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "start"
+              ]
+            },
+            "description": "**POST /api/v1/programs/start**\n\nสมัครโปรแกรมฝึกซ้อม (Main Quest) ให้ผู้ใช้ที่ login อยู่\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| level | string (enum) | ✅ | `\"beginner\"` \\| `\"lower_intermediate\"` \\| `\"upper_intermediate\"` |\n| scheduleMode | string (enum) | ✅ | `\"auto\"` = ระบบสร้างตารางฝึกทั้งโปรแกรมให้อัตโนมัติ, `\"manual\"` = ผู้ใช้ลงตารางฝึกรายวันเอง |\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"สมัครโปรแกรมสำเร็จ — สร้างตารางฝึกทั้งโปรแกรมให้อัตโนมัติแล้ว\",\n  \"data\": { \"...\": \"...\" }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `level`/`scheduleMode` ไม่อยู่ใน enum ที่กำหนด |\n| 401 | ไม่ได้ login |",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"beginner\",\n  \"scheduleMode\": \"auto\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has success and data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.2 Get Current Week",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/current/week",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "current",
+                "week"
+              ]
+            },
+            "description": "**GET /api/v1/programs/current/week**\n\nดึงตารางฝึกของสัปดาห์ปัจจุบันของผู้ใช้ที่ login อยู่ (ต้อง `5.1 Start Program` ก่อนแล้ว)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่ได้ login |\n| 404 | ผู้ใช้ยังไม่ได้สมัครโปรแกรม |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.3 Add Manual Quest",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/quests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "quests"
+              ]
+            },
+            "description": "**POST /api/v1/programs/quests**\n\nลงเควสวันเดียวเอง — ใช้ได้เฉพาะโปรแกรมที่ `scheduleMode = \"manual\"` เท่านั้น\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| scheduledDate | string (ISO date) | ✅ | วันที่จะลงเควส เช่น `\"2026-07-25\"` |\n| sessionType | string (enum) | ✅ | `\"easy\"` \\| `\"tempo\"` \\| `\"vo2max\"` \\| `\"long_run\"` (ต้องตรงกับ `AUTO_TEMPLATES` ใน `programService.js` — คนละ enum กับ `trainingType` ของ side quest) |\n\n### Response 201 Created\n```json\n{ \"success\": true, \"message\": \"เพิ่มเควสสำเร็จ\", \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `scheduledDate` ไม่ใช่ ISO date หรือ `sessionType` ไม่อยู่ใน enum |\n| 401 | ไม่ได้ login |",
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledDate\": \"2026-07-25\",\n  \"sessionType\": \"easy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "// Auto-save questId ถ้ามีใน response เพื่อใช้ต่อกับ 5.4 Delete Manual Quest",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.questId) {",
+                  "        pm.collectionVariables.set('questId', json.data.questId);",
+                  "    } else if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('questId', json.data.id);",
+                  "    }",
+                  "}"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.4 Delete Manual Quest",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/quests/{{questId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "quests",
+                "{{questId}}"
+              ]
+            },
+            "description": "**DELETE /api/v1/programs/quests/:questId**\n\nลบเควสที่ยัง pending (ยังไม่เริ่ม/ยังไม่เสร็จ) — ใช้ `{{questId}}` ที่ auto-save มาจาก `5.3 Add Manual Quest` หรือแก้เป็น id จริงเอง\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Path Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| questId | string (UUID) | ✅ | id ของเควสที่จะลบ ต้องเป็น UUID ที่ถูกต้อง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ลบเควสสำเร็จ\", \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `questId` ไม่ใช่ UUID ที่ถูกต้อง |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบเควส หรือเควสไม่ใช่ของผู้ใช้นี้ |\n| 409 | เควสไม่ได้อยู่ในสถานะ pending แล้ว ลบไม่ได้ |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('success');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5 Get Quests In Range",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/quests?from=2026-07-20&to=2026-07-26",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "quests"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-07-20"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-07-26"
+                }
+              ]
+            },
+            "description": "**GET /api/v1/programs/quests?from=&to=**\n\nดูเควสตามช่วงวันที่ — ถ้าไม่ส่ง `from`/`to` เลยจะ fallback เป็นสัปดาห์ปัจจุบัน\n\n⚠️ ตาม schema (`.and('from', 'to')`) ถ้าจะส่ง query มา **ต้องส่งทั้งคู่พร้อมกัน** จะส่งแค่ `from` หรือแค่ `to` อย่างเดียวไม่ได้ (validation error) และ `to` ต้องเป็นวันที่ **หลัง** `from` เท่านั้น\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| from | string (ISO date) | ❌ (ถ้าส่งต้องส่งคู่กับ to) | วันเริ่มต้นของช่วง |\n| to | string (ISO date) | ❌ (ถ้าส่งต้องส่งคู่กับ from, ต้องมากกว่า from) | วันสิ้นสุดของช่วง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ส่งแค่ `from` หรือ `to` อย่างเดียว, รูปแบบไม่ใช่ ISO date, หรือ `to` ไม่มากกว่า `from` |\n| 401 | ไม่ได้ login |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "5.5b Get Quests (Fallback = Current Week)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/programs/quests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "programs",
+                "quests"
+              ]
+            },
+            "description": "**GET /api/v1/programs/quests** (ไม่ส่ง query เลย)\n\nไม่ส่ง `from`/`to` มา — ระบบจะ fallback เป็นสัปดาห์ปัจจุบันให้อัตโนมัติ (ปลอดภัยตาม schema เพราะไม่ส่งทั้งคู่)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "6. Side Quest",
+      "item": [
+        {
+          "name": "6.1 Get Today Side Quests",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/v1/quests/side?environment=park&trainingType=easy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "v1",
+                "quests",
+                "side"
+              ],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "park"
+                },
+                {
+                  "key": "trainingType",
+                  "value": "easy"
+                }
+              ]
+            },
+            "description": "**GET /api/v1/quests/side?environment=&trainingType=**\n\nดึงรายการ Side Quest ของวันนี้ ตามสภาพแวดล้อมและประเภทการฝึกที่เลือก\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| environment | string (enum) | ✅ | `\"park\"` \\| `\"road\"` \\| `\"city\"` \\| `\"treadmill\"` \\| `\"trail\"` |\n| trainingType | string (enum) | ✅ | `\"easy\"` \\| `\"long_run\"` \\| `\"tempo\"` \\| `\"interval\"` (คนละ enum กับ `sessionType` ของ main quest — ตรงนี้ไม่มี `\"vo2max\"` แต่มี `\"interval\"` แทน) |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `environment`/`trainingType` ไม่อยู่ใน enum ที่กำหนด |\n| 401 | ไม่ได้ login |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
                   "});"
                 ]
               }
