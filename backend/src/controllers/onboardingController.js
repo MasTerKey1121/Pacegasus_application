@@ -42,20 +42,21 @@ async function ensureStepUnlocked(userId, requiredStep) {
   }
 }
 
-// คำนวณ running_experience_level จากข้อมูล step4
 function deriveExperienceLevel(value) {
-  if (!value.hasRunBefore) return 'beginner';
+  if (!value.hasRunBefore || !value.isCurrentlyRunning) return 'beginner';
 
-  const years = value.yearsRunning ?? 0;
-  const hasRaceTime =
-    value.best5kSeconds != null ||
-    value.best10kSeconds != null ||
-    value.bestHalfMarathonSeconds != null ||
-    value.bestMarathonSeconds != null;
+  const weeks = value.weeksRunning ?? 0;
+  const longest = value.longestDistanceKm ?? 0;
 
-  if (years >= 3 && hasRaceTime) return 'advanced';
-  if (years >= 1) return 'intermediate';
-  return 'beginner';
+  // Beginner: ยังฝึกไม่ถึง ~8 เดือน หรือวิ่งไกลสุดยังไม่ถึง 5 กม.
+  if (weeks < 34 || longest < 5) return 'beginner';
+
+  // Upper Intermediate: ฝึกต่อเนื่อง >= 1 ปี และเคยวิ่งไกลสุด >= 15 กม.
+  // (ใกล้ระยะ Half Marathon แล้ว พร้อมขยับไปคอร์ส 21k)
+  if (weeks >= 52 && longest >= 15) return 'upper_intermediate';
+
+  // Lower Intermediate: อยู่ระหว่างกลาง (ฝึกมาสักพัก วิ่งไกลสุดอยู่ในช่วง 10k)
+  return 'lower_intermediate';
 }
 
 // PUT /api/onboarding/step1  (basic info)
