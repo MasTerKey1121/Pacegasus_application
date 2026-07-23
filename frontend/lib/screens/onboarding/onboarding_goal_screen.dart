@@ -2,8 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
+import '../../services/onboarding_api.dart';
 import '../../widgets/common.dart';
 import 'onboarding_history_screen.dart';
+import '../../models/onboarding_data.dart';
 
 const _healthGoalOptions = ['วิ่งลดน้ำหนักทั่วไป', 'ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ', 'ฝึกความอึด'];
 const _distanceGoalOptions = ['วิ่ง 5K', 'วิ่ง 10K', 'Half Marathon', 'Full Marathon'];
@@ -15,8 +17,22 @@ const Map<String, double> _distanceKm = {
   'Full Marathon': 42.195,
 };
 
-const double _minPaceSecPerKm = 2 * 60 + 30; // 2:30 / km (เร็วสุด)
-const double _maxPaceSecPerKm = 12 * 60; // 12:00 / km (ช้าสุด)
+// แมพชื่อไทยในแอป -> enum goalType ที่ API รับ
+const Map<String, String> _healthGoalTypeMap = {
+  'วิ่งลดน้ำหนักทั่วไป': 'general_fitness',
+  'ลดน้ำหนัก': 'lose_weight',
+  'เพิ่มกล้ามเนื้อ': 'general_fitness',
+  'ฝึกความอึด': 'stay_consistent',
+};
+const Map<String, String> _distanceGoalTypeMap = {
+  'วิ่ง 5K': 'run_5k',
+  'วิ่ง 10K': 'run_10k',
+  'Half Marathon': 'half_marathon',
+  'Full Marathon': 'marathon',
+};
+
+const double _minPaceSecPerKm = 2 * 60 + 30;
+const double _maxPaceSecPerKm = 12 * 60;
 
 class OnboardingGoalScreen extends ConsumerStatefulWidget {
   const OnboardingGoalScreen({super.key});
@@ -42,7 +58,6 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     super.dispose();
   }
 
-  /// รับ input รูปแบบ "HH:MM" หรือ "H:MM" เช่น "1:30" (1 ชม 30 นาที)
   void _onTimeChanged(String value, OnboardingNotifier notifier, String distanceGoal) {
     final parts = value.split(':');
     if (parts.length != 2) {
@@ -84,7 +99,8 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     }
 
     if (paceSecPerKm < _minPaceSecPerKm || paceSecPerKm > _maxPaceSecPerKm) {
-      setState(() => _paceError = 'Pace ต้องอยู่ระหว่าง 2:30 - 12:00 นาที/กม. (ปัจจุบันคำนวณได้ ${_formatPace(paceSecPerKm)})');
+      setState(() =>
+          _paceError = 'Pace ต้องอยู่ระหว่าง 2:30 - 12:00 นาที/กม. (ปัจจุบันคำนวณได้ ${_formatPace(paceSecPerKm)})');
       notifier.update((d) {
         d.targetFinishTime = value;
         d.targetPaceSecPerKm = null;
@@ -97,7 +113,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     notifier.update((d) {
       d.targetFinishTime = value;
       d.targetPaceSecPerKm = paceSecPerKm;
-      d.targetSpeedKmPerSec = distanceKm / finishSeconds; // กม. / วินาที ส่งให้ API
+      d.targetSpeedKmPerSec = distanceKm / finishSeconds;
     });
   }
 
@@ -105,6 +121,25 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     final m = (secPerKm ~/ 60);
     final s = (secPerKm % 60).round().toString().padLeft(2, '0');
     return '$m:$s';
+  }
+
+  Map<String, dynamic> _buildBody(OnboardingData d) {
+    return {
+      'goals': [
+        if (d.healthGoal != null)
+          {
+            'goalType': _healthGoalTypeMap[d.healthGoal]!,
+            'isPrimary': d.distanceGoal == null,
+          },
+        if (d.distanceGoal != null)
+          {
+            'goalType': _distanceGoalTypeMap[d.distanceGoal]!,
+            'targetDistanceKm': _distanceKm[d.distanceGoal],
+            if (d.targetPaceSecPerKm != null) 'targetPaceSecPerKm': d.targetPaceSecPerKm!.round(),
+            'isPrimary': true,
+          },
+      ],
+    };
   }
 
   @override
@@ -115,7 +150,8 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
 
     final hasAnyGoal = data.healthGoal != null || data.distanceGoal != null;
     final needsValidTime = data.distanceGoal != null;
-    final canProceed = hasAnyGoal && (!needsValidTime || data.targetSpeedKmPerSec != null);
+    final canProceed =
+        hasAnyGoal && (!needsValidTime || data.targetSpeedKmPerSec != null) && !ob.isSubmitting;
 
     return Scaffold(
       body: AppBackground(
@@ -197,13 +233,16 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                             ),
                             const SizedBox(height: 8),
                             if (_paceError != null)
-                              Text(_paceError!,
-                                  style: AppText.body(size: 12, color: AppColors.red1))
+                              Text(_paceError!, style: AppText.body(size: 12, color: AppColors.red1))
                             else if (data.targetPaceSecPerKm != null)
                               Text(
                                 'Pace โดยประมาณ: ${_formatPace(data.targetPaceSecPerKm!)} นาที/กม.',
                                 style: AppText.body(size: 12, color: AppColors.textSecondary),
                               ),
+                          ],
+                          if (ob.errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            Text(ob.errorMessage!, style: AppText.body(size: 12.5, color: AppColors.red1)),
                           ],
                         ],
                       ),
@@ -215,10 +254,17 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                   const SizedBox(width: 12),
                   Expanded(
                     child: GradientButton(
-                      label: 'ถัดไป',
+                      label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ถัดไป',
                       onTap: canProceed
-                          ? () => Navigator.of(context)
-                              .push(MaterialPageRoute(builder: (_) => const OnboardingHistoryScreen()))
+                          ? () async {
+                              final ok = await notifier.submitStep(
+                                () => ref.read(onboardingApiProvider).step3(_buildBody(data)),
+                              );
+                              if (ok && context.mounted) {
+                                Navigator.of(context)
+                                    .push(MaterialPageRoute(builder: (_) => const OnboardingHistoryScreen()));
+                              }
+                            }
                           : null,
                     ),
                   ),

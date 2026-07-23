@@ -2,14 +2,23 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
+import '../../services/onboarding_api.dart';
 import '../../widgets/common.dart';
 import '../home/main_shell.dart';
+import '../../models/onboarding_data.dart';
 
 const _durationOptions = ['น้อยกว่า 1 เดือน', '1-3 เดือน', '3-6 เดือน', '6-12 เดือน', '1-3 ปี', '3 ปีขึ้นไป'];
 const _distanceOptions = ['น้อยกว่า 5 km', '5-10 km', '10-21 km', '21-42 km', 'มากกว่า 42 km'];
 
 class OnboardingHistoryScreen extends ConsumerWidget {
   const OnboardingHistoryScreen({super.key});
+
+  Map<String, dynamic> _buildBody(OnboardingData d) {
+    return {
+      'hasRunBefore': d.hasRunningExperience ?? false,
+      // yearsRunning / best5kSeconds / ... : ไม่มี UI เก็บค่า และเป็น optional ทั้งหมด เลยไม่ส่ง
+    };
+  }
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -164,20 +173,31 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                               ],
                             ),
                           ),
+                          if (ob.errorMessage != null) ...[
+                            const SizedBox(height: 16),
+                            Text(ob.errorMessage!, style: AppText.body(size: 12.5, color: AppColors.red1)),
+                          ],
                         ],
                       ),
                     ),
                   ),
                 ),
                 GradientButton(
-                  label: 'เริ่มใช้งาน ✓',
+                  label: ob.isSubmitting ? 'กำลังบันทึก...' : 'เริ่มใช้งาน ✓',
                   gradient: AppColors.greenGradient,
-                  onTap: () {
-                    Navigator.of(context).pushAndRemoveUntil(
-                      MaterialPageRoute(builder: (_) => const MainShell()),
-                      (route) => false,
-                    );
-                  },
+                  onTap: ob.isSubmitting
+                      ? null
+                      : () async {
+                          final ok = await notifier.submitStep(
+                            () => ref.read(onboardingApiProvider).step4(_buildBody(data)),
+                          );
+                          if (ok && context.mounted) {
+                            Navigator.of(context).pushAndRemoveUntil(
+                              MaterialPageRoute(builder: (_) => const MainShell()),
+                              (route) => false,
+                            );
+                          }
+                        },
                 ),
               ],
             ),

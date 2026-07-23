@@ -1,4 +1,5 @@
-/// Everything collected across the 3 onboarding steps + the register step.
+
+/// Everything collected across the 4 onboarding steps + the register step.
 class OnboardingData {
   String day = '';
   String month = '';
@@ -6,6 +7,11 @@ class OnboardingData {
   String gender = 'หญิง'; // 'ชาย' | 'หญิง'
   String weightKg = '';
   String heightCm = '';
+
+  // ===== เพิ่มใหม่ (API Step 1 ต้องใช้) =====
+  String? runningExperienceLevel; // beginner | intermediate | advanced | elite
+  String weeklyDistanceKm = ''; // 0-500
+  String runningDaysPerWeek = ''; // 0-7
 
   final Set<String> conditions = {}; // โรคประจำตัว
   final Set<String> pastInjuries = {}; // อาการบาดเจ็บที่เคยเป็น
@@ -32,6 +38,12 @@ class OnboardingData {
       ..gender = gender
       ..weightKg = weightKg
       ..heightCm = heightCm
+
+      // ===== เพิ่มใหม่ =====
+      ..runningExperienceLevel = runningExperienceLevel
+      ..weeklyDistanceKm = weeklyDistanceKm
+      ..runningDaysPerWeek = runningDaysPerWeek
+
       ..healthGoal = healthGoal
       ..distanceGoal = distanceGoal
       ..targetFinishTime = targetFinishTime
@@ -42,9 +54,11 @@ class OnboardingData {
       ..trainingDuration = trainingDuration
       ..notTrainingDuration = notTrainingDuration
       ..longestDistance = longestDistance;
+
     o.conditions.addAll(conditions);
     o.pastInjuries.addAll(pastInjuries);
     o.currentInjuries.addAll(currentInjuries);
+
     return o;
   }
 }

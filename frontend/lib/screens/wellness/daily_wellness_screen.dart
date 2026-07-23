@@ -52,8 +52,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           label: 'คุณภาพการนอน',
                           value: entry.sleepQuality.toDouble(),
                           min: 0,
-                          max: 10,
-                          divisions: 10,
+                          max: 5,
+                          divisions: 5,
                           minCaption: 'แย่มาก',
                           maxCaption: 'ดีมาก',
                           onChanged: (v) => notifier.update((e) => e.sleepQuality = v.round()),
@@ -72,32 +72,32 @@ class DailyWellnessScreen extends ConsumerWidget {
                         const SizedBox(height: 18),
                         LabeledSlider(
                           label: 'ความเมื่อยล้ากล้ามเนื้อ',
-                          value: entry.muscleFatigue.toDouble(),
+                          value: entry.muscleSoreness.toDouble(),
                           min: 0,
-                          max: 10,
-                          divisions: 10,
+                          max: 5,
+                          divisions: 5,
                           minCaption: 'ไม่มี',
                           maxCaption: 'เมื่อยมาก',
-                          onChanged: (v) => notifier.update((e) => e.muscleFatigue = v.round()),
+                          onChanged: (v) => notifier.update((e) => e.muscleSoreness = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
                           label: 'ระดับพลังกล้ามเนื้อ',
-                          value: entry.musclePower.toDouble(),
+                          value: entry.energyLevel.toDouble(),
                           min: 0,
-                          max: 10,
-                          divisions: 10,
+                          max: 5,
+                          divisions: 5,
                           minCaption: 'อ่อนแรง',
                           maxCaption: 'เต็มพลัง',
-                          onChanged: (v) => notifier.update((e) => e.musclePower = v.round()),
+                          onChanged: (v) => notifier.update((e) => e.energyLevel = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
                           label: 'ระดับความเครียด',
                           value: entry.stressLevel.toDouble(),
                           min: 0,
-                          max: 10,
-                          divisions: 10,
+                          max: 5 ,
+                          divisions: 5,
                           minCaption: 'ผ่อนคลาย',
                           maxCaption: 'เครียดมาก',
                           onChanged: (v) => notifier.update((e) => e.stressLevel = v.round()),
@@ -108,11 +108,13 @@ class DailyWellnessScreen extends ConsumerWidget {
                 ),
                 GradientButton(
                   label: 'บันทึก',
-                  onTap: () {
-                    notifier.markComplete();
-                    ref.read(missionProvider).setDone('wellness', true);
-                    ref.read(userProvider).addReward(coin: 10);
-                    Navigator.of(context).pop();
+                  onTap: () async {
+                    final ok = await notifier.submit();
+                    if (ok) {
+                      ref.read(missionProvider).setDone('wellness', true);
+                      ref.read(userProvider).addReward(coin: 10);
+                      Navigator.of(context).pop();
+                    }
                   },
                 ),
               ],

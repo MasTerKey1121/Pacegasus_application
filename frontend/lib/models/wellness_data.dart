@@ -1,16 +1,25 @@
-/// A single day's "Daily Wellness Check-in" entry.
 class WellnessEntry {
-  int sleepQuality; // 0-10
-  double sleepHours; // 0-12
-  int muscleFatigue; // 0-10
-  int musclePower; // 0-10
-  int stressLevel; // 0-10
+  int sleepQuality;   // 1-5
+  int muscleSoreness; // 1-5 (เดิมชื่อ muscleFatigue)
+  int energyLevel;    // 1-5 (เดิมชื่อ musclePower)
+  int stressLevel;    // 1-5
+  int motivation;     // 1-5 (ฟิลด์ใหม่ ต้องมี ไม่งั้น API ปฏิเสธ)
+  double sleepHours;  // 0-12 (ไม่ส่ง API แค่เก็บไว้ดูในแอป)
 
   WellnessEntry({
-    this.sleepQuality = 7,
+    this.sleepQuality = 3,
+    this.muscleSoreness = 3,
+    this.energyLevel = 3,
+    this.stressLevel = 3,
+    this.motivation = 3,
     this.sleepHours = 7,
-    this.muscleFatigue = 3,
-    this.musclePower = 7,
-    this.stressLevel = 4,
   });
+
+  Map<String, dynamic> toApiJson() => {
+        'sleepQuality': sleepQuality,
+        'energyLevel': energyLevel,
+        'muscleSoreness': muscleSoreness,
+        'stressLevel': stressLevel,
+        'motivation': motivation,
+      };
 }

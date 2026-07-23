@@ -4,13 +4,52 @@ import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../widgets/common.dart';
 import 'onboarding_injury_screen.dart';
+import '../../services/onboarding_api.dart';
+import '../../providers/auth_provider.dart';
+import '../../models/onboarding_data.dart';
+
+const _experienceOptions = ['beginner', 'intermediate', 'advanced', 'elite'];
+const _experienceLabels = {
+  'beginner': 'มือใหม่',
+  'intermediate': 'ปานกลาง',
+  'advanced': 'ระดับสูง',
+  'elite': 'นักกีฬา',
+};
 
 class OnboardingBasicScreen extends ConsumerWidget {
   const OnboardingBasicScreen({super.key});
 
+  bool _canProceed(OnboardingData d) {
+    return d.day.isNotEmpty &&
+        d.month.isNotEmpty &&
+        d.year.isNotEmpty &&
+        d.weightKg.isNotEmpty &&
+        d.heightCm.isNotEmpty &&
+        d.runningExperienceLevel != null &&
+        d.weeklyDistanceKm.isNotEmpty &&
+        d.runningDaysPerWeek.isNotEmpty;
+  }
+
+  Map<String, dynamic> _buildBody(OnboardingData d) {
+    return {
+      'dateOfBirth':
+          '${d.year}-${d.month.padLeft(2, '0')}-${d.day.padLeft(2, '0')}',
+      'gender': d.gender == 'ชาย' ? 'male' : 'female',
+      'heightCm': double.parse(d.heightCm),
+      'weightKg': double.parse(d.weightKg),
+      'runningExperienceLevel': d.runningExperienceLevel,
+      'weeklyDistanceKm': double.parse(d.weeklyDistanceKm),
+      'runningDaysPerWeek': int.parse(d.runningDaysPerWeek),
+      'timezone': 'Asia/Bangkok',
+    };
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
+    final data = ob.data;
+    final canProceed = _canProceed(data) && !ob.isSubmitting;
 
     return Scaffold(
       body: AppBackground(
@@ -44,18 +83,18 @@ class OnboardingBasicScreen extends ConsumerWidget {
                             Expanded(
                                 child: _DateBox(
                                     hint: 'DD',
-                                    onChanged: (v) => ref.read(onboardingProvider).update((d) => d.day = v))),
+                                    onChanged: (v) => notifier.update((d) => d.day = v))),
                             const SizedBox(width: 10),
                             Expanded(
                                 child: _DateBox(
                                     hint: 'MM',
-                                    onChanged: (v) => ref.read(onboardingProvider).update((d) => d.month = v))),
+                                    onChanged: (v) => notifier.update((d) => d.month = v))),
                             const SizedBox(width: 10),
                             Expanded(
                                 flex: 2,
                                 child: _DateBox(
                                     hint: 'YYYY',
-                                    onChanged: (v) => ref.read(onboardingProvider).update((d) => d.year = v))),
+                                    onChanged: (v) => notifier.update((d) => d.year = v))),
                           ]),
                           const SizedBox(height: 22),
                           Text('เพศกำเนิด', style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
@@ -64,16 +103,16 @@ class OnboardingBasicScreen extends ConsumerWidget {
                             Expanded(
                               child: _GenderBox(
                                 label: 'ชาย',
-                                selected: ob.data.gender == 'ชาย',
-                                onTap: () => ref.read(onboardingProvider).update((d) => d.gender = 'ชาย'),
+                                selected: data.gender == 'ชาย',
+                                onTap: () => notifier.update((d) => d.gender = 'ชาย'),
                               ),
                             ),
                             const SizedBox(width: 10),
                             Expanded(
                               child: _GenderBox(
                                 label: 'หญิง',
-                                selected: ob.data.gender == 'หญิง',
-                                onTap: () => ref.read(onboardingProvider).update((d) => d.gender = 'หญิง'),
+                                selected: data.gender == 'หญิง',
+                                onTap: () => notifier.update((d) => d.gender = 'หญิง'),
                               ),
                             ),
                           ]),
@@ -84,7 +123,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
                                 label: 'น้ำหนัก (kg)',
                                 hint: '00',
                                 keyboardType: TextInputType.number,
-                                onChanged: (v) => ref.read(onboardingProvider).update((d) => d.weightKg = v),
+                                onChanged: (v) => notifier.update((d) => d.weightKg = v),
                               ),
                             ),
                             const SizedBox(width: 12),
@@ -93,19 +132,58 @@ class OnboardingBasicScreen extends ConsumerWidget {
                                 label: 'ส่วนสูง (cm)',
                                 hint: '000',
                                 keyboardType: TextInputType.number,
-                                onChanged: (v) => ref.read(onboardingProvider).update((d) => d.heightCm = v),
+                                onChanged: (v) => notifier.update((d) => d.heightCm = v),
                               ),
                             ),
                           ]),
+                          const SizedBox(height: 22),
+                          Text('ระดับประสบการณ์วิ่ง',
+                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                          const SizedBox(height: 8),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: _experienceOptions
+                                .map((o) => MultiChip(
+                                      label: _experienceLabels[o]!,
+                                      selected: data.runningExperienceLevel == o,
+                                      onTap: () => notifier.update((d) => d.runningExperienceLevel = o),
+                                    ))
+                                .toList(),
+                          ),
+                          const SizedBox(height: 22),
+                          Row(children: [
+                            Expanded(
+                              child: AppTextField(
+                                label: 'จำนวนวันที่วิ่ง/สัปดาห์',
+                                hint: '0-7',
+                                keyboardType: TextInputType.number,
+                                onChanged: (v) => notifier.update((d) => d.runningDaysPerWeek = v),
+                              ),
+                            ),
+                          ]),
+                          if (ob.errorMessage != null) ...[
+                            const SizedBox(height: 14),
+                            Text(ob.errorMessage!, style: AppText.body(size: 12.5, color: AppColors.red1)),
+                          ],
                         ],
                       ),
                     ),
                   ),
                 ),
                 GradientButton(
-                  label: 'ต่อไป',
-                  onTap: () => Navigator.of(context)
-                      .push(MaterialPageRoute(builder: (_) => const OnboardingInjuryScreen())),
+                  label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ต่อไป',
+                  onTap: canProceed
+                      ? () async {
+                          final ok = await notifier.submitStep(
+                            () => ref.read(onboardingApiProvider).step1(_buildBody(data)),
+                          );
+                          if (ok && context.mounted) {
+                            Navigator.of(context)
+                                .push(MaterialPageRoute(builder: (_) => const OnboardingInjuryScreen()));
+                          }
+                        }
+                      : null,
                 ),
               ],
             ),
