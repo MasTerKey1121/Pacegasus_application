@@ -52,16 +52,28 @@ class OnboardingInjuryScreen extends ConsumerWidget {
                             onClear: () => notifier.update((d) => d.conditions.clear()),
                           ),
                           const SizedBox(height: 30),
-                          Text('อาการบาดเจ็บ (หากมีเลือกได้มากกว่า 1)',
+                          Text('อาการบาดเจ็บที่เคยเป็น (หากมีเลือกได้มากกว่า 1)',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 12),
                           _MultiWrap(
                             options: _injuryOptions,
-                            selected: ob.data.injuries,
+                            selected: ob.data.pastInjuries,
                             onToggle: (v) => notifier.update((d) {
-                              d.injuries.contains(v) ? d.injuries.remove(v) : d.injuries.add(v);
+                              d.pastInjuries.contains(v) ? d.pastInjuries.remove(v) : d.pastInjuries.add(v);
                             }),
-                            onClear: () => notifier.update((d) => d.injuries.clear()),
+                            onClear: () => notifier.update((d) => d.pastInjuries.clear()),
+                          ),
+                          const SizedBox(height: 30),
+                          Text('อาการบาดเจ็บในปัจจุบัน (หากมีเลือกได้มากกว่า 1)',
+                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                          const SizedBox(height: 12),
+                          _MultiWrap(
+                            options: _injuryOptions,
+                            selected: ob.data.currentInjuries,
+                            onToggle: (v) => notifier.update((d) {
+                              d.currentInjuries.contains(v) ? d.currentInjuries.remove(v) : d.currentInjuries.add(v);
+                            }),
+                            onClear: () => notifier.update((d) => d.currentInjuries.clear()),
                           ),
                         ],
                       ),

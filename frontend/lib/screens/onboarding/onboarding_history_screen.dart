@@ -5,8 +5,7 @@ import '../../providers/onboarding_provider.dart';
 import '../../widgets/common.dart';
 import '../home/main_shell.dart';
 
-const _experienceOptions = ['ไม่เคย', 'เคย 1-2 ครั้ง', 'เคยหลายครั้ง'];
-const _durationOptions = ['น้อยกว่า 1 เดือน', '6-12 เดือน', '1-3 ปี', 'มากกว่า 3 ปี'];
+const _durationOptions = ['น้อยกว่า 1 เดือน', '1-3 เดือน', '3-6 เดือน', '6-12 เดือน', '1-3 ปี', '3 ปีขึ้นไป'];
 const _distanceOptions = ['น้อยกว่า 5 km', '5-10 km', '10-21 km', '21-42 km', 'มากกว่า 42 km'];
 
 class OnboardingHistoryScreen extends ConsumerWidget {
@@ -16,6 +15,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
+    final data = ob.data;
 
     return Scaffold(
       body: AppBackground(
@@ -53,29 +53,86 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                           Wrap(
                             spacing: 10,
                             runSpacing: 10,
-                            children: _experienceOptions
-                                .map((o) => MultiChip(
-                                      label: o,
-                                      selected: ob.data.pastExperience == o,
-                                      onTap: () => notifier.update((d) => d.pastExperience = o),
-                                    ))
-                                .toList(),
+                            children: [
+                              MultiChip(
+                                label: 'เคย',
+                                selected: data.hasRunningExperience == true,
+                                onTap: () => notifier.update((d) => d.hasRunningExperience = true),
+                              ),
+                              MultiChip(
+                                label: 'ไม่เคย',
+                                selected: data.hasRunningExperience == false,
+                                onTap: () => notifier.update((d) {
+                                  d.hasRunningExperience = false;
+                                  d.isCurrentlyTraining = null;
+                                  d.trainingDuration = null;
+                                  d.notTrainingDuration = null;
+                                }),
+                              ),
+                            ],
                           ),
-                          const SizedBox(height: 24),
-                          Text('เริ่มวิ่งมานานหรือยัง?',
-                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
-                          const SizedBox(height: 10),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: _durationOptions
-                                .map((o) => MultiChip(
-                                      label: o,
-                                      selected: ob.data.trainingDuration == o,
-                                      onTap: () => notifier.update((d) => d.trainingDuration = o),
-                                    ))
-                                .toList(),
-                          ),
+                          if (data.hasRunningExperience == true) ...[
+                            const SizedBox(height: 24),
+                            Text('ปัจจุบันยังซ้อมอยู่ไหม?',
+                                style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: [
+                                MultiChip(
+                                  label: 'ใช่',
+                                  selected: data.isCurrentlyTraining == true,
+                                  onTap: () => notifier.update((d) {
+                                    d.isCurrentlyTraining = true;
+                                    d.notTrainingDuration = null;
+                                  }),
+                                ),
+                                MultiChip(
+                                  label: 'ไม่',
+                                  selected: data.isCurrentlyTraining == false,
+                                  onTap: () => notifier.update((d) {
+                                    d.isCurrentlyTraining = false;
+                                    d.trainingDuration = null;
+                                  }),
+                                ),
+                              ],
+                            ),
+                          ],
+                          if (data.isCurrentlyTraining == true) ...[
+                            const SizedBox(height: 24),
+                            Text('ซ้อมต่อเนื่องมานานเท่าไหร่แล้ว?',
+                                style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: _durationOptions
+                                  .map((o) => MultiChip(
+                                        label: o,
+                                        selected: data.trainingDuration == o,
+                                        onTap: () => notifier.update((d) => d.trainingDuration = o),
+                                      ))
+                                  .toList(),
+                            ),
+                          ],
+                          if (data.isCurrentlyTraining == false) ...[
+                            const SizedBox(height: 24),
+                            Text('ไม่ได้ซ้อมมานานเท่าไหร่แล้ว?',
+                                style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                            const SizedBox(height: 10),
+                            Wrap(
+                              spacing: 10,
+                              runSpacing: 10,
+                              children: _durationOptions
+                                  .map((o) => MultiChip(
+                                        label: o,
+                                        selected: data.notTrainingDuration == o,
+                                        onTap: () => notifier.update((d) => d.notTrainingDuration = o),
+                                      ))
+                                  .toList(),
+                            ),
+                          ],
                           const SizedBox(height: 24),
                           Text('เคยวิ่งไกลสุดเท่าไหร?',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
@@ -86,7 +143,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                             children: _distanceOptions
                                 .map((o) => MultiChip(
                                       label: o,
-                                      selected: ob.data.longestDistance == o,
+                                      selected: data.longestDistance == o,
                                       onTap: () => notifier.update((d) => d.longestDistance = o),
                                     ))
                                 .toList(),
@@ -98,9 +155,12 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                               children: [
                                 Text('สรุปให้เห็นก่อน', style: AppText.heading(size: 14)),
                                 const SizedBox(height: 12),
-                                _SummaryRow('ประสบการณ์', ob.data.pastExperience),
-                                _SummaryRow('เป้าหมาย', ob.data.goal),
-                                _SummaryRow('ระยะวิ่งต่อสัปดาห์', ob.data.longestDistance),
+                                _SummaryRow(
+                                  'ประสบการณ์',
+                                  data.hasRunningExperience == true ? 'เคยซ้อม/แข่งวิ่ง' : 'ไม่เคย',
+                                ),
+                                _SummaryRow('เป้าหมาย', data.distanceGoal ?? data.healthGoal ?? '-'),
+                                _SummaryRow('ระยะวิ่งไกลสุด', data.longestDistance),
                               ],
                             ),
                           ),
