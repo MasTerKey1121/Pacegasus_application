@@ -6,5 +6,6 @@ const router = express.Router();
 
 router.use(requireAuth);
 router.get('/me/full', userController.getFullProfile);
+router.delete('/me', userController.deleteUser);
 
 module.exports = router;
