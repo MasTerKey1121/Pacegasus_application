@@ -29,10 +29,10 @@ const step1Schema = Joi.object({
   gender: Joi.string().valid('male', 'female', 'other', 'prefer_not_to_say').required(),
   heightCm: Joi.number().min(80).max(250).required(),
   weightKg: Joi.number().min(20).max(300).required(),
-  runningExperienceLevel: Joi.string().valid('beginner', 'intermediate', 'advanced', 'elite').required(),
-  weeklyDistanceKm: Joi.number().min(0).max(500).required(),
+  runningExperienceLevel: Joi.string().valid('beginner', 'intermediate', 'advanced', 'elite').allow(null),
+  weeklyDistanceKm: Joi.number().min(0).max(500).allow(null),
   runningDaysPerWeek: Joi.number().integer().min(0).max(7).required(),
-  timezone: Joi.string().default('Asia/Bangkok'),
+  timezone: Joi.string().allow(null).default('Asia/Bangkok'),
 });
 
 const injurySchema = Joi.object({

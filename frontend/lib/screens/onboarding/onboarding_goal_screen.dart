@@ -129,13 +129,15 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
         if (d.healthGoal != null)
           {
             'goalType': _healthGoalTypeMap[d.healthGoal]!,
+            'targetDistanceKm': null,
+            'targetPaceSecPerKm': null,
             'isPrimary': d.distanceGoal == null,
           },
         if (d.distanceGoal != null)
           {
             'goalType': _distanceGoalTypeMap[d.distanceGoal]!,
             'targetDistanceKm': _distanceKm[d.distanceGoal],
-            if (d.targetPaceSecPerKm != null) 'targetPaceSecPerKm': d.targetPaceSecPerKm!.round(),
+            'targetPaceSecPerKm': d.targetPaceSecPerKm?.round(),
             'isPrimary': true,
           },
       ],

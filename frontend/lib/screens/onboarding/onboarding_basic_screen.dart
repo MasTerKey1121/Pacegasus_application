@@ -5,16 +5,7 @@ import '../../providers/onboarding_provider.dart';
 import '../../widgets/common.dart';
 import 'onboarding_injury_screen.dart';
 import '../../services/onboarding_api.dart';
-import '../../providers/auth_provider.dart';
 import '../../models/onboarding_data.dart';
-
-const _experienceOptions = ['beginner', 'intermediate', 'advanced', 'elite'];
-const _experienceLabels = {
-  'beginner': 'มือใหม่',
-  'intermediate': 'ปานกลาง',
-  'advanced': 'ระดับสูง',
-  'elite': 'นักกีฬา',
-};
 
 class OnboardingBasicScreen extends ConsumerWidget {
   const OnboardingBasicScreen({super.key});
@@ -25,8 +16,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
         d.year.isNotEmpty &&
         d.weightKg.isNotEmpty &&
         d.heightCm.isNotEmpty &&
-        d.runningExperienceLevel != null &&
-        d.weeklyDistanceKm.isNotEmpty &&
         d.runningDaysPerWeek.isNotEmpty;
   }
 
@@ -37,10 +26,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
       'gender': d.gender == 'ชาย' ? 'male' : 'female',
       'heightCm': double.parse(d.heightCm),
       'weightKg': double.parse(d.weightKg),
-      'runningExperienceLevel': d.runningExperienceLevel,
-      'weeklyDistanceKm': double.parse(d.weeklyDistanceKm),
       'runningDaysPerWeek': int.parse(d.runningDaysPerWeek),
-      'timezone': 'Asia/Bangkok',
     };
   }
 
@@ -136,21 +122,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
-                          const SizedBox(height: 22),
-                          Text('ระดับประสบการณ์วิ่ง',
-                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
-                          const SizedBox(height: 8),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: _experienceOptions
-                                .map((o) => MultiChip(
-                                      label: _experienceLabels[o]!,
-                                      selected: data.runningExperienceLevel == o,
-                                      onTap: () => notifier.update((d) => d.runningExperienceLevel = o),
-                                    ))
-                                .toList(),
-                          ),
                           const SizedBox(height: 22),
                           Row(children: [
                             Expanded(

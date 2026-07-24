@@ -17,9 +17,20 @@ class OnboardingInjuryScreen extends ConsumerWidget {
     final hasHistory = d.pastInjuries.isNotEmpty || d.currentInjuries.isNotEmpty;
     return {
       'hasInjuryHistory': hasHistory,
+      'hasChronicCondition': d.conditions.isNotEmpty,
       'injuries': [
-        ...d.pastInjuries.map((b) => {'bodyPart': b, 'isCurrent': false}),
-        ...d.currentInjuries.map((b) => {'bodyPart': b, 'isCurrent': true}),
+        ...d.pastInjuries.map((b) => {
+              'category': 'injury',
+              'bodyPart': b,
+              'injuryType': null,
+              'isCurrent': false,
+            }),
+        ...d.currentInjuries.map((b) => {
+              'category': 'injury',
+              'bodyPart': b,
+              'injuryType': null,
+              'isCurrent': true,
+            }),
       ],
       // หมายเหตุ: d.conditions (โรคประจำตัว) API ไม่มีรองรับ เลยไม่ส่ง
     };

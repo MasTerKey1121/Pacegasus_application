@@ -33,6 +33,9 @@ class ApiClient {
   Future<Map<String, dynamic>> put(String path, {Map<String, dynamic>? body, bool auth = false}) =>
       _request('PUT', path, body: body, auth: auth);
 
+  Future<Map<String, dynamic>> delete(String path, {Map<String, dynamic>? body, bool auth = false}) =>
+      _request('DELETE', path, body: body, auth: auth);
+
   Future<http.Response> _sendRaw(String method, String path, Map<String, dynamic>? body, bool auth) {
     final uri = Uri.parse('$baseUrl$path');
     final headers = <String, String>{'Content-Type': 'application/json'};
@@ -50,6 +53,8 @@ class ApiClient {
         return http.post(uri, headers: headers, body: encodedBody);
       case 'PUT':
         return http.put(uri, headers: headers, body: encodedBody);
+      case 'DELETE':
+        return http.delete(uri, headers: headers, body: encodedBody);
       default:
         throw UnimplementedError(method);
     }

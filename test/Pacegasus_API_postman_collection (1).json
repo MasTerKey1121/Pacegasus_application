@@ -1,70 +1,18 @@
 {
   "info": {
-    "name": "Pacegasus API",
+    "_postman_id": "ff4fb48c-839f-408a-9fac-0f5a4512e25c",
+    "name": "Pacegasus API Copy 2",
     "description": "# Pacegasus Backend API\n\nCollection สำหรับทดสอบ Pacegasus REST API ครอบคลุม 2 โมดูล:\n1. **Authentication** — Email OTP login/register, Google Sign-In, refresh, logout\n2. **Onboarding** — 4 ขั้นตอนเก็บข้อมูลผู้ใช้หลังสมัคร\n\n## วิธีใช้\n1. ตั้งค่า collection variable `baseUrl` ให้ตรงกับที่ backend รันอยู่ (default `http://localhost:4000`)\n2. รัน request ตามลำดับในโฟลเดอร์ **1. Authentication** ก่อน — request `Verify OTP (Register)` จะ auto-save `accessToken`/`refreshToken` ให้ request อื่นใช้ต่ออัตโนมัติผ่าน Test script\n3. เนื่องจาก OTP ถูกส่งไปทางอีเมลจริง (หรือดูค่าตรงจาก DB ตาราง `otp_codes` เวลา dev) ให้เปิดอีเมล/DB มาคัดลอกรหัส 6 หลักมาใส่ใน body ของ `Verify OTP` ก่อนกดส่ง\n4. หลังจากนั้น request ในโฟลเดอร์ **2. Onboarding** และ **3. Users** จะใช้ `{{accessToken}}` ที่ save ไว้อัตโนมัติผ่าน Authorization header\n\n## Response shape มาตรฐาน\nทุก endpoint ตอบกลับในรูปแบบเดียวกัน:\n```json\n{ \"success\": true, \"message\": \"...\", \"data\": { ... } }\n```\nและเมื่อ error:\n```json\n{ \"success\": false, \"message\": \"...\", \"details\": ... }\n```",
-    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json",
+    "_exporter_id": "56742759",
+    "_collection_link": "https://go.postman.co/collection/56742759-ff4fb48c-839f-408a-9fac-0f5a4512e25c?source=collection_link"
   },
-  "variable": [
-    {
-      "key": "baseUrl",
-      "value": "http://localhost:4000",
-      "type": "string"
-    },
-    {
-      "key": "testEmail",
-      "value": "tester@example.com",
-      "type": "string"
-    },
-    {
-      "key": "testOtp",
-      "value": "123456",
-      "type": "string",
-      "description": "แทนที่ด้วย OTP จริงที่ได้รับทางอีเมล/DB ก่อนยิง Verify OTP"
-    },
-    {
-      "key": "testOtpRef",
-      "value": "",
-      "type": "string",
-      "description": "otpRef ที่ได้จาก response ของ Request OTP — auto-save โดย Test script, ใช้คู่กับ otp ตอนเรียก Verify OTP"
-    },
-    {
-      "key": "accessToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "refreshToken",
-      "value": "",
-      "type": "string"
-    },
-    {
-      "key": "userId",
-      "value": "",
-      "type": "string"
-    }
-  ],
   "item": [
     {
       "name": "0. Health Check",
       "item": [
         {
           "name": "Health Check",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/health",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "health"
-              ]
-            },
-            "description": "**GET /api/health**\n\nตรวจสอบว่า backend ทำงานอยู่หรือไม่ ไม่ต้อง Authentication\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"Pacegasus API is running\" }\n```"
-          },
-          "response": [],
           "event": [
             {
               "listen": "test",
@@ -82,7 +30,23 @@
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/health",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "health"
+              ]
+            },
+            "description": "**GET /api/health**\n\nตรวจสอบว่า backend ทำงานอยู่หรือไม่ ไม่ต้อง Authentication\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"Pacegasus API is running\" }\n```"
+          },
+          "response": []
         }
       ]
     },
@@ -91,38 +55,6 @@
       "item": [
         {
           "name": "1.1 Request OTP (Register)",
-          "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/auth/otp/request",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "auth",
-                "otp",
-                "request"
-              ]
-            },
-            "description": "**POST /api/auth/otp/request**\n\nขอรหัส OTP 6 หลักส่งไปที่อีเมล เพื่อใช้สมัครสมาชิกใหม่ (`purpose: \"register\"`)\nระบบจะสร้าง user แถวใหม่ (ยังไม่ verified) ถ้ายังไม่เคยมีอีเมลนี้ในระบบ\n\nทุกครั้งที่เรียก endpoint นี้ ระบบจะสร้าง `otpRef` (รหัสอ้างอิง 6 ตัวอักษร) คู่กับ OTP นั้นด้วย — frontend ต้องเก็บ `otpRef` ไว้เพื่อส่งกลับไปพร้อม OTP ตอนเรียก `/auth/otp/verify` (ใช้แยกแยะว่ากำลังยืนยันคำขอ OTP รอบไหน กรณีขอซ้ำหลายครั้งติดกัน)\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลที่จะสมัคร |\n| purpose | string | ❌ (default `\"login\"`) | `\"register\"` หรือ `\"login\"` |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งรหัส OTP ไปยังอีเมลของคุณแล้ว\",\n  \"data\": {\n    \"email\": \"tester@example.com\",\n    \"expiresInMinutes\": 5,\n    \"otpRef\": \"A1B2C3\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email` ไม่ถูกต้อง หรือ `purpose` ไม่ใช่ `login`/`register` |\n| 404 | `purpose=login` แต่ไม่พบบัญชีผู้ใช้สำหรับอีเมลนี้ |\n| 409 | `purpose=register` แต่มีอีเมลนี้ verified อยู่แล้ว |\n| 429 | ขอ OTP ซ้ำเร็วเกินไป (ยังไม่พ้น resend cooldown) — message จะบอกจำนวนวินาทีที่ต้องรอ |\n\n> Test script ของ request นี้จะ auto-save `otpRef` เป็น collection variable `testOtpRef` ให้ request Verify OTP ใช้ต่อทันที",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"purpose\": \"register\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
-          },
-          "response": [],
           "event": [
             {
               "listen": "test",
@@ -156,10 +88,7 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.2 Verify OTP (Register)",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -168,8 +97,17 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"purpose\": \"register\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/otp/verify",
+              "raw": "{{baseUrl}}/api/auth/otp/request",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -177,21 +115,15 @@
                 "api",
                 "auth",
                 "otp",
-                "verify"
+                "request"
               ]
             },
-            "description": "**POST /api/auth/otp/verify**\n\nยืนยันรหัส OTP ที่ได้รับทางอีเมล เมื่อสำเร็จจะสร้าง session ให้ทันที (ทั้ง register และ login ใช้ endpoint เดียวกัน)\n\nต้องส่งทั้ง `otp` และ `otpRef` (ที่ได้จาก response ของ `/auth/otp/request` ล่าสุด) คู่กัน — ระบบจะตรวจว่า `otpRef` ตรงกับ record ที่ยังไม่หมดอายุ/ยังไม่ถูกใช้ ก่อนเช็ครหัส OTP\n\n⚠️ **ก่อนกดส่ง**: แก้ค่า `otp` ในตัวอย่าง body ให้เป็นรหัส 6 หลักที่ได้รับจริงทางอีเมล (หรือดึงจากตาราง `otp_codes` ตอน dev) — ส่วน `otpRef` จะถูก auto-save จาก request 1.1 ไว้ให้แล้ว\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลเดียวกับที่ขอ OTP |\n| otp | string(6) | ✅ | รหัส OTP ที่ได้รับ |\n| otpRef | string(6) | ✅ | รหัสอ้างอิงที่ได้จาก response ของ `/auth/otp/request` |\n| displayName | string | ❌ | ชื่อที่แสดง (ใส่ตอนสมัครครั้งแรก) |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"เข้าสู่ระบบสำเร็จ\",\n  \"data\": {\n    \"user\": {\n      \"id\": \"uuid\",\n      \"email\": \"tester@example.com\",\n      \"emailVerified\": true,\n      \"displayName\": \"Tester\",\n      \"avatarUrl\": null,\n      \"role\": \"user\",\n      \"onboardingCompleted\": false,\n      \"onboardingStep\": 0,\n      \"createdAt\": \"2026-07-19T15:51:16.483Z\"\n    },\n    \"accessToken\": \"<JWT, อายุ 15 นาที>\",\n    \"refreshToken\": \"<opaque token, อายุ 30 วัน>\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email`/`otp`/`otpRef` รูปแบบไม่ถูกต้อง, ไม่พบคำขอ OTP ที่ตรงกับ `email`+`otpRef`, OTP หมดอายุ, หรือรหัสไม่ถูกต้อง |\n| 429 | กรอกผิดเกินจำนวนครั้งที่กำหนด (default 5 ครั้ง) |\n\n> Test script ของ request นี้จะ auto-save `accessToken`, `refreshToken`, `userId` เป็น collection variable ให้ request ถัดไปใช้ต่อทันที",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\",\n  \"otpRef\": \"{{testOtpRef}}\",\n  \"displayName\": \"Tester\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**POST /api/auth/otp/request**\n\nขอรหัส OTP 6 หลักส่งไปที่อีเมล เพื่อใช้สมัครสมาชิกใหม่ (`purpose: \"register\"`)\nระบบจะสร้าง user แถวใหม่ (ยังไม่ verified) ถ้ายังไม่เคยมีอีเมลนี้ในระบบ\n\nทุกครั้งที่เรียก endpoint นี้ ระบบจะสร้าง `otpRef` (รหัสอ้างอิง 6 ตัวอักษร) คู่กับ OTP นั้นด้วย — frontend ต้องเก็บ `otpRef` ไว้เพื่อส่งกลับไปพร้อม OTP ตอนเรียก `/auth/otp/verify` (ใช้แยกแยะว่ากำลังยืนยันคำขอ OTP รอบไหน กรณีขอซ้ำหลายครั้งติดกัน)\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลที่จะสมัคร |\n| purpose | string | ❌ (default `\"login\"`) | `\"register\"` หรือ `\"login\"` |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งรหัส OTP ไปยังอีเมลของคุณแล้ว\",\n  \"data\": {\n    \"email\": \"tester@example.com\",\n    \"expiresInMinutes\": 5,\n    \"otpRef\": \"A1B2C3\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email` ไม่ถูกต้อง หรือ `purpose` ไม่ใช่ `login`/`register` |\n| 404 | `purpose=login` แต่ไม่พบบัญชีผู้ใช้สำหรับอีเมลนี้ |\n| 409 | `purpose=register` แต่มีอีเมลนี้ verified อยู่แล้ว |\n| 429 | ขอ OTP ซ้ำเร็วเกินไป (ยังไม่พ้น resend cooldown) — message จะบอกจำนวนวินาทีที่ต้องรอ |\n\n> Test script ของ request นี้จะ auto-save `otpRef` เป็น collection variable `testOtpRef` ให้ request Verify OTP ใช้ต่อทันที"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.2 Verify OTP (Register)",
           "event": [
             {
               "listen": "test",
@@ -220,10 +152,7 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.3 Request OTP (Login)",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -232,8 +161,17 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\",\n  \"otpRef\": \"{{testOtpRef}}\",\n  \"displayName\": \"Tester\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/otp/request",
+              "raw": "{{baseUrl}}/api/auth/otp/verify",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -241,21 +179,15 @@
                 "api",
                 "auth",
                 "otp",
-                "request"
+                "verify"
               ]
             },
-            "description": "**POST /api/auth/otp/request**\n\nขอ OTP สำหรับ **เข้าสู่ระบบ** บัญชีที่สมัครไว้แล้ว (`purpose: \"login\"`)\n\nระบบจะสร้าง `otpRef` คู่กับ OTP ทุกครั้งเช่นเดียวกับตอนสมัคร (ดูรายละเอียดใน 1.1) — ต้องเก็บไว้ส่งกลับไปพร้อม OTP ตอนเรียก Verify\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | ต้องเป็นอีเมลที่เคยสมัคร/verified แล้ว |\n| purpose | string | ❌ (default `\"login\"`) | `\"login\"` |\n\n### Response 200 OK\nเหมือน 1.1 (มี `otpRef` ด้วย)\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งรหัส OTP ไปยังอีเมลของคุณแล้ว\",\n  \"data\": {\n    \"email\": \"tester@example.com\",\n    \"expiresInMinutes\": 5,\n    \"otpRef\": \"A1B2C3\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email` ไม่ถูกต้อง หรือ `purpose` ไม่ใช่ `login`/`register` |\n| 404 | ไม่พบบัญชีสำหรับอีเมลนี้ (ต้องสมัครก่อน) |\n| 429 | ขอ OTP ซ้ำเร็วเกินไป (ยังไม่พ้น resend cooldown) — message จะบอกจำนวนวินาทีที่ต้องรอ |\n\n> Test script ของ request นี้จะ auto-save `otpRef` เป็น collection variable `testOtpRef` ให้ request Verify OTP (Login) ใช้ต่อทันที",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"purpose\": \"login\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**POST /api/auth/otp/verify**\n\nยืนยันรหัส OTP ที่ได้รับทางอีเมล เมื่อสำเร็จจะสร้าง session ให้ทันที (ทั้ง register และ login ใช้ endpoint เดียวกัน)\n\nต้องส่งทั้ง `otp` และ `otpRef` (ที่ได้จาก response ของ `/auth/otp/request` ล่าสุด) คู่กัน — ระบบจะตรวจว่า `otpRef` ตรงกับ record ที่ยังไม่หมดอายุ/ยังไม่ถูกใช้ ก่อนเช็ครหัส OTP\n\n⚠️ **ก่อนกดส่ง**: แก้ค่า `otp` ในตัวอย่าง body ให้เป็นรหัส 6 หลักที่ได้รับจริงทางอีเมล (หรือดึงจากตาราง `otp_codes` ตอน dev) — ส่วน `otpRef` จะถูก auto-save จาก request 1.1 ไว้ให้แล้ว\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลเดียวกับที่ขอ OTP |\n| otp | string(6) | ✅ | รหัส OTP ที่ได้รับ |\n| otpRef | string(6) | ✅ | รหัสอ้างอิงที่ได้จาก response ของ `/auth/otp/request` |\n| displayName | string | ❌ | ชื่อที่แสดง (ใส่ตอนสมัครครั้งแรก) |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"เข้าสู่ระบบสำเร็จ\",\n  \"data\": {\n    \"user\": {\n      \"id\": \"uuid\",\n      \"email\": \"tester@example.com\",\n      \"emailVerified\": true,\n      \"displayName\": \"Tester\",\n      \"avatarUrl\": null,\n      \"role\": \"user\",\n      \"onboardingCompleted\": false,\n      \"onboardingStep\": 0,\n      \"createdAt\": \"2026-07-19T15:51:16.483Z\"\n    },\n    \"accessToken\": \"<JWT, อายุ 15 นาที>\",\n    \"refreshToken\": \"<opaque token, อายุ 30 วัน>\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email`/`otp`/`otpRef` รูปแบบไม่ถูกต้อง, ไม่พบคำขอ OTP ที่ตรงกับ `email`+`otpRef`, OTP หมดอายุ, หรือรหัสไม่ถูกต้อง |\n| 429 | กรอกผิดเกินจำนวนครั้งที่กำหนด (default 5 ครั้ง) |\n\n> Test script ของ request นี้จะ auto-save `accessToken`, `refreshToken`, `userId` เป็น collection variable ให้ request ถัดไปใช้ต่อทันที"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.3 Request OTP (Login)",
           "event": [
             {
               "listen": "test",
@@ -284,10 +216,7 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.4 Verify OTP (Login)",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -296,8 +225,17 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"purpose\": \"login\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/otp/verify",
+              "raw": "{{baseUrl}}/api/auth/otp/request",
               "host": [
                 "{{baseUrl}}"
               ],
@@ -305,21 +243,15 @@
                 "api",
                 "auth",
                 "otp",
-                "verify"
+                "request"
               ]
             },
-            "description": "**POST /api/auth/otp/verify**\n\nยืนยัน OTP เพื่อเข้าสู่ระบบ (endpoint เดียวกับ 1.2) — ใช้ตอนล็อกอินซ้ำ ไม่ต้องส่ง `displayName`\n\nต้องส่ง `otpRef` คู่กับ `otp` เช่นเดียวกับ 1.2 (ใช้ค่าที่ auto-save มาจาก request 1.3)\n\n⚠️ แก้ `otp` เป็นรหัสจริงที่ได้รับก่อนกดส่ง เช่นเดียวกับ 1.2\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลเดียวกับที่ขอ OTP |\n| otp | string(6) | ✅ | รหัส OTP ที่ได้รับ |\n| otpRef | string(6) | ✅ | รหัสอ้างอิงที่ได้จาก response ของ `/auth/otp/request` |\n\n### Response 200 OK\nโครงสร้างเดียวกับ 1.2 — พร้อม token ชุดใหม่\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email`/`otp`/`otpRef` รูปแบบไม่ถูกต้อง, ไม่พบคำขอ OTP ที่ตรงกับ `email`+`otpRef`, OTP หมดอายุ, หรือรหัสไม่ถูกต้อง |\n| 429 | กรอกผิดเกินจำนวนครั้งที่กำหนด (default 5 ครั้ง) |",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\",\n  \"otpRef\": \"{{testOtpRef}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**POST /api/auth/otp/request**\n\nขอ OTP สำหรับ **เข้าสู่ระบบ** บัญชีที่สมัครไว้แล้ว (`purpose: \"login\"`)\n\nระบบจะสร้าง `otpRef` คู่กับ OTP ทุกครั้งเช่นเดียวกับตอนสมัคร (ดูรายละเอียดใน 1.1) — ต้องเก็บไว้ส่งกลับไปพร้อม OTP ตอนเรียก Verify\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | ต้องเป็นอีเมลที่เคยสมัคร/verified แล้ว |\n| purpose | string | ❌ (default `\"login\"`) | `\"login\"` |\n\n### Response 200 OK\nเหมือน 1.1 (มี `otpRef` ด้วย)\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งรหัส OTP ไปยังอีเมลของคุณแล้ว\",\n  \"data\": {\n    \"email\": \"tester@example.com\",\n    \"expiresInMinutes\": 5,\n    \"otpRef\": \"A1B2C3\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email` ไม่ถูกต้อง หรือ `purpose` ไม่ใช่ `login`/`register` |\n| 404 | ไม่พบบัญชีสำหรับอีเมลนี้ (ต้องสมัครก่อน) |\n| 429 | ขอ OTP ซ้ำเร็วเกินไป (ยังไม่พ้น resend cooldown) — message จะบอกจำนวนวินาทีที่ต้องรอ |\n\n> Test script ของ request นี้จะ auto-save `otpRef` เป็น collection variable `testOtpRef` ให้ request Verify OTP (Login) ใช้ต่อทันที"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.4 Verify OTP (Login)",
           "event": [
             {
               "listen": "test",
@@ -337,10 +269,7 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.5 Google Sign-In",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -349,29 +278,33 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{testEmail}}\",\n  \"otp\": \"{{testOtp}}\",\n  \"otpRef\": \"{{testOtpRef}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/google",
+              "raw": "{{baseUrl}}/api/auth/otp/verify",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "auth",
-                "google"
+                "otp",
+                "verify"
               ]
             },
-            "description": "**POST /api/auth/google**\n\nLogin/Register ด้วย Google — ฝั่ง frontend ต้องทำ Google Sign-In ก่อนเพื่อได้ `idToken` แล้วส่งมาที่ endpoint นี้ให้ backend ตรวจสอบกับ Google อีกที\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| idToken | string | ✅ | Google ID Token จาก frontend (JWT ที่ Google ออกให้) |\n\n### Response 200 OK\nโครงสร้างเหมือน 1.2 (`user`, `accessToken`, `refreshToken`) — ถ้าเป็นอีเมลใหม่จะสร้าง user ให้อัตโนมัติและตั้ง `emailVerified: true` ทันที\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ไม่ได้ส่ง idToken |\n| 401 | idToken ไม่ถูกต้อง/หมดอายุ/ audience ไม่ตรงกับ GOOGLE_CLIENT_ID |\n\n> **หมายเหตุการทดสอบใน Postman**: ต้องหา idToken จริงจาก Google มาใส่ก่อน (เช่น log ออกมาจากแอป frontend ตอน dev) เพราะสร้างปลอมใน Postman ไม่ได้ — endpoint นี้ verify กับ Google server จริง",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"idToken\": \"<paste real Google ID Token here>\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**POST /api/auth/otp/verify**\n\nยืนยัน OTP เพื่อเข้าสู่ระบบ (endpoint เดียวกับ 1.2) — ใช้ตอนล็อกอินซ้ำ ไม่ต้องส่ง `displayName`\n\nต้องส่ง `otpRef` คู่กับ `otp` เช่นเดียวกับ 1.2 (ใช้ค่าที่ auto-save มาจาก request 1.3)\n\n⚠️ แก้ `otp` เป็นรหัสจริงที่ได้รับก่อนกดส่ง เช่นเดียวกับ 1.2\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| email | string | ✅ | อีเมลเดียวกับที่ขอ OTP |\n| otp | string(6) | ✅ | รหัส OTP ที่ได้รับ |\n| otpRef | string(6) | ✅ | รหัสอ้างอิงที่ได้จาก response ของ `/auth/otp/request` |\n\n### Response 200 OK\nโครงสร้างเดียวกับ 1.2 — พร้อม token ชุดใหม่\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `email`/`otp`/`otpRef` รูปแบบไม่ถูกต้อง, ไม่พบคำขอ OTP ที่ตรงกับ `email`+`otpRef`, OTP หมดอายุ, หรือรหัสไม่ถูกต้อง |\n| 429 | กรอกผิดเกินจำนวนครั้งที่กำหนด (default 5 ครั้ง) |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.5 Google Sign-In",
           "event": [
             {
               "listen": "test",
@@ -389,10 +322,7 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.6 Refresh Access Token",
+          ],
           "request": {
             "method": "POST",
             "header": [
@@ -401,29 +331,32 @@
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"idToken\": \"<paste real Google ID Token here>\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/refresh",
+              "raw": "{{baseUrl}}/api/auth/google",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "auth",
-                "refresh"
+                "google"
               ]
             },
-            "description": "**POST /api/auth/refresh**\n\nขอ accessToken ใหม่ (อายุสั้น 15 นาที) โดยใช้ refreshToken — ระบบจะ **หมุน (rotate)** refreshToken ให้ใหม่ทุกครั้งที่เรียก (ตัวเก่าจะถูกเพิกถอนทันที)\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| refreshToken | string | ✅ | refreshToken ล่าสุดที่ได้จาก login/refresh ครั้งก่อน |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": { \"accessToken\": \"<new JWT>\", \"refreshToken\": \"<new refresh token>\" }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ไม่ได้ส่ง refreshToken |\n| 401 | refreshToken ไม่ถูกต้อง / หมดอายุ / ถูกเพิกถอนไปแล้ว |",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**POST /api/auth/google**\n\nLogin/Register ด้วย Google — ฝั่ง frontend ต้องทำ Google Sign-In ก่อนเพื่อได้ `idToken` แล้วส่งมาที่ endpoint นี้ให้ backend ตรวจสอบกับ Google อีกที\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| idToken | string | ✅ | Google ID Token จาก frontend (JWT ที่ Google ออกให้) |\n\n### Response 200 OK\nโครงสร้างเหมือน 1.2 (`user`, `accessToken`, `refreshToken`) — ถ้าเป็นอีเมลใหม่จะสร้าง user ให้อัตโนมัติและตั้ง `emailVerified: true` ทันที\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ไม่ได้ส่ง idToken |\n| 401 | idToken ไม่ถูกต้อง/หมดอายุ/ audience ไม่ตรงกับ GOOGLE_CLIENT_ID |\n\n> **หมายเหตุการทดสอบใน Postman**: ต้องหา idToken จริงจาก Google มาใส่ก่อน (เช่น log ออกมาจากแอป frontend ตอน dev) เพราะสร้างปลอมใน Postman ไม่ได้ — endpoint นี้ verify กับ Google server จริง"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.6 Refresh Access Token",
           "event": [
             {
               "listen": "test",
@@ -441,37 +374,41 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.7 Get Current User (Me)",
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
-              "raw": "{{baseUrl}}/api/auth/me",
+              "raw": "{{baseUrl}}/api/auth/refresh",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "auth",
-                "me"
+                "refresh"
               ]
             },
-            "description": "**GET /api/auth/me**\n\nคืนข้อมูลผู้ใช้ที่ login อยู่ปัจจุบัน ต้องแนบ `Authorization: Bearer <accessToken>`\n\n### Headers\n| Key | Value |\n|---|---|\n| Authorization | Bearer {{accessToken}} |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"user\": { ...same shape as 1.2 user object... } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่มี/หมดอายุ/ผิดรูปแบบ accessToken |\n| 404 | ไม่พบผู้ใช้ (ถูกลบไปแล้ว) |",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "**POST /api/auth/refresh**\n\nขอ accessToken ใหม่ (อายุสั้น 15 นาที) โดยใช้ refreshToken — ระบบจะ **หมุน (rotate)** refreshToken ให้ใหม่ทุกครั้งที่เรียก (ตัวเก่าจะถูกเพิกถอนทันที)\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| refreshToken | string | ✅ | refreshToken ล่าสุดที่ได้จาก login/refresh ครั้งก่อน |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": { \"accessToken\": \"<new JWT>\", \"refreshToken\": \"<new refresh token>\" }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ไม่ได้ส่ง refreshToken |\n| 401 | refreshToken ไม่ถูกต้อง / หมดอายุ / ถูกเพิกถอนไปแล้ว |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.7 Get Current User (Me)",
           "event": [
             {
               "listen": "test",
@@ -494,41 +431,37 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "1.8 Logout",
+          ],
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
             "url": {
-              "raw": "{{baseUrl}}/api/auth/logout",
+              "raw": "{{baseUrl}}/api/auth/me",
               "host": [
                 "{{baseUrl}}"
               ],
               "path": [
                 "api",
                 "auth",
-                "logout"
+                "me"
               ]
             },
-            "description": "**POST /api/auth/logout**\n\nเพิกถอน (revoke) refreshToken ที่ระบุ ทำให้ใช้ `1.6 Refresh` กับ token ตัวนี้ต่อไม่ได้อีก\n\n### Request Body\n| Field | Type | Required |\n|---|---|---|\n| refreshToken | string | ✅ |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ออกจากระบบสำเร็จ\" }\n```",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            }
+            "description": "**GET /api/auth/me**\n\nคืนข้อมูลผู้ใช้ที่ login อยู่ปัจจุบัน ต้องแนบ `Authorization: Bearer <accessToken>`\n\n### Headers\n| Key | Value |\n|---|---|\n| Authorization | Bearer {{accessToken}} |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"user\": { ...same shape as 1.2 user object... } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่มี/หมดอายุ/ผิดรูปแบบ accessToken |\n| 404 | ไม่พบผู้ใช้ (ถูกลบไปแล้ว) |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "1.8 Logout",
           "event": [
             {
               "listen": "test",
@@ -546,7 +479,38 @@
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"refreshToken\": \"{{refreshToken}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/auth/logout",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "auth",
+                "logout"
+              ]
+            },
+            "description": "**POST /api/auth/logout**\n\nเพิกถอน (revoke) refreshToken ที่ระบุ ทำให้ใช้ `1.6 Refresh` กับ token ตัวนี้ต่อไม่ได้อีก\n\n### Request Body\n| Field | Type | Required |\n|---|---|---|\n| refreshToken | string | ✅ |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ออกจากระบบสำเร็จ\" }\n```"
+          },
+          "response": []
         }
       ]
     },
@@ -555,33 +519,6 @@
       "item": [
         {
           "name": "2.0 Get Onboarding Status",
-          "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/status",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "onboarding",
-                "status"
-              ]
-            },
-            "description": "**GET /api/onboarding/status**\n\nเช็คว่าผู้ใช้ทำ onboarding ไปถึงขั้นตอนไหนแล้ว — เรียกได้ทุกเมื่อหลัง login เพื่อตัดสินใจว่าจะพาไปหน้าไหนต่อ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": { \"currentStep\": 0, \"completed\": false }\n}\n```\n`currentStep`: 0 = ยังไม่เริ่ม, 1-4 = ทำถึงขั้นตอนล่าสุดที่เสร็จแล้ว",
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
-          },
-          "response": [],
           "event": [
             {
               "listen": "test",
@@ -605,39 +542,8 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "2.1 Step 1 - Basic Info",
+          ],
           "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/step1",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "onboarding",
-                "step1"
-              ]
-            },
-            "description": "**PUT /api/onboarding/step1**\n\nบันทึกข้อมูลพื้นฐาน (Onboarding หน้าที่ 1) — เรียกซ้ำได้ (upsert)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| dateOfBirth | string (ISO date) | ✅ | เช่น `1998-05-10` |\n| gender | string | ✅ | `male` \\| `female` \\| `other` \\| `prefer_not_to_say` |\n| heightCm | number | ✅ | 80–250 |\n| weightKg | number | ✅ | 20–300 |\n| runningExperienceLevel | string | ✅ | `beginner` \\| `intermediate` \\| `advanced` \\| `elite` |\n| weeklyDistanceKm | number | ✅ | 0–500 |\n| runningDaysPerWeek | number | ✅ | 0–7 |\n| timezone | string | ❌ | default `Asia/Bangkok` |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกข้อมูลพื้นฐานสำเร็จ\", \"data\": { \"step\": 1 } }\n```\n### Error\n| Status | สาเหตุ |\n|---|---|\n| 400 | field ไม่ครบ / ค่านอกช่วงที่กำหนด |\n| 401 | ไม่ได้ login |",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"dateOfBirth\": \"1998-05-10\",\n  \"gender\": \"male\",\n  \"heightCm\": 175,\n  \"weightKg\": 68,\n  \"runningExperienceLevel\": \"beginner\",\n  \"weeklyDistanceKm\": 15,\n  \"runningDaysPerWeek\": 3,\n  \"timezone\": \"Asia/Bangkok\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -647,9 +553,26 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/onboarding/status",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "status"
+              ]
+            },
+            "description": "**GET /api/onboarding/status**\n\nเช็คว่าผู้ใช้ทำ onboarding ไปถึงขั้นตอนไหนแล้ว — เรียกได้ทุกเมื่อหลัง login เพื่อตัดสินใจว่าจะพาไปหน้าไหนต่อ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": { \"currentStep\": 0, \"completed\": false }\n}\n```\n`currentStep`: 0 = ยังไม่เริ่ม, 1-4 = ทำถึงขั้นตอนล่าสุดที่เสร็จแล้ว"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "2.1 Step 1 - Basic Info",
           "event": [
             {
               "listen": "test",
@@ -672,39 +595,8 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "2.2 Step 2 - Injury History",
+          ],
           "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/step2",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "onboarding",
-                "step2"
-              ]
-            },
-            "description": "**PUT /api/onboarding/step2**\n\nบันทึกประวัติการบาดเจ็บ (Onboarding หน้าที่ 2) — ส่งซ้ำจะ **แทนที่รายการ injuries เดิมทั้งหมด**\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| hasInjuryHistory | boolean | ✅ | มีประวัติบาดเจ็บหรือไม่ |\n| injuries | array | ❌ | รายการบาดเจ็บ (ใช้เมื่อ hasInjuryHistory=true) |\n\nแต่ละ item ใน `injuries`:\n| Field | Type | Required |\n|---|---|---|\n| bodyPart | string | ✅ |\n| injuryType | string | ❌ |\n| severity | number (1-10) | ❌ |\n| isCurrent | boolean | ❌ (default false) |\n| occurredAt | string (ISO date) | ❌ |\n| notes | string | ❌ |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกประวัติการบาดเจ็บสำเร็จ\", \"data\": { \"step\": 2 } }\n```",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"hasInjuryHistory\": true,\n  \"injuries\": [\n    {\n      \"bodyPart\": \"knee\",\n      \"injuryType\": \"runner's knee\",\n      \"severity\": 3,\n      \"isCurrent\": false,\n      \"occurredAt\": \"2025-03-01\",\n      \"notes\": \"หายแล้ว แต่ยังระวังตอนวิ่งลงเนิน\"\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -714,9 +606,40 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"dateOfBirth\": \"1998-05-10\",\n  \"gender\": \"male\",\n  \"heightCm\": 175,\n  \"weightKg\": 68,\n  \"runningDaysPerWeek\": 3\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/onboarding/step1",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "step1"
+              ]
+            },
+            "description": "**PUT /api/onboarding/step1**\n\nบันทึกข้อมูลพื้นฐาน (Onboarding หน้าที่ 1) — เรียกซ้ำได้ (upsert) ลงตาราง `user_basic_info`\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ **อัปเดตตาม schema ล่าสุด**: ตัด `weeklyDistanceKm` และ `timezone` ออก เพราะคอลัมน์ `weekly_distance_km` และ `timezone` ถูกลบออกจากตาราง `user_basic_info` แล้ว (ดู migration ใหม่) ส่วน `runningExperienceLevel` ยังคง **ไม่รับ** จากหน้านี้เหมือนเดิม — คอลัมน์ `running_experience_level` มีอยู่ในตาราง (`NOT NULL DEFAULT 'beginner'`) แต่ค่าจริงจะถูกคำนวณและเขียนทับตอน Step 4\n\n### Request Body\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| dateOfBirth | string (ISO date) | ✅ | เช่น `1998-05-10` |\n| gender | string | ✅ | `male` \\| `female` \\| `other` \\| `prefer_not_to_say` |\n| heightCm | number | ✅ | 80–250 |\n| weightKg | number | ✅ | 20–300 |\n| runningDaysPerWeek | number | ✅ | 0–7 |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกข้อมูลพื้นฐานสำเร็จ\", \"data\": { \"step\": 1 } }\n```\n### Error\n| Status | สาเหตุ |\n|---|---|\n| 400 | field ไม่ครบ / ค่านอกช่วงที่กำหนด |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบผู้ใช้งาน |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "2.2 Step 2 - Injury History",
           "event": [
             {
               "listen": "test",
@@ -739,39 +662,8 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "2.3 Step 3 - Goals",
+          ],
           "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/step3",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "onboarding",
-                "step3"
-              ]
-            },
-            "description": "**PUT /api/onboarding/step3**\n\nบันทึกเป้าหมายการวิ่ง (Onboarding หน้าที่ 3) — ส่งซ้ำจะ **แทนที่รายการ goals เดิมทั้งหมด**\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required |\n|---|---|---|\n| goals | array (อย่างน้อย 1 รายการ) | ✅ |\n\nแต่ละ item ใน `goals`:\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| goalType | string | ✅ | `lose_weight` \\| `run_5k` \\| `run_10k` \\| `half_marathon` \\| `marathon` \\| `general_fitness` \\| `improve_pace` \\| `stay_consistent` |\n| targetDistanceKm | number | ❌ | |\n| targetDate | string (ISO date) | ❌ | |\n| targetPaceSecPerKm | number | ❌ | วินาที/กม. (120–1200) |\n| isPrimary | boolean | ❌ | default false |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกเป้าหมายสำเร็จ\", \"data\": { \"step\": 3 } }\n```",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"goals\": [\n    {\n      \"goalType\": \"run_10k\",\n      \"targetDistanceKm\": 10,\n      \"targetDate\": \"2026-12-01\",\n      \"targetPaceSecPerKm\": 330,\n      \"isPrimary\": true\n    },\n    {\n      \"goalType\": \"stay_consistent\",\n      \"isPrimary\": false\n    }\n  ]\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -781,9 +673,40 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hasInjuryHistory\": true,\n  \"hasChronicCondition\": false,\n  \"injuries\": [\n    {\n      \"category\": \"injury\",\n      \"bodyPart\": \"knee\",\n      \"injuryType\": \"runner's knee\",\n      \"isCurrent\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/onboarding/step2",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "step2"
+              ]
+            },
+            "description": "**PUT /api/onboarding/step2**\n\nบันทึกประวัติการบาดเจ็บ/โรคประจำตัว (Onboarding หน้าที่ 2) ลงตาราง `user_injury_summary` + `user_injuries` — ส่งซ้ำจะ **แทนที่รายการ injuries เดิมทั้งหมด**\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ **อัปเดตตาม schema ล่าสุด** — เปลี่ยนแปลงหลายจุด:\n- `user_injury_summary` แยก flag เป็น 2 ตัวแล้ว: `has_injury_history` (เคยบาดเจ็บจากการวิ่ง) และ `has_chronic_condition` (มีโรคประจำตัว) แทนที่จะมี flag เดียว\n- แต่ละ item ใน `injuries` ตอนนี้มี `category` (`injury` หรือ `chronic_condition`) เพื่อแยกว่าเป็นรายการบาดเจ็บ หรือโรคประจำตัว\n- `bodyPart` เป็น **nullable** แล้ว — ใช้เฉพาะตอน `category = injury` (ไม่ต้องส่งถ้าเป็น `chronic_condition`)\n- `injuryType` เปลี่ยนจาก optional เป็น **required** แล้ว (เช่น `ankle sprain`, `IT band syndrome`, `diabetes`, `asthma`)\n- **ตัดออก:** `severity`, `occurredAt`, `notes` — คอลัมน์เหล่านี้ถูกลบออกจากตาราง `user_injuries` แล้ว\n\n⚠️ ต้องทำ **Step 1** สำเร็จมาก่อน (`ensureStepUnlocked(userId, 1)`)\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| hasInjuryHistory | boolean | ✅ | เคยบาดเจ็บจากการวิ่งหรือไม่ |\n| hasChronicCondition | boolean | ✅ | มีโรคประจำตัวหรือไม่ |\n| injuries | array | ❌ | รายการบาดเจ็บ/โรคประจำตัว |\n\nแต่ละ item ใน `injuries`:\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| category | string | ✅ | `injury` \\| `chronic_condition` |\n| bodyPart | string | ❌ (nullable) | ใช้เมื่อ `category = injury` เท่านั้น |\n| injuryType | string | ✅ | เช่น `ankle sprain`, `diabetes` |\n| isCurrent | boolean | ❌ (default false) | |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกประวัติการบาดเจ็บสำเร็จ\", \"data\": { \"step\": 2 } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | field ไม่ครบ/ค่าไม่ถูกต้อง (เช่น `category` ผิด enum หรือ `injuryType` ขาดหาย) หรือยังไม่ผ่าน Step 1 |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบผู้ใช้งาน |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "2.3 Step 3 - Goals",
           "event": [
             {
               "listen": "test",
@@ -806,39 +729,8 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "2.4 Step 4 - Running History (Final)",
+          ],
           "request": {
-            "method": "PUT",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/onboarding/step4",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "onboarding",
-                "step4"
-              ]
-            },
-            "description": "**PUT /api/onboarding/step4**\n\nบันทึกประวัติการวิ่ง (Onboarding หน้าที่ 4, ขั้นตอนสุดท้าย) — เมื่อสำเร็จจะตั้ง `onboarding_completed = true` ให้ผู้ใช้ทันที\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| hasRunBefore | boolean | ✅ | |\n| yearsRunning | number | ❌ | 0–80 |\n| best5kSeconds | number | ❌ | best time หน่วยวินาที |\n| best10kSeconds | number | ❌ | |\n| bestHalfMarathonSeconds | number | ❌ | |\n| bestMarathonSeconds | number | ❌ | |\n| preferredEnvironment | string | ❌ | `park` \\| `road` \\| `city` \\| `treadmill` \\| `trail` |\n| typicalTrainingTime | string | ❌ | `early_morning` \\| `morning` \\| `afternoon` \\| `evening` \\| `night` |\n| connectedStrava | boolean | ❌ | default false |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"บันทึกประวัติการวิ่งสำเร็จ — Onboarding เสร็จสมบูรณ์\",\n  \"data\": { \"step\": 4, \"onboardingCompleted\": true }\n}\n```",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"hasRunBefore\": true,\n  \"yearsRunning\": 1.5,\n  \"best5kSeconds\": 1500,\n  \"best10kSeconds\": 3200,\n  \"bestHalfMarathonSeconds\": null,\n  \"bestMarathonSeconds\": null,\n  \"preferredEnvironment\": \"park\",\n  \"typicalTrainingTime\": \"morning\",\n  \"connectedStrava\": false\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -848,9 +740,40 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"goals\": [\n    {\n      \"goalType\": \"run_10k\",\n      \"targetDistanceKm\": 10,\n      \"targetPaceSecPerKm\": 330,\n      \"isPrimary\": true\n    },\n    {\n      \"goalType\": \"stay_consistent\",\n      \"isPrimary\": false\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/onboarding/step3",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "step3"
+              ]
+            },
+            "description": "**PUT /api/onboarding/step3**\n\nบันทึกเป้าหมายการวิ่ง (Onboarding หน้าที่ 3) ลงตาราง `user_goals` — ส่งซ้ำจะ **แทนที่รายการ goals เดิมทั้งหมด**\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ **อัปเดตตาม schema ล่าสุด**: ตัด `targetDate` ออก เพราะคอลัมน์ `target_date` ถูกลบออกจากตาราง `user_goals` แล้ว\n\n⚠️ ต้องทำ **Step 2** สำเร็จมาก่อน (`ensureStepUnlocked(userId, 2)`)\n\n### Request Body\n| Field | Type | Required |\n|---|---|---|\n| goals | array (อย่างน้อย 1 รายการ) | ✅ |\n\nแต่ละ item ใน `goals`:\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| goalType | string | ✅ | `lose_weight` \\| `run_5k` \\| `run_10k` \\| `half_marathon` \\| `marathon` \\| `general_fitness` \\| `improve_pace` \\| `stay_consistent` |\n| targetDistanceKm | number | ❌ | |\n| targetPaceSecPerKm | number | ❌ | วินาที/กม. (120–1200) |\n| isPrimary | boolean | ❌ | default false |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"บันทึกเป้าหมายสำเร็จ\", \"data\": { \"step\": 3 } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | field ไม่ครบ/ค่าไม่ถูกต้อง หรือยังไม่ผ่าน Step 2 |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบผู้ใช้งาน |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "2.4 Step 4 - Running History (Final)",
           "event": [
             {
               "listen": "test",
@@ -864,35 +787,18 @@
                   "    const json = pm.response.json();",
                   "    pm.expect(json.data.step).to.eql(4);",
                   "    pm.expect(json.data.onboardingCompleted).to.eql(true);",
+                  "});",
+                  "",
+                  "pm.test('Has derived runningExperienceLevel', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('runningExperienceLevel');",
+                  "    pm.expect(['beginner', 'intermediate', 'advanced', 'elite']).to.include(json.data.runningExperienceLevel);",
                   "});"
                 ]
               }
             }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "3. Users",
-      "item": [
-        {
-          "name": "3.1 Get Full Profile",
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/users/me/full",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "users",
-                "me",
-                "full"
-              ]
-            },
-            "description": "**GET /api/users/me/full**\n\nรวมข้อมูลผู้ใช้ทั้งหมดในครั้งเดียว (user + basicInfo + injury + goals + runningHistory) — เหมาะใช้ตอนโหลดหน้า Home/Profile หลัง onboarding เสร็จ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"email\": \"...\", \"displayName\": \"...\", \"onboardingCompleted\": true, \"onboardingStep\": 4, ... },\n    \"basicInfo\": { \"date_of_birth\": \"...\", \"gender\": \"male\", \"height_cm\": \"175.00\", ... } ,\n    \"injury\": { \"has_injury_history\": true, \"injuries\": [ { \"body_part\": \"knee\", ... } ] },\n    \"goals\": [ { \"goal_type\": \"run_10k\", \"is_primary\": true, ... } ],\n    \"runningHistory\": { \"has_run_before\": true, \"preferred_environment\": \"park\", ... }\n  }\n}\n```\n\nหมายเหตุ: `basicInfo`/`injury`/`runningHistory` จะเป็น `null`/ค่า default ถ้ายังไม่เคยบันทึก onboarding ขั้นตอนนั้น",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -902,9 +808,45 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"hasRunBefore\": true,\n  \"isCurrentlyRunning\": true,\n  \"weeksRunning\": 26,\n  \"longestDistanceKm\": 12\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/onboarding/step4",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "onboarding",
+                "step4"
+              ]
+            },
+            "description": "**PUT /api/onboarding/step4**\n\nบันทึกประวัติการวิ่ง (Onboarding หน้าที่ 4, ขั้นตอนสุดท้าย) ลงตาราง `user_running_history` — เมื่อสำเร็จจะตั้ง `onboarding_completed = true` ให้ผู้ใช้ทันที\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ **อัปเดตตาม schema ล่าสุด — โครงสร้างตารางนี้เปลี่ยนทั้งหมด**:\n- **ตัดออก:** `yearsRunning`, `best5kSeconds`, `best10kSeconds`, `bestHalfMarathonSeconds`, `bestMarathonSeconds`, `preferredEnvironment`, `typicalTrainingTime`, `connectedStrava` — คอลัมน์เหล่านี้ถูกลบออกจาก `user_running_history` แล้ว\n- **เพิ่มใหม่:** `isCurrentlyRunning` (boolean), `weeksRunning` (int, ใส่ค่าเมื่อ `isCurrentlyRunning = true`), `longestDistanceKm` (numeric)\n\n🚧 **หมายเหตุสำคัญ**: เนื่องจาก field ที่เคยใช้คำนวณ `runningExperienceLevel` (`yearsRunning`, best time ต่างๆ) ถูกตัดออกจาก schema แล้ว ตรรกะ `deriveExperienceLevel()` ในฝั่ง controller **ต้องได้รับการแก้ไขใหม่** ให้ใช้ field ชุดใหม่แทน (`hasRunBefore` / `isCurrentlyRunning` / `weeksRunning` / `longestDistanceKm`) — เอกสารนี้ยังคงโครง response เดิมไว้เป็น placeholder จนกว่าจะได้ controller เวอร์ชันใหม่มายืนยันตรรกะจริง ถ้ามีโค้ด controller ที่อัปเดตแล้ว ส่งมาให้ดูเพิ่มได้เพื่อปรับ error table/response ให้ตรง 100%\n\n### Request Body\n| Field | Type | Required | ค่าที่รับได้ |\n|---|---|---|---|\n| hasRunBefore | boolean | ✅ | |\n| isCurrentlyRunning | boolean | ❌ (default false) | |\n| weeksRunning | number | ❌ | ใส่ค่าเมื่อ `isCurrentlyRunning = true` |\n| longestDistanceKm | number | ❌ | |\n\n### Response 200 OK (โครงเดิม — รอ controller ใหม่ยืนยันตรรกะ derive)\n```json\n{\n  \"success\": true,\n  \"message\": \"บันทึกประวัติการวิ่งสำเร็จ — Onboarding เสร็จสมบูรณ์\",\n  \"data\": {\n    \"step\": 4,\n    \"onboardingCompleted\": true,\n    \"runningExperienceLevel\": \"intermediate\"\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | field ไม่ครบ/ค่าไม่ถูกต้อง, ยังไม่ผ่าน Step 3, หรือ edge case ไม่พบแถว `user_basic_info` ของผู้ใช้ |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบผู้ใช้งาน |"
           },
-          "response": [],
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "3. Users",
+      "item": [
+        {
+          "name": "3.1 Get Full Profile",
           "event": [
             {
               "listen": "test",
@@ -931,30 +873,8 @@
                 ]
               }
             }
-          ]
-        }
-      ]
-    },
-    {
-      "name": "4. Daily Wellness Check-in",
-      "item": [
-        {
-          "name": "4.1 Get Today Status",
+          ],
           "request": {
-            "method": "GET",
-            "header": [],
-            "url": {
-              "raw": "{{baseUrl}}/api/wellness-checkin/today",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "wellness-checkin",
-                "today"
-              ]
-            },
-            "description": "**GET /api/wellness-checkin/today**\n\nเช็คสถานะว่าวันนี้ทำ Daily Wellness Check-in แล้วหรือยัง — เป็น informational เท่านั้น ไม่ gate flow อื่นในระบบ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK (ยังไม่ทำวันนี้)\n```json\n{ \"success\": true, \"data\": { \"status\": \"not_done\", \"record\": null } }\n```\n\n### Response 200 OK (ทำแล้ว)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"done\",\n    \"record\": {\n      \"checkin_id\": \"uuid\",\n      \"checkin_date\": \"2026-07-21\",\n      \"sleep_quality\": 4,\n      \"energy_level\": 3,\n      \"muscle_soreness\": 2,\n      \"stress_level\": 2,\n      \"motivation\": 4,\n      \"wellness_score\": 3.4,\n      \"note\": null,\n      \"created_at\": \"...\",\n      \"updated_at\": \"...\"\n    }\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่ได้ login |",
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -964,9 +884,90 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/full",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me",
+                "full"
+              ]
+            },
+            "description": "**GET /api/users/me/full**\n\nรวมข้อมูลผู้ใช้ทั้งหมดในครั้งเดียว (user + basicInfo + injury + goals + runningHistory) — เหมาะใช้ตอนโหลดหน้า Home/Profile หลัง onboarding เสร็จ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ อัปเดตตาม schema ล่าสุด: `basicInfo` ไม่มี `weekly_distance_km`/`timezone` แล้ว, `injury` แยกเป็น `has_injury_history`/`has_chronic_condition` และแต่ละรายการใน `injuries` มี `category` แทน `severity`/`occurred_at`/`notes`, `goals` ไม่มี `target_date` แล้ว, และ `runningHistory` เปลี่ยนเป็น `has_run_before`/`is_currently_running`/`weeks_running`/`longest_distance_km` แทนชุดฟิลด์เดิมทั้งหมด\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"email\": \"...\", \"displayName\": \"...\", \"onboardingCompleted\": true, \"onboardingStep\": 4, ... },\n    \"basicInfo\": {\n      \"date_of_birth\": \"...\", \"gender\": \"male\", \"height_cm\": \"175.00\", \"weight_kg\": \"68.00\",\n      \"running_experience_level\": \"intermediate\", \"running_days_per_week\": 3\n    },\n    \"injury\": {\n      \"has_injury_history\": true, \"has_chronic_condition\": false,\n      \"injuries\": [ { \"category\": \"injury\", \"body_part\": \"knee\", \"injury_type\": \"runner's knee\", \"is_current\": false } ]\n    },\n    \"goals\": [ { \"goal_type\": \"run_10k\", \"target_distance_km\": 10, \"target_pace_sec_per_km\": 330, \"is_primary\": true } ],\n    \"runningHistory\": {\n      \"has_run_before\": true, \"is_currently_running\": true, \"weeks_running\": 26, \"longest_distance_km\": 12\n    }\n  }\n}\n```\n\nหมายเหตุ: `basicInfo`/`injury`/`runningHistory` จะเป็น `null`/ค่า default ถ้ายังไม่เคยบันทึก onboarding ขั้นตอนนั้น"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "3.2 Delete Profile",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('success');",
+                  "});",
+                  "",
+                  "pm.test('Has all profile sections', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data).to.have.property('user');",
+                  "    pm.expect(json.data).to.have.property('basicInfo');",
+                  "    pm.expect(json.data).to.have.property('injury');",
+                  "    pm.expect(json.data).to.have.property('goals');",
+                  "    pm.expect(json.data).to.have.property('runningHistory');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/full",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me",
+                "full"
+              ]
+            },
+            "description": "**GET /api/users/me/full**\n\nรวมข้อมูลผู้ใช้ทั้งหมดในครั้งเดียว (user + basicInfo + injury + goals + runningHistory) — เหมาะใช้ตอนโหลดหน้า Home/Profile หลัง onboarding เสร็จ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ อัปเดตตาม schema ล่าสุด: `basicInfo` ไม่มี `weekly_distance_km`/`timezone` แล้ว, `injury` แยกเป็น `has_injury_history`/`has_chronic_condition` และแต่ละรายการใน `injuries` มี `category` แทน `severity`/`occurred_at`/`notes`, `goals` ไม่มี `target_date` แล้ว, และ `runningHistory` เปลี่ยนเป็น `has_run_before`/`is_currently_running`/`weeks_running`/`longest_distance_km` แทนชุดฟิลด์เดิมทั้งหมด\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"email\": \"...\", \"displayName\": \"...\", \"onboardingCompleted\": true, \"onboardingStep\": 4, ... },\n    \"basicInfo\": {\n      \"date_of_birth\": \"...\", \"gender\": \"male\", \"height_cm\": \"175.00\", \"weight_kg\": \"68.00\",\n      \"running_experience_level\": \"intermediate\", \"running_days_per_week\": 3\n    },\n    \"injury\": {\n      \"has_injury_history\": true, \"has_chronic_condition\": false,\n      \"injuries\": [ { \"category\": \"injury\", \"body_part\": \"knee\", \"injury_type\": \"runner's knee\", \"is_current\": false } ]\n    },\n    \"goals\": [ { \"goal_type\": \"run_10k\", \"target_distance_km\": 10, \"target_pace_sec_per_km\": 330, \"is_primary\": true } ],\n    \"runningHistory\": {\n      \"has_run_before\": true, \"is_currently_running\": true, \"weeks_running\": 26, \"longest_distance_km\": 12\n    }\n  }\n}\n```\n\nหมายเหตุ: `basicInfo`/`injury`/`runningHistory` จะเป็น `null`/ค่า default ถ้ายังไม่เคยบันทึก onboarding ขั้นตอนนั้น"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "4. Daily Wellness Check-in",
+      "item": [
+        {
+          "name": "4.1 Get Today Status",
           "event": [
             {
               "listen": "test",
@@ -985,38 +986,8 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "4.2 Create Check-in",
+          ],
           "request": {
-            "method": "POST",
-            "header": [
-              {
-                "key": "Content-Type",
-                "value": "application/json"
-              }
-            ],
-            "url": {
-              "raw": "{{baseUrl}}/api/wellness-checkin",
-              "host": [
-                "{{baseUrl}}"
-              ],
-              "path": [
-                "api",
-                "wellness-checkin"
-              ]
-            },
-            "description": "**POST /api/wellness-checkin**\n\nสร้าง record Wellness Check-in ของวันนี้ (ทำได้ 1 ครั้ง/วัน) — ทั้ง 5 มิติสเกล 1-5\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| sleepQuality | integer 1-5 | ✅ | คุณภาพการนอน (1=แย่ที่สุด, 5=ดีที่สุด) |\n| energyLevel | integer 1-5 | ✅ | ระดับพลังงาน |\n| muscleSoreness | integer 1-5 | ✅ | อาการปวดกล้ามเนื้อ/DOMS (1=ไม่ปวดเลย, 5=ปวดมาก) |\n| stressLevel | integer 1-5 | ✅ | ระดับความเครียด (1=ผ่อนคลาย, 5=เครียดมาก) |\n| motivation | integer 1-5 | ✅ | แรงจูงใจในการซ้อมวันนี้ |\n| note | string ≤500 ตัวอักษร | ❌ | บันทึกเพิ่มเติม |\n\n### Response 201 Created\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 409 | ทำ check-in ของวันนี้ไปแล้ว — ให้เรียก `4.3 Update Check-in` แทน |",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sleepQuality\": 4,\n  \"energyLevel\": 3,\n  \"muscleSoreness\": 2,\n  \"stressLevel\": 2,\n  \"motivation\": 4,\n  \"note\": \"รู้สึกโอเค พร้อมซ้อม\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1026,9 +997,26 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin/today",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin",
+                "today"
+              ]
+            },
+            "description": "**GET /api/wellness-checkin/today**\n\nเช็คสถานะว่าวันนี้ทำ Daily Wellness Check-in แล้วหรือยัง — เป็น informational เท่านั้น ไม่ gate flow อื่นในระบบ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK (ยังไม่ทำวันนี้)\n```json\n{ \"success\": true, \"data\": { \"status\": \"not_done\", \"record\": null } }\n```\n\n### Response 200 OK (ทำแล้ว)\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"status\": \"done\",\n    \"record\": {\n      \"checkin_id\": \"uuid\",\n      \"checkin_date\": \"2026-07-21\",\n      \"sleep_quality\": 4,\n      \"energy_level\": 3,\n      \"muscle_soreness\": 2,\n      \"stress_level\": 2,\n      \"motivation\": 4,\n      \"wellness_score\": 3.4,\n      \"note\": null,\n      \"created_at\": \"...\",\n      \"updated_at\": \"...\"\n    }\n  }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่ได้ login |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "4.2 Create Check-in",
           "event": [
             {
               "listen": "test",
@@ -1048,18 +1036,34 @@
                 ]
               }
             }
-          ]
-        },
-        {
-          "name": "4.3 Update Check-in",
+          ],
           "request": {
-            "method": "PUT",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
             "header": [
               {
                 "key": "Content-Type",
                 "value": "application/json"
               }
             ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sleepQuality\": 4,\n  \"energyLevel\": 3,\n  \"muscleSoreness\": 2,\n  \"stressLevel\": 2,\n  \"motivation\": 4,\n  \"note\": \"รู้สึกโอเค พร้อมซ้อม\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
             "url": {
               "raw": "{{baseUrl}}/api/wellness-checkin",
               "host": [
@@ -1070,28 +1074,12 @@
                 "wellness-checkin"
               ]
             },
-            "description": "**PUT /api/wellness-checkin**\n\nแก้ไข record Wellness Check-in ของวันนี้ (ต้องสร้างด้วย `4.2 Create Check-in` ก่อนแล้วเท่านั้น)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\nโครงสร้างเดียวกับ `4.2 Create Check-in` (ทุกฟิลด์ required เหมือนเดิม เป็นการเขียนทับค่าทั้งหมด)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 404 | ยังไม่มี check-in ของวันนี้ — ให้เรียก `4.2 Create Check-in` ก่อน |",
-            "body": {
-              "mode": "raw",
-              "raw": "{\n  \"sleepQuality\": 5,\n  \"energyLevel\": 4,\n  \"muscleSoreness\": 1,\n  \"stressLevel\": 1,\n  \"motivation\": 5,\n  \"note\": \"แก้ไข: นอนหลับดีขึ้นหลังตื่นมาทบทวน\"\n}",
-              "options": {
-                "raw": {
-                  "language": "json"
-                }
-              }
-            },
-            "auth": {
-              "type": "bearer",
-              "bearer": [
-                {
-                  "key": "token",
-                  "value": "{{accessToken}}",
-                  "type": "string"
-                }
-              ]
-            }
+            "description": "**POST /api/wellness-checkin**\n\nสร้าง record Wellness Check-in ของวันนี้ (ทำได้ 1 ครั้ง/วัน) — ทั้ง 5 มิติสเกล 1-5\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| sleepQuality | integer 1-5 | ✅ | คุณภาพการนอน (1=แย่ที่สุด, 5=ดีที่สุด) |\n| energyLevel | integer 1-5 | ✅ | ระดับพลังงาน |\n| muscleSoreness | integer 1-5 | ✅ | อาการปวดกล้ามเนื้อ/DOMS (1=ไม่ปวดเลย, 5=ปวดมาก) |\n| stressLevel | integer 1-5 | ✅ | ระดับความเครียด (1=ผ่อนคลาย, 5=เครียดมาก) |\n| motivation | integer 1-5 | ✅ | แรงจูงใจในการซ้อมวันนี้ |\n| note | string ≤500 ตัวอักษร | ❌ | บันทึกเพิ่มเติม |\n\n### Response 201 Created\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 409 | ทำ check-in ของวันนี้ไปแล้ว — ให้เรียก `4.3 Update Check-in` แทน |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "4.3 Update Check-in",
           "event": [
             {
               "listen": "test",
@@ -1111,11 +1099,79 @@
                 ]
               }
             }
-          ]
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sleepQuality\": 5,\n  \"energyLevel\": 4,\n  \"muscleSoreness\": 1,\n  \"stressLevel\": 1,\n  \"motivation\": 5,\n  \"note\": \"แก้ไข: นอนหลับดีขึ้นหลังตื่นมาทบทวน\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/wellness-checkin",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "wellness-checkin"
+              ]
+            },
+            "description": "**PUT /api/wellness-checkin**\n\nแก้ไข record Wellness Check-in ของวันนี้ (ต้องสร้างด้วย `4.2 Create Check-in` ก่อนแล้วเท่านั้น)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\nโครงสร้างเดียวกับ `4.2 Create Check-in` (ทุกฟิลด์ required เหมือนเดิม เป็นการเขียนทับค่าทั้งหมด)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"status\": \"done\", \"record\": { \"...\": \"...\" } } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ฟิลด์ใดฟิลด์หนึ่งไม่อยู่ในช่วง 1-5 หรือขาดฟิลด์ที่จำเป็น |\n| 404 | ยังไม่มี check-in ของวันนี้ — ให้เรียก `4.2 Create Check-in` ก่อน |"
+          },
+          "response": []
         },
         {
           "name": "4.4 Get History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has records array', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.records).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
           "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
             "method": "GET",
             "header": [],
             "url": {
@@ -1135,7 +1191,39 @@
                 }
               ]
             },
-            "description": "**GET /api/wellness-checkin/history?days=30**\n\nดึงประวัติ Wellness Check-in ย้อนหลัง N วัน (default 30) เรียงจากล่าสุดไปเก่าสุด สำหรับใช้ทำกราฟ/แนวโน้มใน Dashboard\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| days | integer | ❌ (default 30) | จำนวนวันย้อนหลังที่จะดึง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"records\": [ { \"...\": \"...\" } ] } }\n```",
+            "description": "**GET /api/wellness-checkin/history?days=30**\n\nดึงประวัติ Wellness Check-in ย้อนหลัง N วัน (default 30) เรียงจากล่าสุดไปเก่าสุด สำหรับใช้ทำกราฟ/แนวโน้มใน Dashboard\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| days | integer | ❌ (default 30) | จำนวนวันย้อนหลังที่จะดึง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"records\": [ { \"...\": \"...\" } ] } }\n```"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "5. Main Quest (Program)",
+      "item": [
+        {
+          "name": "5.1 Start Program",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has success and data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
             "auth": {
               "type": "bearer",
               "bearer": [
@@ -1145,29 +1233,426 @@
                   "type": "string"
                 }
               ]
-            }
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"level\": \"beginner\",\n  \"scheduleMode\": \"auto\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/start",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "start"
+              ]
+            },
+            "description": "**POST /api/v1/programs/start**\n\nสมัครโปรแกรมฝึกซ้อม (Main Quest) ให้ผู้ใช้ที่ login อยู่\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| level | string (enum) | ✅ | `\"beginner\"` \\| `\"lower_intermediate\"` \\| `\"upper_intermediate\"` |\n| scheduleMode | string (enum) | ✅ | `\"auto\"` = ระบบสร้างตารางฝึกทั้งโปรแกรมให้อัตโนมัติ, `\"manual\"` = ผู้ใช้ลงตารางฝึกรายวันเอง |\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"สมัครโปรแกรมสำเร็จ — สร้างตารางฝึกทั้งโปรแกรมให้อัตโนมัติแล้ว\",\n  \"data\": { \"...\": \"...\" }\n}\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `level`/`scheduleMode` ไม่อยู่ใน enum ที่กำหนด |\n| 401 | ไม่ได้ login |"
           },
-          "response": [],
+          "response": []
+        },
+        {
+          "name": "5.2 Get Current Week",
           "event": [
             {
               "listen": "test",
               "script": {
-                "type": "text/javascript",
                 "exec": [
                   "pm.test('Status code is 200', function () {",
                   "    pm.response.to.have.status(200);",
                   "});",
                   "",
-                  "pm.test('Response has records array', function () {",
+                  "pm.test('Response has data', function () {",
                   "    const json = pm.response.json();",
-                  "    pm.expect(json.data.records).to.be.an('array');",
+                  "    pm.expect(json).to.have.property('data');",
                   "});"
-                ]
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
               }
             }
-          ]
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/current/week",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "current",
+                "week"
+              ]
+            },
+            "description": "**GET /api/v1/programs/current/week**\n\nดึงตารางฝึกของสัปดาห์ปัจจุบันของผู้ใช้ที่ login อยู่ (ต้อง `5.1 Start Program` ก่อนแล้ว)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 401 | ไม่ได้ login |\n| 404 | ผู้ใช้ยังไม่ได้สมัครโปรแกรม |"
+          },
+          "response": []
+        },
+        {
+          "name": "5.3 Add Manual Quest",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 201', function () {",
+                  "    pm.response.to.have.status(201);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});",
+                  "",
+                  "// Auto-save questId ถ้ามีใน response เพื่อใช้ต่อกับ 5.4 Delete Manual Quest",
+                  "if (pm.response.code === 201) {",
+                  "    const json = pm.response.json();",
+                  "    if (json.data && json.data.questId) {",
+                  "        pm.collectionVariables.set('questId', json.data.questId);",
+                  "    } else if (json.data && json.data.id) {",
+                  "        pm.collectionVariables.set('questId', json.data.id);",
+                  "    }",
+                  "}"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"scheduledDate\": \"2026-07-25\",\n  \"sessionType\": \"easy\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/quests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "quests"
+              ]
+            },
+            "description": "**POST /api/v1/programs/quests**\n\nลงเควสวันเดียวเอง — ใช้ได้เฉพาะโปรแกรมที่ `scheduleMode = \"manual\"` เท่านั้น\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Request Body\n| Field | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| scheduledDate | string (ISO date) | ✅ | วันที่จะลงเควส เช่น `\"2026-07-25\"` |\n| sessionType | string (enum) | ✅ | `\"easy\"` \\| `\"tempo\"` \\| `\"vo2max\"` \\| `\"long_run\"` (ต้องตรงกับ `AUTO_TEMPLATES` ใน `programService.js` — คนละ enum กับ `trainingType` ของ side quest) |\n\n### Response 201 Created\n```json\n{ \"success\": true, \"message\": \"เพิ่มเควสสำเร็จ\", \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `scheduledDate` ไม่ใช่ ISO date หรือ `sessionType` ไม่อยู่ใน enum |\n| 401 | ไม่ได้ login |"
+          },
+          "response": []
+        },
+        {
+          "name": "5.4 Delete Manual Quest",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has success field', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('success');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/quests/{{questId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "quests",
+                "{{questId}}"
+              ]
+            },
+            "description": "**DELETE /api/v1/programs/quests/:questId**\n\nลบเควสที่ยัง pending (ยังไม่เริ่ม/ยังไม่เสร็จ) — ใช้ `{{questId}}` ที่ auto-save มาจาก `5.3 Add Manual Quest` หรือแก้เป็น id จริงเอง\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Path Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| questId | string (UUID) | ✅ | id ของเควสที่จะลบ ต้องเป็น UUID ที่ถูกต้อง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ลบเควสสำเร็จ\", \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `questId` ไม่ใช่ UUID ที่ถูกต้อง |\n| 401 | ไม่ได้ login |\n| 404 | ไม่พบเควส หรือเควสไม่ใช่ของผู้ใช้นี้ |\n| 409 | เควสไม่ได้อยู่ในสถานะ pending แล้ว ลบไม่ได้ |"
+          },
+          "response": []
+        },
+        {
+          "name": "5.5 Get Quests In Range",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/quests?from=2026-07-20&to=2026-07-26",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "quests"
+              ],
+              "query": [
+                {
+                  "key": "from",
+                  "value": "2026-07-20"
+                },
+                {
+                  "key": "to",
+                  "value": "2026-07-26"
+                }
+              ]
+            },
+            "description": "**GET /api/v1/programs/quests?from=&to=**\n\nดูเควสตามช่วงวันที่ — ถ้าไม่ส่ง `from`/`to` เลยจะ fallback เป็นสัปดาห์ปัจจุบัน\n\n⚠️ ตาม schema (`.and('from', 'to')`) ถ้าจะส่ง query มา **ต้องส่งทั้งคู่พร้อมกัน** จะส่งแค่ `from` หรือแค่ `to` อย่างเดียวไม่ได้ (validation error) และ `to` ต้องเป็นวันที่ **หลัง** `from` เท่านั้น\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| from | string (ISO date) | ❌ (ถ้าส่งต้องส่งคู่กับ to) | วันเริ่มต้นของช่วง |\n| to | string (ISO date) | ❌ (ถ้าส่งต้องส่งคู่กับ from, ต้องมากกว่า from) | วันสิ้นสุดของช่วง |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | ส่งแค่ `from` หรือ `to` อย่างเดียว, รูปแบบไม่ใช่ ISO date, หรือ `to` ไม่มากกว่า `from` |\n| 401 | ไม่ได้ login |"
+          },
+          "response": []
+        },
+        {
+          "name": "5.5b Get Quests (Fallback = Current Week)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/quests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "programs",
+                "quests"
+              ]
+            },
+            "description": "**GET /api/v1/programs/quests** (ไม่ส่ง query เลย)\n\nไม่ส่ง `from`/`to` มา — ระบบจะ fallback เป็นสัปดาห์ปัจจุบันให้อัตโนมัติ (ปลอดภัยตาม schema เพราะไม่ส่งทั้งคู่)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`"
+          },
+          "response": []
         }
       ]
+    },
+    {
+      "name": "6. Side Quest",
+      "item": [
+        {
+          "name": "6.1 Get Today Side Quests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Response has data', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json).to.have.property('data');",
+                  "});"
+                ],
+                "type": "text/javascript",
+                "packages": {},
+                "requests": {}
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/quests/side?environment=park&trainingType=easy",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "quests",
+                "side"
+              ],
+              "query": [
+                {
+                  "key": "environment",
+                  "value": "park"
+                },
+                {
+                  "key": "trainingType",
+                  "value": "easy"
+                }
+              ]
+            },
+            "description": "**GET /api/v1/quests/side?environment=&trainingType=**\n\nดึงรายการ Side Quest ของวันนี้ ตามสภาพแวดล้อมและประเภทการฝึกที่เลือก\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Query Params\n| Key | Type | Required | คำอธิบาย |\n|---|---|---|---|\n| environment | string (enum) | ✅ | `\"park\"` \\| `\"road\"` \\| `\"city\"` \\| `\"treadmill\"` \\| `\"trail\"` |\n| trainingType | string (enum) | ✅ | `\"easy\"` \\| `\"long_run\"` \\| `\"tempo\"` \\| `\"interval\"` (คนละ enum กับ `sessionType` ของ main quest — ตรงนี้ไม่มี `\"vo2max\"` แต่มี `\"interval\"` แทน) |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"...\": \"...\" } }\n```\n\n### Error responses\n| Status | สาเหตุ |\n|---|---|\n| 400 | `environment`/`trainingType` ไม่อยู่ใน enum ที่กำหนด |\n| 401 | ไม่ได้ login |"
+          },
+          "response": []
+        }
+      ]
+    }
+  ],
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:4000"
+    },
+    {
+      "key": "testEmail",
+      "value": "tester@example.com"
+    },
+    {
+      "key": "testOtp",
+      "value": "123456",
+      "description": "แทนที่ด้วย OTP จริงที่ได้รับทางอีเมล/DB ก่อนยิง Verify OTP"
+    },
+    {
+      "key": "testOtpRef",
+      "value": "",
+      "description": "otpRef ที่ได้จาก response ของ Request OTP — auto-save โดย Test script, ใช้คู่กับ otp ตอนเรียก Verify OTP"
+    },
+    {
+      "key": "accessToken",
+      "value": ""
+    },
+    {
+      "key": "refreshToken",
+      "value": ""
+    },
+    {
+      "key": "userId",
+      "value": ""
+    },
+    {
+      "key": "questId",
+      "value": ""
     }
   ]
 }

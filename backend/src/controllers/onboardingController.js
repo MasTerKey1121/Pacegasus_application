@@ -60,7 +60,7 @@ const saveStep1 = asyncHandler(async (req, res) => {
       value.runningExperienceLevel,
       value.weeklyDistanceKm,
       value.runningDaysPerWeek,
-      value.timezone,
+      value.timezone ?? 'Asia/Bangkok',
     ]
   );
 

@@ -47,4 +47,13 @@ const getFullProfile = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getFullProfile };
+// DELETE /api/users/me
+const deleteCurrentUser = asyncHandler(async (req, res) => {
+  const { rowCount } = await db.query(`DELETE FROM users WHERE id = $1`, [req.user.id]);
+
+  if (rowCount === 0) throw new ApiError(404, 'ไม่พบผู้ใช้งาน');
+
+  res.status(200).json({ success: true, message: 'ลบบัญชีผู้ใช้สำเร็จ' });
+});
+
+module.exports = { getFullProfile, deleteCurrentUser };

@@ -1,10 +1,71 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
 import '../auth/login_screen.dart';
 
-class SettingsScreen extends StatelessWidget {
+class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
+
+  @override
+  ConsumerState<SettingsScreen> createState() => _SettingsScreenState();
+}
+
+class _SettingsScreenState extends ConsumerState<SettingsScreen> {
+  bool _deleting = false;
+
+  Future<void> _logout() async {
+    // เคลียร์ session ผ่าน authProvider (ยิง /api/auth/logout + ลบ refresh token
+    // ที่เก็บไว้ใน secure storage) แทนการ Navigator.push เฉยๆ แบบเดิม
+    await ref.read(authProvider.notifier).logout();
+    if (!mounted) return;
+    Navigator.of(context)
+        .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+  }
+
+  Future<void> _confirmDeleteAccount() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppColors.bg2,
+        title: Text('ลบบัญชีถาวร?', style: AppText.heading(size: 17)),
+        content: Text(
+          'ข้อมูลทั้งหมดของคุณ (โปรไฟล์ ประวัติการวิ่ง เควส คอยน์) จะถูกลบและกู้คืนไม่ได้',
+          style: AppText.body(size: 13.5, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(false),
+            child: Text('ยกเลิก', style: AppText.body(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(true),
+            child: Text('ลบบัญชี', style: AppText.body(color: AppColors.red1, weight: FontWeight.w700)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+
+    setState(() => _deleting = true);
+    try {
+      final authApi = ref.read(authApiProvider);
+      await authApi.deleteAccount();
+      // ลบสำเร็จฝั่ง server แล้ว เคลียร์ session ฝั่ง client ต่อ
+      await ref.read(authProvider.notifier).logout();
+      if (!mounted) return;
+      Navigator.of(context)
+          .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+    } on ApiException catch (e) {
+      if (mounted) showAppToast(context, e.message);
+    } catch (_) {
+      if (mounted) showAppToast(context, 'ลบบัญชีไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      if (mounted) setState(() => _deleting = false);
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -27,10 +88,14 @@ class SettingsScreen extends StatelessWidget {
             icon: Icons.logout_rounded,
             label: 'ออกจากระบบ',
             danger: true,
-            onTap: () {
-              Navigator.of(context)
-                  .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
-            },
+            onTap: _logout,
+          ),
+          const SizedBox(height: 10),
+          _MenuTile(
+            icon: Icons.delete_forever_rounded,
+            label: _deleting ? 'กำลังลบบัญชี...' : 'ลบบัญชี',
+            danger: true,
+            onTap: _deleting ? () {} : _confirmDeleteAccount,
           ),
         ],
       ),

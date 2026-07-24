@@ -9,8 +9,6 @@ class OnboardingData {
   String heightCm = '';
 
   // ===== เพิ่มใหม่ (API Step 1 ต้องใช้) =====
-  String? runningExperienceLevel; // beginner | intermediate | advanced | elite
-  String weeklyDistanceKm = ''; // 0-500
   String runningDaysPerWeek = ''; // 0-7
 
   final Set<String> conditions = {}; // โรคประจำตัว
@@ -40,8 +38,6 @@ class OnboardingData {
       ..heightCm = heightCm
 
       // ===== เพิ่มใหม่ =====
-      ..runningExperienceLevel = runningExperienceLevel
-      ..weeklyDistanceKm = weeklyDistanceKm
       ..runningDaysPerWeek = runningDaysPerWeek
 
       ..healthGoal = healthGoal

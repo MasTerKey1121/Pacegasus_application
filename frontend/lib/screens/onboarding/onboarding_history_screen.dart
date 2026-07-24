@@ -14,8 +14,21 @@ class OnboardingHistoryScreen extends ConsumerWidget {
   const OnboardingHistoryScreen({super.key});
 
   Map<String, dynamic> _buildBody(OnboardingData d) {
+    const weeksByDuration = [2, 8, 18, 39, 104, 156];
+    const kmByLongestDistance = [2.5, 7.5, 15.5, 31.5, 42.2];
+    final duration = d.isCurrentlyTraining == true
+        ? d.trainingDuration
+        : d.isCurrentlyTraining == false
+            ? d.notTrainingDuration
+            : null;
+    final durationIndex = duration == null ? -1 : _durationOptions.indexOf(duration);
+    final distanceIndex = _distanceOptions.indexOf(d.longestDistance);
+
     return {
-      'hasRunBefore': d.hasRunningExperience ?? false,
+      'hasRunBefore': d.hasRunningExperience,
+      'isCurrentlyRunning': d.hasRunningExperience == true ? d.isCurrentlyTraining : null,
+      'weeksRunning': durationIndex >= 0 ? weeksByDuration[durationIndex] : null,
+      'longestDistanceKm': distanceIndex >= 0 ? kmByLongestDistance[distanceIndex] : null,
       // yearsRunning / best5kSeconds / ... : ไม่มี UI เก็บค่า และเป็น optional ทั้งหมด เลยไม่ส่ง
     };
   }
@@ -25,6 +38,14 @@ class OnboardingHistoryScreen extends ConsumerWidget {
     final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
     final data = ob.data;
+    final hasAnsweredExperience = data.hasRunningExperience != null;
+    final needsTrainingAnswer = data.hasRunningExperience == true;
+    final hasAnsweredTraining = !needsTrainingAnswer || data.isCurrentlyTraining != null;
+    final hasSelectedDuration = !needsTrainingAnswer ||
+        (data.isCurrentlyTraining == true
+            ? data.trainingDuration != null
+            : data.notTrainingDuration != null);
+    final canProceed = hasAnsweredExperience && hasAnsweredTraining && hasSelectedDuration && !ob.isSubmitting;
 
     return Scaffold(
       body: AppBackground(
@@ -185,9 +206,8 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                 GradientButton(
                   label: ob.isSubmitting ? 'กำลังบันทึก...' : 'เริ่มใช้งาน ✓',
                   gradient: AppColors.greenGradient,
-                  onTap: ob.isSubmitting
-                      ? null
-                      : () async {
+                  onTap: canProceed
+                      ? () async {
                           final ok = await notifier.submitStep(
                             () => ref.read(onboardingApiProvider).step4(_buildBody(data)),
                           );
@@ -197,7 +217,8 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                               (route) => false,
                             );
                           }
-                        },
+                        }
+                      : null,
                 ),
               ],
             ),

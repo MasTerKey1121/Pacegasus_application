@@ -37,4 +37,11 @@ class AuthApi {
   Future<void> logout({required String refreshToken}) {
     return client.post('/api/auth/logout', body: {'refreshToken': refreshToken});
   }
+
+  // ⚠️ TODO: path นี้เดาจาก REST convention (DELETE /api/users/me) เพราะใน Postman
+  // collection ที่ให้มายังไม่มี endpoint สำหรับลบบัญชี — ต้องขอ path/response จริงจากทีม backend
+  // แล้วมาแก้ตรงนี้อีกที
+  Future<void> deleteAccount() {
+    return client.delete('/api/users/me', auth: true);
+  }
 }
