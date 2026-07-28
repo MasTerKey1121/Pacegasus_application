@@ -1,0 +1,164 @@
+const db = require('../config/db');
+const ApiError = require('../utils/ApiError');
+
+function normalizeJsonValue(value) {
+  if (value === null || value === undefined || value === '') {
+    return null;
+  }
+
+  if (typeof value === 'string') {
+    const trimmed = value.trim();
+    if (!trimmed) {
+      return null;
+    }
+
+    try {
+      const parsed = JSON.parse(trimmed);
+      return normalizeJsonValue(parsed);
+    } catch (err) {
+      return null;
+    }
+  }
+
+  if (typeof value === 'object') {
+    return value;
+  }
+
+  return value;
+}
+
+function serializeJsonValue(value) {
+  const normalized = normalizeJsonValue(value);
+  if (normalized === null || normalized === undefined) {
+    return null;
+  }
+
+  return JSON.stringify(normalized);
+}
+
+function normalizeSessionPayload(payload = {}) {
+  const sideQuestInstanceIds = Array.isArray(payload.sideQuestInstanceIds)
+    ? payload.sideQuestInstanceIds.filter(Boolean)
+    : [];
+
+  return {
+    environment: payload.environment || null,
+    sessionType: payload.sessionType || null,
+    distanceKm: payload.distanceKm != null ? Number(payload.distanceKm) : null,
+    durationSeconds: payload.durationSeconds != null ? Number(payload.durationSeconds) : null,
+    note: payload.note || null,
+    startLat: payload.startLat != null ? Number(payload.startLat) : null,
+    startLng: payload.startLng != null ? Number(payload.startLng) : null,
+    endLat: payload.endLat != null ? Number(payload.endLat) : null,
+    endLng: payload.endLng != null ? Number(payload.endLng) : null,
+    routePoints: normalizeJsonValue(payload.routePoints),
+    avgHeartRateBpm: payload.avgHeartRateBpm != null ? Number(payload.avgHeartRateBpm) : null,
+    maxHeartRateBpm: payload.maxHeartRateBpm != null ? Number(payload.maxHeartRateBpm) : null,
+    sideQuestInstanceIds,
+  };
+}
+
+async function startSession(userId, payload) {
+  const body = normalizeSessionPayload(payload);
+
+  const { rows } = await db.query(
+    `INSERT INTO running_sessions (
+       user_id, environment, session_type, status, started_at,
+       start_lat, start_lng, route_points
+     )
+     VALUES ($1, $2, $3, 'in_progress', now(), $4, $5, $6::jsonb)
+     RETURNING id, user_id, environment, session_type, status, started_at, ended_at, distance_km, duration_seconds, created_at, updated_at, start_lat, start_lng, end_lat, end_lng, route_points, avg_heart_rate_bpm, max_heart_rate_bpm`,
+    [userId, body.environment, body.sessionType, body.startLat, body.startLng, serializeJsonValue(body.routePoints)]
+  );
+
+  const session = rows[0];
+
+  if (body.sideQuestInstanceIds.length > 0) {
+    await db.query(
+      `UPDATE user_side_quest_instances
+       SET running_session_id = $1,
+           status = 'in_progress',
+           started_at = COALESCE(started_at, now())
+       WHERE id = ANY($2::uuid[]) AND user_id = $3`,
+      [session.id, body.sideQuestInstanceIds, userId]
+    );
+  }
+
+  return session;
+}
+
+async function completeSession(userId, sessionId, payload) {
+  const body = normalizeSessionPayload(payload);
+
+  const { rows } = await db.query(
+    `UPDATE running_sessions
+     SET status = 'completed',
+         ended_at = COALESCE(ended_at, now()),
+         distance_km = COALESCE($3, distance_km),
+         duration_seconds = COALESCE($4, duration_seconds),
+         end_lat = COALESCE($5, end_lat),
+         end_lng = COALESCE($6, end_lng),
+         route_points = COALESCE($7::jsonb, route_points),
+         avg_heart_rate_bpm = COALESCE($8, avg_heart_rate_bpm),
+         max_heart_rate_bpm = COALESCE($9, max_heart_rate_bpm),
+         updated_at = now()
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, user_id, environment, session_type, status, started_at, ended_at, distance_km, duration_seconds, created_at, updated_at, start_lat, start_lng, end_lat, end_lng, route_points, avg_heart_rate_bpm, max_heart_rate_bpm`,
+    [sessionId, userId, body.distanceKm, body.durationSeconds, body.endLat, body.endLng, serializeJsonValue(body.routePoints), body.avgHeartRateBpm, body.maxHeartRateBpm]
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ running session ที่ต้องการ');
+  }
+
+  return rows[0];
+}
+
+async function abandonSession(userId, sessionId, payload) {
+  const body = normalizeSessionPayload(payload);
+
+  const { rows } = await db.query(
+    `UPDATE running_sessions
+     SET status = 'abandoned',
+         ended_at = COALESCE(ended_at, now()),
+         distance_km = COALESCE($3, distance_km),
+         duration_seconds = COALESCE($4, duration_seconds),
+         end_lat = COALESCE($5, end_lat),
+         end_lng = COALESCE($6, end_lng),
+         route_points = COALESCE($7::jsonb, route_points),
+         avg_heart_rate_bpm = COALESCE($8, avg_heart_rate_bpm),
+         max_heart_rate_bpm = COALESCE($9, max_heart_rate_bpm),
+         updated_at = now()
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, user_id, environment, session_type, status, started_at, ended_at, distance_km, duration_seconds, created_at, updated_at, start_lat, start_lng, end_lat, end_lng, route_points, avg_heart_rate_bpm, max_heart_rate_bpm`,
+    [sessionId, userId, body.distanceKm, body.durationSeconds, body.endLat, body.endLng, serializeJsonValue(body.routePoints), body.avgHeartRateBpm, body.maxHeartRateBpm]
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ running session ที่ต้องการ');
+  }
+
+  return rows[0];
+}
+
+async function getSessionDetail(userId, sessionId) {
+  const { rows } = await db.query(
+    `SELECT id, user_id, environment, session_type, status, started_at, ended_at, distance_km, duration_seconds, created_at, updated_at, start_lat, start_lng, end_lat, end_lng, route_points, avg_heart_rate_bpm, max_heart_rate_bpm
+     FROM running_sessions
+     WHERE id = $1 AND user_id = $2`,
+    [sessionId, userId]
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ running session ที่ต้องการ');
+  }
+
+  return rows[0];
+}
+
+module.exports = {
+  startSession,
+  completeSession,
+  abandonSession,
+  getSessionDetail,
+};

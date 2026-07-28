@@ -23,14 +23,27 @@ function computeTargetCount(template, plannedDistanceKm) {
   return template.fixed_count;
 }
 
+function buildInstancePayload(row) {
+  return {
+    id: row.id,
+    runningSessionId: row.running_session_id,
+    userId: row.user_id,
+    sideQuestTemplateId: row.side_quest_template_id,
+    targetCount: row.target_count,
+    foundCount: row.found_count,
+    status: row.status,
+    coinAwarded: row.coin_awarded,
+    startedAt: row.started_at,
+    completedAt: row.completed_at,
+  };
+}
+
 /**
  * GET /api/v1/quests/side?environment=park&trainingType=easy
  * คืน 3 side quest แบบสุ่ม พร้อมสร้าง instance ผูกกับ user (running_session_id
  * ยังเป็น NULL ไปก่อน — จะผูกทีหลังตอนเริ่ม running session จริง)
  */
 async function getTodaySideQuests(userId, environment, trainingType) {
-  // 1. หาระยะทางที่วางแผนไว้วันนี้ (ถ้ามี main quest ของวันนี้ที่ session_type
-  //    ตรงกับ trainingType และ unit เป็น km)
   const { rows: mainQuestRows } = await db.query(
     `SELECT planned_value FROM main_quest_instances mq
      JOIN user_programs up ON up.id = mq.user_program_id
@@ -44,7 +57,6 @@ async function getTodaySideQuests(userId, environment, trainingType) {
   );
   const plannedDistanceKm = mainQuestRows.length > 0 ? Number(mainQuestRows[0].planned_value) : null;
 
-  // 2. สุ่มเลือก template ที่ active ตาม environment + training_type
   const { rows: templates } = await db.query(
     `SELECT id, title, description, target_object, mechanic_type,
             km_per, cap_count, fixed_count, coin_reward_base
@@ -59,7 +71,6 @@ async function getTodaySideQuests(userId, environment, trainingType) {
     throw new ApiError(404, `ไม่พบ side quest สำหรับ ${environment} x ${trainingType}`);
   }
 
-  // 3. สร้าง user_side_quest_instances ต่อ template ที่เลือก
   const instances = [];
   for (const t of templates) {
     const targetCount = computeTargetCount(t, plannedDistanceKm);
@@ -68,7 +79,7 @@ async function getTodaySideQuests(userId, environment, trainingType) {
       `INSERT INTO user_side_quest_instances
          (user_id, side_quest_template_id, target_count)
        VALUES ($1, $2, $3)
-       RETURNING id, target_count, found_count, status, started_at`,
+       RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
       [userId, t.id, targetCount]
     );
 
@@ -88,6 +99,137 @@ async function getTodaySideQuests(userId, environment, trainingType) {
   return { environment, trainingType, plannedDistanceKm, quests: instances };
 }
 
+async function startSideQuest(userId, runningSessionId, payload) {
+  const { instanceId, sideQuestTemplateId } = payload;
+
+  if (!instanceId && !sideQuestTemplateId) {
+    throw new ApiError(400, 'ต้องระบุ instanceId หรือ sideQuestTemplateId');
+  }
+
+  if (instanceId) {
+    const { rows } = await db.query(
+      `SELECT id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at
+       FROM user_side_quest_instances
+       WHERE id = $1 AND user_id = $2`,
+      [instanceId, userId]
+    );
+
+    if (rows.length === 0) {
+      throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+    }
+
+    const { rows: updatedRows } = await db.query(
+      `UPDATE user_side_quest_instances
+       SET running_session_id = $3,
+           status = 'in_progress',
+           started_at = COALESCE(started_at, now())
+       WHERE id = $1 AND user_id = $2
+       RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+      [instanceId, userId, runningSessionId]
+    );
+
+    return buildInstancePayload(updatedRows[0]);
+  }
+
+  const { rows: templateRows } = await db.query(
+    `SELECT id, mechanic_type, km_per, cap_count, fixed_count
+     FROM side_quest_templates
+     WHERE id = $1 AND is_active = true`,
+    [sideQuestTemplateId]
+  );
+
+  if (templateRows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ side quest template ที่ระบุ');
+  }
+
+  const targetCount = computeTargetCount(templateRows[0], null);
+  const { rows: insertedRows } = await db.query(
+    `INSERT INTO user_side_quest_instances
+       (user_id, side_quest_template_id, running_session_id, target_count)
+     VALUES ($1, $2, $3, $4)
+     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+    [userId, sideQuestTemplateId, runningSessionId, targetCount]
+  );
+
+  return buildInstancePayload(insertedRows[0]);
+}
+
+async function updateProgress(userId, questId, payload) {
+  const { rows: currentRows } = await db.query(
+    `SELECT id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at
+     FROM user_side_quest_instances
+     WHERE id = $1 AND user_id = $2`,
+    [questId, userId]
+  );
+
+  if (currentRows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+  }
+
+  const current = currentRows[0];
+  const nextFoundCount = payload.foundCount != null
+    ? payload.foundCount
+    : (current.found_count + (payload.increment || 0));
+
+  const boundedFoundCount = Math.max(0, Math.min(nextFoundCount, current.target_count));
+  const nextStatus = boundedFoundCount >= current.target_count ? 'completed' : current.status;
+
+  const { rows: updatedRows } = await db.query(
+    `UPDATE user_side_quest_instances
+     SET found_count = $3,
+         status = $4,
+         completed_at = CASE WHEN $4 = 'completed' AND status <> 'completed' THEN now() ELSE completed_at END
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+    [questId, userId, boundedFoundCount, nextStatus]
+  );
+
+  if (payload.photoUrl) {
+    await db.query(
+      `INSERT INTO quest_album_photos (user_side_quest_instance_id, photo_url, gps_lat, gps_lng)
+       VALUES ($1, $2, $3, $4)`,
+      [questId, payload.photoUrl, payload.gpsLat ?? null, payload.gpsLng ?? null]
+    );
+  }
+
+  return buildInstancePayload(updatedRows[0]);
+}
+
+async function finishSideQuest(userId, questId) {
+  const { rows } = await db.query(
+    `UPDATE user_side_quest_instances
+     SET status = 'completed',
+         found_count = GREATEST(found_count, target_count),
+         completed_at = COALESCE(completed_at, now())
+     WHERE id = $1 AND user_id = $2
+     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+    [questId, userId]
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+  }
+
+  return buildInstancePayload(rows[0]);
+}
+
+async function getQuestAlbum(userId, questId) {
+  const { rows } = await db.query(
+    `SELECT p.id, p.user_side_quest_instance_id, p.photo_url, p.gps_lat, p.gps_lng, p.captured_at
+     FROM quest_album_photos p
+     JOIN user_side_quest_instances u ON u.id = p.user_side_quest_instance_id
+     WHERE p.user_side_quest_instance_id = $1 AND u.user_id = $2
+     ORDER BY p.captured_at DESC`,
+    [questId, userId]
+  );
+
+  return rows;
+}
+
 module.exports = {
   getTodaySideQuests,
+  startSideQuest,
+  updateProgress,
+  finishSideQuest,
+  getQuestAlbum,
 };
