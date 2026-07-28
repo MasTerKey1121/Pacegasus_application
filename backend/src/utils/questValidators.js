@@ -20,6 +20,19 @@ const getSideQuestsSchema = Joi.object({
     .required(),
 });
 
+const startSideQuestSchema = Joi.object({
+  instanceId: Joi.string().uuid().optional(),
+  sideQuestTemplateId: Joi.string().uuid().optional(),
+});
+
+const updateProgressSchema = Joi.object({
+  increment: Joi.number().integer().min(1).max(100).optional(),
+  foundCount: Joi.number().integer().min(0).optional(),
+  photoUrl: Joi.string().uri().allow('').optional(),
+  gpsLat: Joi.number().min(-90).max(90).optional(),
+  gpsLng: Joi.number().min(-180).max(180).optional(),
+});
+
 // ----------------------------------------------------------------------------
 // เพิ่มใหม่: รองรับ controller ที่ยังไม่มี schema มาก่อน
 // (addManualQuest / deleteManualQuest / getQuestsInRange ใน programController.js)
@@ -60,6 +73,8 @@ const getQuestsInRangeSchema = Joi.object({
 module.exports = {
   startProgramSchema,
   getSideQuestsSchema,
+  startSideQuestSchema,
+  updateProgressSchema,
   addManualQuestSchema,
   questIdParamSchema,
   getQuestsInRangeSchema,

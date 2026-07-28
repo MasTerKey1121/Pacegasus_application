@@ -5,6 +5,7 @@ const userRoutes = require('./userRoutes');
 const wellnessCheckinRoutes = require('./wellnessCheckinRoutes');
 const programRoutes = require('./programRoutes');
 const sideQuestRoutes = require('./sideQuestRoutes');
+const runningRoutes = require('./runningRoutes');
 
 const router = express.Router();
 
@@ -15,6 +16,8 @@ router.use('/onboarding', onboardingRoutes);
 router.use('/users', userRoutes);
 router.use('/wellness-checkin', wellnessCheckinRoutes);
 router.use('/programs', programRoutes);
+router.use('/running-sessions', runningRoutes);
+router.use('/', sideQuestRoutes);
 router.use('/quests', sideQuestRoutes);
 
 module.exports = router;

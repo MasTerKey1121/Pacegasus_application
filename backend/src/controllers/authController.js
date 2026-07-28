@@ -19,6 +19,9 @@ function serializeUser(user) {
     displayName: user.display_name,
     avatarUrl: user.avatar_url,
     role: user.role,
+    policyAccepted: user.policy_accepted,
+    policyAcceptedAt: user.policy_accepted_at,
+    policyVersion: user.policy_version,
     onboardingCompleted: user.onboarding_completed,
     onboardingStep: user.onboarding_step,
     createdAt: user.created_at,
@@ -35,12 +38,42 @@ async function findUserById(id) {
   return rows[0] || null;
 }
 
+// ปรับ createUser ให้รองรับ Policy ข้อมูลเบื้องต้น
 async function createUser(email, extra = {}) {
   const { rows } = await db.query(
-    `INSERT INTO users (email, email_verified, display_name, avatar_url)
-     VALUES ($1, $2, $3, $4)
+    `INSERT INTO users (
+      email, 
+      email_verified, 
+      display_name, 
+      avatar_url,
+      policy_accepted,
+      policy_accepted_at,
+      policy_version
+    )
+    VALUES ($1, $2, $3, $4, $5, $6, $7)
+    RETURNING *`,
+    [
+      email, 
+      extra.emailVerified || false, 
+      extra.displayName || null, 
+      extra.avatarUrl || null,
+      extra.policyAccepted || false,
+      extra.policyAcceptedAt || null,
+      extra.policyVersion || null
+    ]
+  );
+  return rows[0];
+}
+
+async function acceptPolicyForUser(userId, policyVersion) {
+  const { rows } = await db.query(
+    `UPDATE users 
+     SET policy_accepted = TRUE,
+         policy_accepted_at = NOW(),
+         policy_version = $2
+     WHERE id = $1
      RETURNING *`,
-    [email, extra.emailVerified || false, extra.displayName || null, extra.avatarUrl || null]
+    [userId, policyVersion]
   );
   return rows[0];
 }
@@ -69,21 +102,42 @@ const requestOtp = asyncHandler(async (req, res) => {
   const { value, error } = requestOtpSchema.validate(req.body);
   if (error) throw new ApiError(400, error.message);
 
-  const { email, purpose } = value;
+  const { email, purpose, policyAccepted, policyVersion } = value;
 
-  const existingUser = await findUserByEmail(email);
-  if (purpose === 'register' && existingUser && existingUser.email_verified) {
-    throw new ApiError(409, 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
-  }
-  if (purpose === 'login' && !existingUser) {
-    throw new ApiError(404, 'ไม่พบบัญชีผู้ใช้สำหรับอีเมลนี้ กรุณาสมัครสมาชิกก่อน');
+  let existingUser = await findUserByEmail(email);
+
+  // 1. กรณีสมัครใหม่ (register)
+  if (purpose === 'register') {
+    if (existingUser && existingUser.email_verified) {
+      throw new ApiError(409, 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
+    }
+
+    // สร้าง User Profile ใหม่ หรืออัปเดตถ้ามี record ค้างอยู่แต่ยังไม่ยืนยัน
+    if (!existingUser) {
+      existingUser = await createUser(email, {
+        policyAccepted: true,
+        policyAcceptedAt: new Date(),
+        policyVersion: policyVersion,
+      });
+    } else {
+      // อัปเดตสถานะการยอมรับ policy
+      existingUser = await acceptPolicyForUser(existingUser.id, policyVersion);
+    }
   }
 
-  // Ensure a (possibly unverified) user row exists so the profile can be attached
-  if (!existingUser) {
-    await createUser(email);
+  // 2. กรณีเข้าสู่ระบบ (login)
+  if (purpose === 'login') {
+    if (!existingUser) {
+      throw new ApiError(404, 'ไม่พบบัญชีผู้ใช้สำหรับอีเมลนี้ กรุณาสมัครสมาชิกก่อน');
+    }
+
+    // ตรวจสอบความปลอดภัย: ต้องเคยยอมรับ policy แล้วเท่านั้น
+    if (!existingUser.policy_accepted) {
+      throw new ApiError(403, 'บัญชีของคุณยังไม่ได้ยอมรับนโยบายความเป็นส่วนตัว');
+    }
   }
 
+  // 3. ส่ง OTP เมื่อผ่านเงื่อนไขครบถ้วน
   const result = await otpService.requestOtp(email, purpose);
 
   res.status(200).json({
@@ -108,7 +162,7 @@ const verifyOtp = asyncHandler(async (req, res) => {
 
   let user = await findUserByEmail(email);
   if (!user) {
-    user = await createUser(email, { emailVerified: true, displayName });
+    throw new ApiError(404, 'ไม่พบข้อมูลผู้ใช้');
   }
 
   if (!user.email_verified || (displayName && !user.display_name)) {
@@ -143,10 +197,14 @@ const googleAuth = asyncHandler(async (req, res) => {
 
   let user = await findUserByEmail(profile.email);
   if (!user) {
+    // สมัครด้วย Google จะถือว่ายอมรับ policy ในขั้นตอนนั้น
     user = await createUser(profile.email, {
       emailVerified: profile.emailVerified,
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
+      policyAccepted: true,
+      policyAcceptedAt: new Date(),
+      policyVersion: '2026-07', // หรือดึงมาจาก config
     });
   } else if (!user.avatar_url && profile.avatarUrl) {
     const { rows } = await db.query(

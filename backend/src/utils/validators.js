@@ -4,9 +4,35 @@ const emailSchema = Joi.string().trim().lowercase().email().required();
 const otpSchema = Joi.string().trim().length(6).pattern(/^\d+$/).required();
 const otpRefSchema = Joi.string().trim().uppercase().length(6).pattern(/^[A-Z0-9]+$/).required();
 
+// ==========================================
+// Auth Schemas
+// ==========================================
+
 const requestOtpSchema = Joi.object({
   email: emailSchema,
   purpose: Joi.string().valid('register', 'login').default('login'),
+
+  // บังคับเฉพาะกรณี purpose === 'register'
+  policyAccepted: Joi.boolean()
+    .when('purpose', {
+      is: 'register',
+      then: Joi.boolean().valid(true).required().messages({
+        'any.only': 'คุณต้องยอมรับนโยบายความเป็นส่วนตัวและเงื่อนไขการใช้งานก่อนสมัครสมาชิก',
+        'any.required': 'กรุณายอมรับนโยบายความเป็นส่วนตัวและเงื่อนไขการใช้งาน',
+      }),
+      otherwise: Joi.optional().allow(null),
+    }),
+
+  policyVersion: Joi.string()
+    .trim()
+    .max(20)
+    .when('purpose', {
+      is: 'register',
+      then: Joi.string().required().messages({
+        'any.required': 'กรุณาระบุเวอร์ชันของนโยบาย (policyVersion)',
+      }),
+      otherwise: Joi.optional().allow('', null),
+    }),
 });
 
 const verifyOtpSchema = Joi.object({
@@ -24,33 +50,34 @@ const refreshSchema = Joi.object({
   refreshToken: Joi.string().required(),
 });
 
-// แก้ไข Step 1: เพิ่ม weeklyDistanceKm และ timezone ที่ต้องใช้ใน Controller
+// ==========================================
+// Onboarding Schemas (Step 1 - Step 4)
+// ==========================================
+
 const step1Schema = Joi.object({
   dateOfBirth: Joi.date().iso().max('now').required(),
   gender: Joi.string().valid('male', 'female', 'other', 'prefer_not_to_say').required(),
   heightCm: Joi.number().min(80).max(250).required(),
   weightKg: Joi.number().min(20).max(300).required(),
-  weeklyDistanceKm: Joi.number().min(0).max(1000).allow(null).optional(), //
+  weeklyDistanceKm: Joi.number().min(0).max(1000).allow(null).optional(),
   runningDaysPerWeek: Joi.number().integer().min(0).max(7).required(),
-  timezone: Joi.string().trim().default('Asia/Bangkok'), // 
+  timezone: Joi.string().trim().default('Asia/Bangkok'),
 });
 
-// แก้ไข injurySchema: เพิ่ม category, severity, occurredAt, notes ตาม Payload & DB Query
 const injurySchema = Joi.object({
-  category: Joi.string().trim().optional(), // 👈 แก้ปัญหานี้! รองรับ "category": "injury"
+  category: Joi.string().trim().optional(),
   bodyPart: Joi.string().trim().max(100).required(),
   injuryType: Joi.string().trim().max(150).allow('', null).optional(),
-  severity: Joi.string().trim().max(50).allow('', null).optional(), // 
+  severity: Joi.string().trim().max(50).allow('', null).optional(),
   isCurrent: Joi.boolean().default(false),
-  occurredAt: Joi.date().iso().allow(null).optional(), // 
-  notes: Joi.string().trim().allow('', null).optional(), // 
+  occurredAt: Joi.date().iso().allow(null).optional(),
+  notes: Joi.string().trim().allow('', null).optional(),
 });
 
-// แก้ไข chronicConditionSchema: เพิ่มรองรับ category และ field อื่นๆ
 const chronicConditionSchema = Joi.object({
-  category: Joi.string().trim().optional(), // 👈 เพิ่มรองรับ category
-  conditionName: Joi.string().trim().max(150).optional(), // 
-  injuryType: Joi.string().trim().max(150).optional(), //
+  category: Joi.string().trim().optional(),
+  conditionName: Joi.string().trim().max(150).optional(),
+  injuryType: Joi.string().trim().max(150).optional(),
   isCurrent: Joi.boolean().default(true),
   notes: Joi.string().trim().allow('', null).optional(),
 });
