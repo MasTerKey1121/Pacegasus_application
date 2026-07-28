@@ -9,6 +9,7 @@ import '../wellness/daily_wellness_screen.dart';
 import '../home/daily_missions_screen.dart';
 import '../run/run_session_screen.dart';
 import '../training/training_schedule_screen.dart';
+import '../auth/terms_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -99,7 +100,17 @@ class HomeScreen extends ConsumerWidget {
             label: '▶ เริ่ม Session การวิ่ง',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RunSessionScreen())),
           ),
-
+          GradientButton(
+              label: 'ดุหน้า test',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => TermsConsentScreen(
+                    email: 'demo@pacegasus.app',
+                    displayName: user.username,
+                  ),
+                ),
+              ),
+          ),
           const SizedBox(height: 16),
           GestureDetector(
             onTap: () =>
@@ -123,7 +134,7 @@ class HomeScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('ตารางซ้อมของฉัน', style: AppText.heading(size: 14.5)),
+                        Text('จัดตารางซ้อมของฉัน', style: AppText.heading(size: 14.5)),
                         const SizedBox(height: 2),
                         Text(user.goalLabel, style: AppText.body(size: 12, color: AppColors.textSecondary)),
                       ],

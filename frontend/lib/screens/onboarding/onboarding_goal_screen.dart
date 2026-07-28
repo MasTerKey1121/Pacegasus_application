@@ -7,7 +7,7 @@ import '../../widgets/common.dart';
 import 'onboarding_history_screen.dart';
 import '../../models/onboarding_data.dart';
 
-const _healthGoalOptions = ['วิ่งลดน้ำหนักทั่วไป', 'ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ', 'ฝึกความอึด'];
+const _healthGoalOptions = ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ','เพิ่มความเร็ว','เพิ่มความอึด'];
 const _distanceGoalOptions = ['วิ่ง 5K', 'วิ่ง 10K', 'Half Marathon', 'Full Marathon'];
 
 const Map<String, double> _distanceKm = {
@@ -19,10 +19,10 @@ const Map<String, double> _distanceKm = {
 
 // แมพชื่อไทยในแอป -> enum goalType ที่ API รับ
 const Map<String, String> _healthGoalTypeMap = {
-  'วิ่งลดน้ำหนักทั่วไป': 'general_fitness',
   'ลดน้ำหนัก': 'lose_weight',
-  'เพิ่มกล้ามเนื้อ': 'general_fitness',
-  'ฝึกความอึด': 'stay_consistent',
+  'เพิ่มกล้ามเนื้อ': 'build_muscle',
+  'เพิ่มความเร็ว': 'increase_speed',
+  'เพิ่มความอึด': 'stay_consistent',
 };
 const Map<String, String> _distanceGoalTypeMap = {
   'วิ่ง 5K': 'run_5k',
@@ -34,6 +34,10 @@ const Map<String, String> _distanceGoalTypeMap = {
 const double _minPaceSecPerKm = 2 * 60 + 30;
 const double _maxPaceSecPerKm = 12 * 60;
 
+// ตัวเลือกชั่วโมง/นาทีสำหรับ dropdown
+const List<int> _hourOptions = [0, 1, 2, 3, 4, 5, 6, 7, 8];
+const List<int> _minuteOptions = [0, 5, 10, 15, 20, 25, 30, 35, 40, 45, 50, 55];
+
 class OnboardingGoalScreen extends ConsumerStatefulWidget {
   const OnboardingGoalScreen({super.key});
 
@@ -42,42 +46,40 @@ class OnboardingGoalScreen extends ConsumerStatefulWidget {
 }
 
 class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
-  late final TextEditingController _timeController;
+  int? _selectedHour;
+  int? _selectedMinute;
+  bool _skipTime = false;
   String? _paceError;
 
   @override
   void initState() {
     super.initState();
     final existing = ref.read(onboardingProvider).data.targetFinishTime;
-    _timeController = TextEditingController(text: existing);
+    if (existing != null && existing.contains(':')) {
+      final parts = existing.split(':');
+      _selectedHour = int.tryParse(parts[0]);
+      _selectedMinute = int.tryParse(parts[1]);
+    }
   }
 
-  @override
-  void dispose() {
-    _timeController.dispose();
-    super.dispose();
-  }
-
-  void _onTimeChanged(String value, OnboardingNotifier notifier, String distanceGoal) {
-    final parts = value.split(':');
-    if (parts.length != 2) {
-      setState(() {
-        _paceError = value.isEmpty ? null : 'กรอกในรูปแบบ ชั่วโมง:นาที เช่น 1:30';
-      });
+  void _recalculate(OnboardingNotifier notifier, String distanceGoal) {
+    if (_skipTime) {
+      setState(() => _paceError = null);
       notifier.update((d) {
-        d.targetFinishTime = value;
+        d.targetFinishTime = '';
         d.targetPaceSecPerKm = null;
         d.targetSpeedKmPerSec = null;
       });
       return;
     }
 
-    final h = int.tryParse(parts[0]);
-    final m = int.tryParse(parts[1]);
+    final h = _selectedHour;
+    final m = _selectedMinute;
+
     if (h == null || m == null) {
-      setState(() => _paceError = 'กรอกในรูปแบบ ชั่วโมง:นาที เช่น 1:30');
+      setState(() => _paceError = null);
       notifier.update((d) {
-        d.targetFinishTime = value;
+        d.targetFinishTime = '';
         d.targetPaceSecPerKm = null;
         d.targetSpeedKmPerSec = null;
       });
@@ -86,23 +88,24 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
 
     final finishSeconds = (h * 3600 + m * 60).toDouble();
     final distanceKm = _distanceKm[distanceGoal]!;
-    final paceSecPerKm = finishSeconds / distanceKm;
 
     if (finishSeconds <= 0) {
-      setState(() => _paceError = 'กรุณากรอกเวลาที่ต้องการจบ');
+      setState(() => _paceError = 'กรุณาเลือกเวลาที่ต้องการจบ');
       notifier.update((d) {
-        d.targetFinishTime = value;
+        d.targetFinishTime = '$h:$m';
         d.targetPaceSecPerKm = null;
         d.targetSpeedKmPerSec = null;
       });
       return;
     }
 
+    final paceSecPerKm = finishSeconds / distanceKm;
+
     if (paceSecPerKm < _minPaceSecPerKm || paceSecPerKm > _maxPaceSecPerKm) {
       setState(() =>
           _paceError = 'Pace ต้องอยู่ระหว่าง 2:30 - 12:00 นาที/กม. (ปัจจุบันคำนวณได้ ${_formatPace(paceSecPerKm)})');
       notifier.update((d) {
-        d.targetFinishTime = value;
+        d.targetFinishTime = '$h:$m';
         d.targetPaceSecPerKm = null;
         d.targetSpeedKmPerSec = null;
       });
@@ -111,7 +114,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
 
     setState(() => _paceError = null);
     notifier.update((d) {
-      d.targetFinishTime = value;
+      d.targetFinishTime = '$h:$m';
       d.targetPaceSecPerKm = paceSecPerKm;
       d.targetSpeedKmPerSec = distanceKm / finishSeconds;
     });
@@ -151,7 +154,8 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     final data = ob.data;
 
     final hasAnyGoal = data.healthGoal != null || data.distanceGoal != null;
-    final needsValidTime = data.distanceGoal != null;
+    // ต้องกรอกเวลาให้ครบเฉพาะตอนเลือกระยะทางแล้ว และยังไม่ได้ติ๊ก "ไม่สนใจเวลาจบ"
+    final needsValidTime = data.distanceGoal != null && !_skipTime;
     final canProceed =
         hasAnyGoal && (!needsValidTime || data.targetSpeedKmPerSec != null) && !ob.isSubmitting;
 
@@ -185,22 +189,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                       child: Column(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          Text('เป้าหมายด้านสุขภาพ (เลือกได้ 1 ข้อ)',
-                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
-                          const SizedBox(height: 12),
-                          Wrap(
-                            spacing: 10,
-                            runSpacing: 10,
-                            children: _healthGoalOptions
-                                .map((g) => MultiChip(
-                                      label: g,
-                                      selected: data.healthGoal == g,
-                                      onTap: () => notifier.update(
-                                          (d) => d.healthGoal = d.healthGoal == g ? null : g),
-                                    ))
-                                .toList(),
-                          ),
-                          const SizedBox(height: 28),
+                          // ---------- โซนระยะทาง (ขึ้นก่อน) ----------
                           Text('เป้าหมายด้านระยะทาง (เลือกได้ 1 ข้อ)',
                               style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
                           const SizedBox(height: 12),
@@ -218,7 +207,12 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                                           d.targetFinishTime = '';
                                           d.targetPaceSecPerKm = null;
                                           d.targetSpeedKmPerSec = null;
-                                          _timeController.clear();
+                                          setState(() {
+                                            _selectedHour = null;
+                                            _selectedMinute = null;
+                                            _skipTime = false;
+                                            _paceError = null;
+                                          });
                                         }
                                       }),
                                     ))
@@ -226,22 +220,98 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                           ),
                           if (data.distanceGoal != null) ...[
                             const SizedBox(height: 22),
-                            AppTextField(
-                              label: 'ต้องการจบภายในเวลาเท่าไหร่ (ชม:นาที)',
-                              hint: 'เช่น 1:30',
-                              keyboardType: TextInputType.datetime,
-                              controller: _timeController,
-                              onChanged: (v) => _onTimeChanged(v, notifier, data.distanceGoal!),
+                            Text('ต้องการจบภายในเวลาเท่าไหร่',
+                                style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Expanded(
+                                  child: DropdownButtonFormField<int>(
+                                    value: _selectedHour,
+                                    isExpanded: true,
+                                    decoration: const InputDecoration(
+                                      labelText: 'ชั่วโมง',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: _hourOptions
+                                        .map((h) => DropdownMenuItem(value: h, child: Text('$h ชม.')))
+                                        .toList(),
+                                    onChanged: _skipTime
+                                        ? null
+                                        : (v) {
+                                            setState(() => _selectedHour = v);
+                                            _recalculate(notifier, data.distanceGoal!);
+                                          },
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: DropdownButtonFormField<int>(
+                                    value: _selectedMinute,
+                                    isExpanded: true,
+                                    decoration: const InputDecoration(
+                                      labelText: 'นาที',
+                                      border: OutlineInputBorder(),
+                                    ),
+                                    items: _minuteOptions
+                                        .map((m) => DropdownMenuItem(value: m, child: Text('$m นาที')))
+                                        .toList(),
+                                    onChanged: _skipTime
+                                        ? null
+                                        : (v) {
+                                            setState(() => _selectedMinute = v);
+                                            _recalculate(notifier, data.distanceGoal!);
+                                          },
+                                  ),
+                                ),
+                              ],
+                            ),
+                            const SizedBox(height: 10),
+                            Row(
+                              children: [
+                                Checkbox(
+                                  value: _skipTime,
+                                  onChanged: (v) {
+                                    setState(() {
+                                      _skipTime = v ?? false;
+                                      if (_skipTime) {
+                                        _selectedHour = null;
+                                        _selectedMinute = null;
+                                        _paceError = null;
+                                      }
+                                    });
+                                    _recalculate(notifier, data.distanceGoal!);
+                                  },
+                                ),
+                                Text('ไม่สนใจเวลาจบ', style: AppText.body(size: 13)),
+                              ],
                             ),
                             const SizedBox(height: 8),
-                            if (_paceError != null)
+                            if (!_skipTime && _paceError != null)
                               Text(_paceError!, style: AppText.body(size: 12, color: AppColors.red1))
-                            else if (data.targetPaceSecPerKm != null)
+                            else if (!_skipTime && data.targetPaceSecPerKm != null)
                               Text(
                                 'Pace โดยประมาณ: ${_formatPace(data.targetPaceSecPerKm!)} นาที/กม.',
                                 style: AppText.body(size: 12, color: AppColors.textSecondary),
                               ),
                           ],
+                          const SizedBox(height: 28),
+                          // ---------- โซนสุขภาพ (ย้ายมาไว้ทีหลัง) ----------
+                          Text('เป้าหมายด้านสุขภาพ (เลือกได้ 1 ข้อ)',
+                              style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                          const SizedBox(height: 12),
+                          Wrap(
+                            spacing: 10,
+                            runSpacing: 10,
+                            children: _healthGoalOptions
+                                .map((g) => MultiChip(
+                                      label: g,
+                                      selected: data.healthGoal == g,
+                                      onTap: () => notifier.update(
+                                          (d) => d.healthGoal = d.healthGoal == g ? null : g),
+                                    ))
+                                .toList(),
+                          ),
                           if (ob.errorMessage != null) ...[
                             const SizedBox(height: 16),
                             Text(ob.errorMessage!, style: AppText.body(size: 12.5, color: AppColors.red1)),

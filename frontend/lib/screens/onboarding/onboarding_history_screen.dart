@@ -183,7 +183,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text('สรุปให้เห็นก่อน', style: AppText.heading(size: 14)),
+                                Text('สรุปประวัติการวิ่ง', style: AppText.heading(size: 14)),
                                 const SizedBox(height: 12),
                                 _SummaryRow(
                                   'ประสบการณ์',
