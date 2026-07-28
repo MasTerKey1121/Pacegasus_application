@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
 import '../../services/onboarding_api.dart';
+import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
 import '../home/main_shell.dart';
 import '../../models/onboarding_data.dart';
@@ -209,7 +210,22 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                   onTap: canProceed
                       ? () async {
                           final ok = await notifier.submitStep(
-                            () => ref.read(onboardingApiProvider).step4(_buildBody(data)),
+                            () async {
+                              final onboardingResponse = await ref
+                                  .read(onboardingApiProvider)
+                                  .step4(_buildBody(data));
+                              final responseData = onboardingResponse['data']
+                                  as Map<String, dynamic>?;
+                              final level = responseData?['runningExperienceLevel']
+                                  as String?;
+                              if (level == null || level.isEmpty) {
+                                throw StateError(
+                                  'ไม่พบระดับการวิ่งที่ได้จาก Onboarding',
+                                );
+                              }
+
+                              await ref.read(programApiProvider).start(level: level);
+                            },
                           );
                           if (ok && context.mounted) {
                             Navigator.of(context).pushAndRemoveUntil(

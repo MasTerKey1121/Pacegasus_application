@@ -4,6 +4,7 @@ import '../../app_theme.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../providers/mission_provider.dart';
+import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
 import '../wellness/daily_wellness_screen.dart';
 import '../home/daily_missions_screen.dart';
@@ -19,6 +20,8 @@ class HomeScreen extends ConsumerWidget {
     final user = ref.watch(userProvider);
     final wellness = ref.watch(wellnessProvider);
     final missions = ref.watch(missionProvider);
+    final program = ref.watch(programProvider);
+    final todayQuest = program.todayQuest;
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
@@ -153,7 +156,7 @@ class HomeScreen extends ConsumerWidget {
                 Text(wellness.completedToday ? '🏃' : '🔒',
                     style: const TextStyle(fontSize: 30)),
                 const SizedBox(height: 10),
-                Text(
+                if (!wellness.completedToday) Text(
                   wellness.completedToday
                       ? 'Easy run 5 km · Zone 2 · ประมาณ 35 นาที'
                       : 'ทำ Daily Wellness Check-in เพื่อปลดล็อค',
@@ -164,28 +167,80 @@ class HomeScreen extends ConsumerWidget {
                     color: wellness.completedToday ? AppColors.textPrimary : AppColors.gold1,
                   ),
                 ),
+                if (wellness.completedToday && todayQuest != null) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    _todayQuestLabel(todayQuest),
+                    textAlign: TextAlign.center,
+                    style: AppText.body(
+                      size: 12.5,
+                      weight: FontWeight.w600,
+                      color: AppColors.green2,
+                    ),
+                  ),
+                ] else if (wellness.completedToday && program.isLoading) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'กำลังโหลดเควสของวันนี้...',
+                    style: AppText.body(size: 12, color: AppColors.textSecondary),
+                  ),
+                ] else if (wellness.completedToday) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'วันนี้ไม่มีเควสในตารางฝึก',
+                    style: AppText.body(size: 12, color: AppColors.textSecondary),
+                  ),
+                ],
               ],
             ),
           ),
 
           const SectionLabel(title: 'สัปดาห์นี้'),
-          Row(
-            children: List.generate(3, (i) {
-              return Expanded(
-                child: Container(
-                  margin: EdgeInsets.only(right: i == 2 ? 0 : 10),
-                  height: 90,
-                  decoration: BoxDecoration(
-                    color: AppColors.card,
-                    borderRadius: BorderRadius.circular(16),
-                    border: Border.all(color: AppColors.border),
-                  ),
-                ),
-              );
-            }),
-          ),
+          if (wellness.completedToday && program.quests.isNotEmpty)
+            Wrap(
+              spacing: 10,
+              runSpacing: 10,
+              children: program.quests
+                  .map(
+                    (quest) => Container(
+                      width: 104,
+                      padding: const EdgeInsets.all(12),
+                      decoration: BoxDecoration(
+                        color: AppColors.card,
+                        borderRadius: BorderRadius.circular(16),
+                        border: Border.all(color: AppColors.border),
+                      ),
+                      child: Text(
+                        _todayQuestLabel(quest),
+                        style: AppText.body(size: 11.5),
+                      ),
+                    ),
+                  )
+                  .toList(),
+            )
+          else
+            Text(
+              wellness.completedToday
+                  ? 'ยังไม่มีเควสสำหรับสัปดาห์นี้'
+                  : 'ทำ Daily Wellness Check-in เพื่อดูเควสสัปดาห์นี้',
+              style: AppText.body(size: 12, color: AppColors.textSecondary),
+            ),
         ],
       ),
     );
+  }
+  String _todayQuestLabel(Map<String, dynamic> quest) {
+    final type = (quest['session_type'] ?? 'run').toString();
+    final value = quest['planned_value'];
+    final unit = quest['unit'];
+    final title = switch (type) {
+      'easy' => 'Easy Run',
+      'tempo' => 'Tempo Run',
+      'vo2max' => 'VO2 Max',
+      'long_run' => 'Long Run',
+      _ => type,
+    };
+    final target = value == null ? '' : ' ${value}${unit == null ? '' : ' $unit'}';
+    return '$title$target';
   }
 }
