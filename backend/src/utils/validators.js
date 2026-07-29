@@ -93,12 +93,9 @@ const goalSchema = Joi.object({
   goalType: Joi.string()
     .valid(
       'lose_weight',
-      'run_5k',
-      'run_10k',
-      'half_marathon',
-      'marathon',
-      'general_fitness',
-      'improve_pace',
+      'build_muscle',
+      'increase_speed',
+      'increase_endurance',
       'stay_consistent'
     )
     .required(),
