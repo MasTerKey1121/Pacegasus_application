@@ -5,6 +5,7 @@ const morgan = require('morgan');
 const env = require('./config/env');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
+const usageLogMiddleware = require('./middleware/usageLog'); 
 
 const app = express();
 
@@ -18,6 +19,8 @@ app.use(
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
+
+app.use(usageLogMiddleware); 
 
 app.use('/api', routes);
 
