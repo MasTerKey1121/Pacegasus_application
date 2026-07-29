@@ -28,13 +28,20 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
   bool _agreedChecked = false;
   bool _loading = false;
 
+  static const String _policyVersion = '2026-07'; // TODO: ย้ายไป config ถ้ามีการอัปเดตนโยบายบ่อย
+
   Future<void> _onAgree() async {
     if (!_agreedChecked || _loading) return;
 
     setState(() => _loading = true);
     try {
       final authApi = ref.read(authApiProvider);
-      final res = await authApi.requestOtp(email: widget.email, purpose: 'register');
+      final res = await authApi.requestOtp(
+        email: widget.email,
+        purpose: 'register',
+        policyAccepted: true,
+        policyVersion: _policyVersion,
+      );
       final otpRef = res['data']['otpRef'] as String;
 
       if (!mounted) return;

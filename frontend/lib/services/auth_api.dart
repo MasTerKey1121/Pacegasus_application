@@ -7,10 +7,14 @@ class AuthApi {
   Future<Map<String, dynamic>> requestOtp({
     required String email,
     required String purpose, // 'login' | 'register'
+    bool? policyAccepted, // จำเป็นตอน purpose = register
+    String? policyVersion, // จำเป็นตอน purpose = register
   }) {
     return client.post('/api/auth/otp/request', body: {
       'email': email,
       'purpose': purpose,
+      if (policyAccepted != null) 'policyAccepted': policyAccepted,
+      if (policyVersion != null) 'policyVersion': policyVersion,
     });
   }
 
@@ -38,6 +42,13 @@ class AuthApi {
     return client.post('/api/auth/logout', body: {'refreshToken': refreshToken});
   }
 
+  Future<Map<String, dynamic>> acceptPolicy({required String policyVersion}) {
+  return client.post(
+    '/api/auth/accept-policy',
+    body: {'policyVersion': policyVersion},
+    auth: true,
+  );
+}
   // ⚠️ TODO: path นี้เดาจาก REST convention (DELETE /api/users/me) เพราะใน Postman
   // collection ที่ให้มายังไม่มี endpoint สำหรับลบบัญชี — ต้องขอ path/response จริงจากทีม backend
   // แล้วมาแก้ตรงนี้อีกที

@@ -10,7 +10,6 @@ import '../wellness/daily_wellness_screen.dart';
 import '../home/daily_missions_screen.dart';
 import '../run/run_session_screen.dart';
 import '../training/training_schedule_screen.dart';
-import '../auth/terms_screen.dart';
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -103,6 +102,9 @@ class HomeScreen extends ConsumerWidget {
             label: '▶ เริ่ม Session การวิ่ง',
             onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RunSessionScreen())),
           ),
+
+
+          /* เผื่อเสริมหน้า test
           GradientButton(
               label: 'ดุหน้า test',
               onTap: () => Navigator.of(context).push(
@@ -115,6 +117,8 @@ class HomeScreen extends ConsumerWidget {
               ),
           ),
           const SizedBox(height: 16),
+*/
+
           GestureDetector(
             onTap: () =>
                 Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TrainingScheduleScreen())),

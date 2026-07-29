@@ -2,9 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
-import '../../providers/auth_provider.dart';
-import '../../services/api_client.dart';
-import 'otp_screen.dart';
+import 'terms_screen.dart';
 import '../onboarding/onboarding_basic_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -17,7 +15,6 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
-  bool _loading = false;
 
   @override
   void dispose() {
@@ -26,7 +23,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
-  Future<void> _register() async {
+  void _goToTerms() {
     final email = _emailController.text.trim();
     final name = _nameController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
@@ -38,36 +35,15 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    setState(() => _loading = true);
-    try {
-      final authApi = ref.read(authApiProvider);
-      final res = await authApi.requestOtp(email: email, purpose: 'register');
-      final otpRef = res['data']['otpRef'] as String;
-
-      if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OtpScreen(
-            email: email,
-            otpRef: otpRef,
-            purpose: 'register',
-            displayName: name,
-            onVerified: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
-                (route) => false,
-              );
-            },
-          ),
+    // ไม่ยิง OTP ตรงนี้แล้ว — ต้องผ่านหน้ายอมรับข้อกำหนดก่อน
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => TermsConsentScreen(
+          email: email,
+          displayName: name,
         ),
-      );
-    } on ApiException catch (e) {
-      showAppToast(context, e.message);
-    } catch (_) {
-      showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
-    } finally {
-      if (mounted) setState(() => _loading = false);
-    }
+      ),
+    );
   }
 
   @override
@@ -95,8 +71,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
                 GradientButton(
-                  label: _loading ? 'กำลังส่งรหัส...' : 'สมัครสมาชิก',
-                  onTap: _loading ? null : _register,
+                  label: 'สมัครสมาชิก',
+                  onTap: _goToTerms,
                 ),
                 const SizedBox(height: 22),
                 Row(children: [
