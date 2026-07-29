@@ -12,8 +12,9 @@ class DailyWellnessScreen extends ConsumerWidget {
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
+    final state = ref.watch(wellnessProvider);
     final notifier = ref.read(wellnessProvider);
-    final entry = ref.watch(wellnessProvider).entry;
+    final entry = state.entry;
     final today = DateTime.now();
 
     return Scaffold(
@@ -31,9 +32,9 @@ class DailyWellnessScreen extends ConsumerWidget {
                 ]),
                 const SizedBox(height: 18),
                 AppCard(
-                  borderColor: AppColors.gold1.withOpacity(.35),
+                  borderColor: AppColors.gold1.withValues(alpha: 0.35),
                   backgroundGradient: LinearGradient(
-                    colors: [AppColors.gold1.withOpacity(.12), AppColors.gold1.withOpacity(.02)],
+                    colors: [AppColors.gold1.withValues(alpha: 0.12), AppColors.gold1.withValues(alpha: 0.02)],
                   ),
                   child: Row(
                     children: [
@@ -108,16 +109,23 @@ class DailyWellnessScreen extends ConsumerWidget {
                   ),
                 ),
                 GradientButton(
-                  label: 'บันทึก',
-                  onTap: () async {
-                    final ok = await notifier.submit();
-                    if (ok) {
-                      await ref.read(programProvider).loadCurrentWeek();
-                      ref.read(missionProvider).setDone('wellness', true);
-                      ref.read(userProvider).addReward(coin: 10);
-                      Navigator.of(context).pop();
-                    }
-                  },
+                  label: state.isSaving ? 'กำลังบันทึก...' : 'บันทึก',
+                  onTap: state.isSaving
+                      ? null
+                      : () async {
+                          final ok = await notifier.submit();
+                          if (!context.mounted) return;
+
+                          if (ok) {
+                            await ref.read(programProvider).loadCurrentWeek();
+                            if (!context.mounted) return;
+                            ref.read(missionProvider).setDone('wellness', true);
+                            ref.read(userProvider).addReward(coin: 10);
+                            Navigator.of(context).pop();
+                          } else {
+                            showAppToast(context, state.errorMessage ?? 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+                          }
+                        },
                 ),
               ],
             ),

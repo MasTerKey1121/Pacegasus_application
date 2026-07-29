@@ -25,6 +25,7 @@ const otpVerifyLimiter = rateLimit({
 router.post('/otp/request', otpRequestLimiter, authController.requestOtp);
 router.post('/otp/verify', otpVerifyLimiter, authController.verifyOtp);
 router.post('/google', authController.googleAuth);
+router.post('/accept-policy', requireAuth, authController.acceptPolicy);
 router.post('/refresh', authController.refresh);
 router.post('/logout', authController.logout);
 router.get('/me', requireAuth, authController.me);

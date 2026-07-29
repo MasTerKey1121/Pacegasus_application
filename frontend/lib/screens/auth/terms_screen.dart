@@ -6,18 +6,26 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import 'otp_screen.dart';
 import '../onboarding/onboarding_basic_screen.dart';
+import 'login_screen.dart';
 
 /// หน้าข้อกำหนดและการยินยอม — คั่นระหว่าง Register กับ OTP
 /// Flow: RegisterScreen -> TermsConsentScreen -> (ยินยอม) -> ยิง OTP -> OtpScreen
 ///                                            -> (ไม่ยินยอม) -> pop กลับ RegisterScreen
 class TermsConsentScreen extends ConsumerStatefulWidget {
   final String email;
-  final String displayName;
+
+  /// จำเป็นเฉพาะตอน register
+  final String? displayName;
+
+  /// ถ้าไม่เป็น null = login-mode (user login ผ่าน OTP มาแล้ว มี accessToken)
+  /// กด "ยินยอม" แค่บันทึกการยอมรับ policy ไม่ต้องขอ OTP ใหม่
+  final VoidCallback? onAcceptedDirectly;
 
   const TermsConsentScreen({
     super.key,
     required this.email,
-    required this.displayName,
+    this.displayName,
+    this.onAcceptedDirectly,
   });
 
   @override
@@ -31,49 +39,72 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
   static const String _policyVersion = '2026-07'; // TODO: ย้ายไป config ถ้ามีการอัปเดตนโยบายบ่อย
 
   Future<void> _onAgree() async {
-    if (!_agreedChecked || _loading) return;
+  if (!_agreedChecked || _loading) return;
 
-    setState(() => _loading = true);
-    try {
-      final authApi = ref.read(authApiProvider);
-      final res = await authApi.requestOtp(
-        email: widget.email,
-        purpose: 'register',
-        policyAccepted: true,
-        policyVersion: _policyVersion,
-      );
-      final otpRef = res['data']['otpRef'] as String;
+  setState(() => _loading = true);
+  try {
+    final authApi = ref.read(authApiProvider);
+
+    if (widget.onAcceptedDirectly != null) {
+      // Login-mode: ผ่าน OTP login มาแล้ว แค่บันทึกการยอมรับ policy
+      final res = await authApi.acceptPolicy(policyVersion: _policyVersion);
+      final updatedUser = res['data']['user'] as Map<String, dynamic>;
+      ref.read(authProvider.notifier).updateUser(updatedUser);
 
       if (!mounted) return;
-      Navigator.of(context).push(
-        MaterialPageRoute(
-          builder: (_) => OtpScreen(
-            email: widget.email,
-            otpRef: otpRef,
-            purpose: 'register',
-            displayName: widget.displayName,
-            onVerified: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
-                (route) => false,
-              );
-            },
-          ),
-        ),
-      );
-    } on ApiException catch (e) {
-      showAppToast(context, e.message);
-    } catch (_) {
-      showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
-    } finally {
-      if (mounted) setState(() => _loading = false);
+      widget.onAcceptedDirectly!.call();
+      return;
     }
+
+    // Register-mode (flow เดิม)
+    final res = await authApi.requestOtp(
+      email: widget.email,
+      purpose: 'register',
+      policyAccepted: true,
+      policyVersion: _policyVersion,
+    );
+    final otpRef = res['data']['otpRef'] as String;
+
+    if (!mounted) return;
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (_) => OtpScreen(
+          email: widget.email,
+          otpRef: otpRef,
+          purpose: 'register',
+          displayName: widget.displayName,
+          onVerified: (_) {
+            Navigator.of(context).pushAndRemoveUntil(
+              MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
+              (route) => false,
+            );
+          },
+        ),
+      ),
+    );
+  } on ApiException catch (e) {
+    showAppToast(context, e.message);
+  } catch (_) {
+    showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
+  } finally {
+    if (mounted) setState(() => _loading = false);
   }
+}
 
   void _onDisagree() {
-    // ไม่ยินยอม -> ย้อนกลับไปหน้า register (ไม่ยิง OTP ใดๆ)
-    Navigator.of(context).pop();
+  if (widget.onAcceptedDirectly != null) {
+    // Login-mode: มี session ค้างอยู่แต่ไม่ยินยอม -> logout แล้วกลับไป LoginScreen
+    // (pop() ใช้ไม่ได้ เพราะ route เดิมถูก pushAndRemoveUntil ทิ้งไปแล้ว)
+    ref.read(authProvider.notifier).logout();
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const LoginScreen()),
+      (route) => false,
+    );
+    return;
   }
+  // Register-mode: ไม่ยินยอม -> ย้อนกลับไปหน้า register
+  Navigator.of(context).pop();
+}
 
   @override
   Widget build(BuildContext context) {

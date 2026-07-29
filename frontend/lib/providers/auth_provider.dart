@@ -57,6 +57,9 @@ class AuthNotifier extends StateNotifier<AuthState> {
     }
   }
 
+  void updateUser(Map<String, dynamic> user) {
+  state = state.copyWith(user: user);
+}
   /// ตอน verify OTP สำเร็จ (login หรือ register)
   Future<void> completeLogin(Map<String, dynamic> verifyResponseData) async {
     final accessToken = verifyResponseData['accessToken'] as String;

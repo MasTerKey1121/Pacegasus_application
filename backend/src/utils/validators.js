@@ -96,7 +96,11 @@ const goalSchema = Joi.object({
       'build_muscle',
       'increase_speed',
       'increase_endurance',
-      'stay_consistent'
+      'stay_consistent',
+      'run_5k',
+      'run_10k',
+      'half_marathon',
+      'marathon'
     )
     .required(),
   targetDistanceKm: Joi.number().min(0).max(500).allow(null),

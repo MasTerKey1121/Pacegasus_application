@@ -7,6 +7,7 @@ import '../../services/api_client.dart';
 import 'register_screen.dart';
 import 'otp_screen.dart';
 import '../home/main_shell.dart';
+import 'terms_screen.dart';
 
 class LoginScreen extends ConsumerStatefulWidget {
   const LoginScreen({super.key});
@@ -45,12 +46,34 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
             email: email,
             otpRef: otpRef,
             purpose: 'login',
-            onVerified: () {
-              Navigator.of(context).pushAndRemoveUntil(
-                MaterialPageRoute(builder: (_) => const MainShell()),
-                (route) => false,
-              );
-            },
+            onVerified: (data) {
+              final user = data['user'] as Map<String, dynamic>;
+              final policyAccepted = user['policyAccepted'] == true;
+
+              if (!policyAccepted) {
+                // ยัง verify OTP ผ่านแล้ว (พิสูจน์ตัวตนแล้ว) แต่ยังไม่ยอมรับ policy
+                Navigator.of(context).pushAndRemoveUntil(
+                  MaterialPageRoute(
+                    builder: (_) => TermsConsentScreen(
+                      email: email,
+                      onAcceptedDirectly: () {
+                        Navigator.of(context).pushAndRemoveUntil(
+                          MaterialPageRoute(builder: (_) => const MainShell()),
+                          (route) => false,
+                        );
+                      },
+                    ),
+                  ),
+                  (route) => false,
+                );
+                return;
+              }
+
+  Navigator.of(context).pushAndRemoveUntil(
+    MaterialPageRoute(builder: (_) => const MainShell()),
+    (route) => false,
+  );
+},
           ),
         ),
       );

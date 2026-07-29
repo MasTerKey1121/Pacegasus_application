@@ -7,7 +7,7 @@ import '../../widgets/common.dart';
 import 'onboarding_history_screen.dart';
 import '../../models/onboarding_data.dart';
 
-const _healthGoalOptions = ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ','เพิ่มความเร็ว','เพิ่มความอึด'];
+const _healthGoalOptions = ['ลดน้ำหนัก', 'เพิ่มกล้ามเนื้อ', 'เพิ่มความเร็ว', 'เพิ่มความอึด', 'สร้างวินัย'];
 const _distanceGoalOptions = ['วิ่ง 5K', 'วิ่ง 10K', 'Half Marathon', 'Full Marathon'];
 
 const Map<String, double> _distanceKm = {
@@ -22,7 +22,8 @@ const Map<String, String> _healthGoalTypeMap = {
   'ลดน้ำหนัก': 'lose_weight',
   'เพิ่มกล้ามเนื้อ': 'build_muscle',
   'เพิ่มความเร็ว': 'increase_speed',
-  'เพิ่มความอึด': 'stay_consistent',
+  'เพิ่มความอึด': 'increase_endurance',
+  'สร้างวินัย': 'stay_consistent',
 };
 const Map<String, String> _distanceGoalTypeMap = {
   'วิ่ง 5K': 'run_5k',

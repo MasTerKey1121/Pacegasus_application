@@ -1,3 +1,4 @@
+const Joi = require('joi');
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
@@ -97,6 +98,10 @@ async function issueSession(user, req) {
   return { accessToken, refreshToken };
 }
 
+const acceptPolicySchema = Joi.object({
+  policyVersion: Joi.string().trim().max(20).required(),
+});
+
 // POST /api/auth/otp/request
 const requestOtp = asyncHandler(async (req, res) => {
   const { value, error } = requestOtpSchema.validate(req.body);
@@ -129,11 +134,6 @@ const requestOtp = asyncHandler(async (req, res) => {
   if (purpose === 'login') {
     if (!existingUser) {
       throw new ApiError(404, 'ไม่พบบัญชีผู้ใช้สำหรับอีเมลนี้ กรุณาสมัครสมาชิกก่อน');
-    }
-
-    // ตรวจสอบความปลอดภัย: ต้องเคยยอมรับ policy แล้วเท่านั้น
-    if (!existingUser.policy_accepted) {
-      throw new ApiError(403, 'บัญชีของคุณยังไม่ได้ยอมรับนโยบายความเป็นส่วนตัว');
     }
   }
 
@@ -225,6 +225,19 @@ const googleAuth = asyncHandler(async (req, res) => {
   });
 });
 
+// POST /api/auth/accept-policy
+const acceptPolicy = asyncHandler(async (req, res) => {
+  const { value, error } = acceptPolicySchema.validate(req.body);
+  if (error) throw new ApiError(400, error.message);
+
+  const user = await acceptPolicyForUser(req.user.id, value.policyVersion);
+  res.status(200).json({
+    success: true,
+    message: 'ยอมรับนโยบายความเป็นส่วนตัวสำเร็จ',
+    data: { user: serializeUser(user) },
+  });
+});
+
 // POST /api/auth/refresh
 const refresh = asyncHandler(async (req, res) => {
   const { value, error } = refreshSchema.validate(req.body);
@@ -266,4 +279,4 @@ const me = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: { user: serializeUser(user) } });
 });
 
-module.exports = { requestOtp, verifyOtp, googleAuth, refresh, logout, me, serializeUser, findUserById };
+module.exports = { requestOtp, verifyOtp, googleAuth, acceptPolicy, refresh, logout, me, serializeUser, findUserById };

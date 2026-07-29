@@ -32,6 +32,8 @@ class WellnessNotifier extends ChangeNotifier {
   }
 
   Future<bool> submit() async {
+    if (isSaving) return false;
+
     isSaving = true;
     errorMessage = null;
     notifyListeners();
@@ -41,9 +43,9 @@ class WellnessNotifier extends ChangeNotifier {
         await api.update(entry.toApiJson());
       } else {
         await api.create(entry.toApiJson());
-        completedToday = true;
       }
 
+      completedToday = true;
       isSaving = false;
       notifyListeners();
 

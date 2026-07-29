@@ -2,6 +2,8 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/mission.dart';
 
+
+//เอา quest  มาแสดงด้วย provider นี้
 class MissionNotifier extends ChangeNotifier {
   final List<Mission> missions = [
     Mission(id: 'run', icon: '🏃', title: 'Easy run 5 km', subtitle: 'Zone 2 · ประมาณ 35 นาที', coinReward: 20),

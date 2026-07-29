@@ -18,7 +18,7 @@ class OtpScreen extends ConsumerStatefulWidget {
   final int resendCooldownSeconds;
 
   /// เรียกเมื่อ verify สำเร็จ — login ไป Home, register ไป Onboarding
-  final VoidCallback? onVerified;
+  final void Function(Map<String, dynamic> verifyResponseData)? onVerified;
 
   const OtpScreen({
     super.key,
@@ -131,7 +131,7 @@ class _OtpScreenState extends ConsumerState<OtpScreen> {
       await ref.read(authProvider.notifier).completeLogin(data);
 
       if (!mounted) return;
-      widget.onVerified?.call();
+      widget.onVerified?.call(data);
     } on ApiException catch (e) {
       if (!mounted) return;
       setState(() {
