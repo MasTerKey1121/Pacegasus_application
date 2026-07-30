@@ -8,8 +8,9 @@ import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
 import '../wellness/daily_wellness_screen.dart';
 import '../home/daily_missions_screen.dart';
-import '../run/run_session_screen.dart';
+import '../run/run_select_screen.dart';
 import '../training/training_schedule_screen.dart';
+
 
 class HomeScreen extends ConsumerWidget {
   const HomeScreen({super.key});
@@ -98,9 +99,9 @@ class HomeScreen extends ConsumerWidget {
             ),
 
           const SizedBox(height: 16),
-          GradientButton(
+         GradientButton(
             label: '▶ เริ่ม Session การวิ่ง',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RunSessionScreen())),
+            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RunTypeSelectScreen())),
           ),
 
 

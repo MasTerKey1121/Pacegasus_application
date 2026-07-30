@@ -33,6 +33,9 @@ class ApiClient {
   Future<Map<String, dynamic>> put(String path, {Map<String, dynamic>? body, bool auth = false}) =>
       _request('PUT', path, body: body, auth: auth);
 
+  Future<Map<String, dynamic>> patch(String path, {Map<String, dynamic>? body, bool auth = false}) =>
+    _request('PATCH', path, body: body, auth: auth);
+
   Future<Map<String, dynamic>> delete(String path, {Map<String, dynamic>? body, bool auth = false}) =>
       _request('DELETE', path, body: body, auth: auth);
 
@@ -53,6 +56,8 @@ class ApiClient {
         return http.post(uri, headers: headers, body: encodedBody);
       case 'PUT':
         return http.put(uri, headers: headers, body: encodedBody);
+      case 'PATCH':
+        return http.patch(uri, headers: headers, body: encodedBody);
       case 'DELETE':
         return http.delete(uri, headers: headers, body: encodedBody);
       default:
