@@ -6,7 +6,7 @@ Express.js REST API สำหรับ Pacegasus — ครอบคลุมว
 2. **Onboarding**: 4 ขั้นตอน (ข้อมูลพื้นฐาน, ประวัติบาดเจ็บ/โรคประจำตัว, เป้าหมาย, ประวัติการวิ่ง)
 3. **Daily Wellness Check-in**: บันทึกความพร้อมร่างกายรายวัน (Slider 5 มิติ) — เป็น informational เท่านั้น ไม่ gate flow อื่นในระบบ
 4. **Main Quest (Program)**: สมัคร/ดูตารางฝึกซ้อมรายสัปดาห์ (auto หรือ manual schedule) และจัดการเควสรายวัน
-5. **Side Quest**: ดึงเควสเสริมประจำวันตามสภาพแวดล้อมและประเภทการฝึก
+5. **Side Quest**: ดึงเควสเสริมประจำวันตามสภาพแวดล้อมและประเภทการฝึก, ผูกเควสเข้ากับ running session (รองรับ batch), อัปเดต progress, ปิดเควส, และดึงอัลบั้มภาพ
 
 Database schema ถูกออกแบบใหม่ทั้งหมด (fresh install) อยู่ที่ `src/db/schema.sql`
 ระบบ Auth + Onboarding **ผ่านการทดสอบจริง** (boot server, run migration, call ทุก endpoint) แล้วในสภาพแวดล้อมพัฒนา
@@ -71,8 +71,11 @@ Default: `http://localhost:4000` — frontend (React Native/Expo) ที่ร�
 | `user_goals` | Onboarding ขั้นตอนที่ 3 (เป้าหมาย เช่น run_5k, marathon, lose_weight) |
 | `user_running_history` | Onboarding ขั้นตอนที่ 4 (เคยวิ่งมาก่อนไหม, กำลังวิ่งอยู่ตอนนี้ไหม, วิ่งมากี่สัปดาห์, ระยะไกลที่สุดที่เคยวิ่ง) — ใช้เป็นฐานคำนวณ `running_experience_level` |
 | `daily_wellness_checkins` | Check-in รายวัน 5 มิติ (sleep_quality, energy_level, muscle_soreness, stress_level, motivation) + wellness_score คำนวณอัตโนมัติ, 1 record/user/วัน, แก้ไขได้ — เพิ่มจาก migration `003_create_daily_wellness_checkins.sql` |
+| `user_side_quest_instances` | Instance ของ side quest ต่อผู้ใช้ 1 รายการ (ผูกกับ `running_session_id` เมื่อเริ่มจริง), เก็บ `target_count` / `found_count` / `status` (`pending` → `in_progress` → `completed`) / `coin_awarded` / `started_at` / `completed_at` |
+| `side_quest_templates` | แม่แบบ side quest แยกตาม `environment` x `training_type`, กำหนด `mechanic_type` (`collect_distance` / `pace_trigger` / `sprint_marker`), `km_per`, `cap_count`, `fixed_count`, `coin_reward_base` |
+| `quest_album_photos` | รูปที่ผู้ใช้แนบระหว่าง/ตอนจบ side quest แต่ละ instance (พร้อมพิกัด GPS ถ้ามี) |
 
-> หมายเหตุ: ตารางฝั่ง Main Quest (Program) / Side Quest และ Adaptive Training Engine ยังไม่ระบุรายละเอียดในเอกสารนี้ (ยังไม่มี migration file อ้างอิงชัดเจนในสรุปนี้) — โปรดตรวจสอบ `src/db/schema.sql` และ migration ล่าสุดในโปรเจกต์จริงประกอบ ก่อนเชื่อมกับ endpoint ในหมวด Main Quest / Side Quest ด้านล่าง
+> หมายเหตุ: ตารางฝั่ง Main Quest (Program) และ Adaptive Training Engine ยังไม่ระบุรายละเอียดในเอกสารนี้ (ยังไม่มี migration file อ้างอิงชัดเจนในสรุปนี้) — โปรดตรวจสอบ `src/db/schema.sql` และ migration ล่าสุดในโปรเจกต์จริงประกอบ ก่อนเชื่อมกับ endpoint ในหมวด Main Quest ด้านล่าง
 > ตาราง Gamification (Coin, Badge) ยังไม่รวมใน schema นี้ — จะเพิ่มเป็น migration ถัดไปเมื่อถึงคิวพัฒนา
 
 ---
@@ -391,12 +394,17 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 ### Side Quest (ต้อง Login ก่อน — แนบ `Authorization: Bearer <accessToken>` ทุก request)
 
 > **สถานะ:** เอกสารส่วนนี้อ้างอิงจาก Postman collection ที่ให้มา ยังไม่มีข้อมูลยืนยันว่าผ่านการทดสอบ end-to-end แล้วหรือยัง — โปรดตรวจสอบกับ service/controller จริงก่อนใช้งาน production
+> **หลักการ:** ผู้ใช้ดึง side quest ของวันนี้ (สุ่มจาก template ตาม environment/trainingType, สร้าง instance ผูก user ทันทีแบบยังไม่ผูก session) → เลือกเควสที่ต้องการเริ่มแล้วผูกเข้ากับ running session (**รองรับส่งพร้อมกันหลายรายการในคำขอเดียว — สูงสุด 3 รายการ, ทำงานเป็น transaction เดียวแบบ all-or-nothing**) → อัปเดต progress ระหว่างวิ่ง → ปิดเควสเมื่อสำเร็จ
 
-| Method | Path | Query | คำอธิบาย |
+| Method | Path | Body / Query | คำอธิบาย |
 |---|---|---|---|
-| GET | `/v1/quests/side?environment=&trainingType=` | `environment`, `trainingType` (บังคับทั้งคู่) | ดึงรายการ Side Quest ของวันนี้ตามสภาพแวดล้อมและประเภทการฝึกที่เลือก |
+| GET | `/quests/side?environment=&trainingType=` | query `environment`, `trainingType` (บังคับทั้งคู่) | ดึงรายการ Side Quest ของวันนี้ตามสภาพแวดล้อมและประเภทการฝึกที่เลือก |
+| POST | `/quests/running-sessions/:id/side-quests` | `{ instances: [...] }` | เริ่ม/ผูก side quest instance เข้ากับ running session — **แบบ batch สูงสุด 3 รายการต่อคำขอ** |
+| PATCH | `/side-quests/:id/progress` | `{ increment? , foundCount?, photoUrl?, gpsLat?, gpsLng? }` | อัปเดต progress ของ side quest ที่เริ่มไปแล้ว |
+| PATCH | `/side-quests/:id/finish` | – | ปิด side quest ด้วยสถานะ `completed` (เติม `found_count` ให้เต็ม `target_count` อัตโนมัติถ้ายังไม่ครบ) |
+| GET | `/side-quests/:id/album` | – | ดึงอัลบั้มภาพที่แนบไว้ระหว่าง/ตอนจบ side quest instance นี้ |
 
-#### GET `/v1/quests/side?environment=&trainingType=`
+#### GET `/quests/side?environment=&trainingType=`
 
 **Query params**
 
@@ -408,7 +416,27 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 **Response `200`**
 
 ```json
-{ "success": true, "data": { "...": "..." } }
+{
+  "success": true,
+  "data": {
+    "environment": "park",
+    "trainingType": "easy",
+    "plannedDistanceKm": 5,
+    "quests": [
+      {
+        "instanceId": "...",
+        "title": "...",
+        "description": "...",
+        "targetObject": "...",
+        "mechanicType": "collect_distance",
+        "targetCount": 3,
+        "foundCount": 0,
+        "status": "pending",
+        "coinRewardBase": 10
+      }
+    ]
+  }
+}
 ```
 
 **Error responses**
@@ -417,8 +445,186 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 |---|---|
 | `400` | `environment`/`trainingType` ไม่อยู่ใน enum ที่กำหนด |
 | `401` | ไม่ได้ login |
+| `404` | ไม่พบ side quest template ที่ตรงกับ `environment` x `trainingType` |
 
 > หมายเหตุ: `sessionType` (Main Quest) และ `trainingType` (Side Quest) เป็นคนละ enum กัน — ระวังอย่าใช้ค่าสลับกันตอนเรียก 2 endpoint นี้คู่กัน (เช่น `"vo2max"` มีเฉพาะฝั่ง Main Quest, `"interval"` มีเฉพาะฝั่ง Side Quest)
+
+---
+
+#### POST `/quests/running-sessions/:id/side-quests`
+
+ผูก side quest instance ที่เลือกไว้ (จาก `GET /quests/side`) เข้ากับ running session ที่สร้างไว้แล้ว **แบบ batch** — ส่งได้หลายรายการพร้อมกันในคำขอเดียว ทำงานเป็น transaction เดียว (all-or-nothing) ถ้ารายการใดรายการหนึ่งใน batch ผิดพลาด จะ rollback ทั้งหมด
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `id` | string (UUID) | ✅ | id ของ running session ที่จะผูกเควสเข้าไป |
+
+**Request body**
+
+| Field | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `instances` | array | ✅ | รายการ side quest ที่ต้องการเริ่ม 1-3 รายการ |
+| `instances[].instanceId` | string (UUID) | ✅ (xor กับ `sideQuestTemplateId`) | instanceId ที่ได้จาก `GET /quests/side` |
+| `instances[].sideQuestTemplateId` | string (UUID) | ✅ (xor กับ `instanceId`) | สร้าง instance ใหม่ตรงจาก template แทนการใช้ instance ที่มีอยู่ |
+
+แต่ละ item ต้องระบุ `instanceId` หรือ `sideQuestTemplateId` อย่างใดอย่างหนึ่งเท่านั้น (ห้ามส่งทั้งคู่หรือไม่ส่งเลย)
+
+**Response `201`**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "...",
+      "runningSessionId": "...",
+      "userId": "...",
+      "sideQuestTemplateId": "...",
+      "targetCount": 3,
+      "foundCount": 0,
+      "status": "in_progress",
+      "coinAwarded": false,
+      "startedAt": "...",
+      "completedAt": null
+    }
+  ]
+}
+```
+
+`data` เป็น **array** ตามจำนวน instance ที่ส่งมาใน `instances`
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | body ไม่ผ่าน validation (เช่น `instances` ว่าง/เกิน 3 รายการ, item ใดไม่ระบุหรือระบุทั้ง `instanceId` และ `sideQuestTemplateId` พร้อมกัน) |
+| `400` | จำนวน quest ที่ active อยู่แล้วใน session รวมกับที่ส่งมาใหม่เกิน limit (3 ต่อ session) |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบ `instanceId`/`sideQuestTemplateId` ที่ระบุ (ของรายการใดรายการหนึ่งใน batch จะทำให้ทั้ง batch fail) |
+| `409` | instance นั้น `completed` ไปแล้ว, ผูกกับ running session อื่นอยู่แล้ว, หรือ template นั้นถูกเริ่มไปแล้วใน session นี้ |
+
+---
+
+#### PATCH `/side-quests/:id/progress`
+
+อัปเดต progress ของ side quest ที่เริ่มไปแล้ว สามารถแนบ `photoUrl` พร้อมพิกัด GPS เพิ่มเติมได้ (จะถูกบันทึกลงอัลบั้มของ instance นั้น)
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `id` | string (UUID) | ✅ | id ของ side quest instance |
+
+**Request body**
+
+| Field | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `increment` | integer 1-100 | ไม่ (xor กับ `foundCount`) | เพิ่ม `found_count` ทีละเท่านี้ |
+| `foundCount` | integer ≥0 | ไม่ (xor กับ `increment`) | ตั้งค่า `found_count` ตรงๆ |
+| `photoUrl` | string (URI) | ไม่ | URL รูปที่แนบ — จะถูกบันทึกเข้า `quest_album_photos` |
+| `gpsLat` | number -90 ถึง 90 | ไม่ | พิกัด latitude ตอนถ่ายรูป |
+| `gpsLng` | number -180 ถึง 180 | ไม่ | พิกัด longitude ตอนถ่ายรูป |
+
+เมื่อ `found_count` ถึง `target_count` แล้ว ระบบจะตั้ง `status = "completed"` และ `completed_at` ให้อัตโนมัติ
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "...",
+    "runningSessionId": "...",
+    "targetCount": 3,
+    "foundCount": 2,
+    "status": "in_progress",
+    "coinAwarded": false,
+    "startedAt": "...",
+    "completedAt": null
+  }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | body ไม่ผ่าน validation (เช่น `increment`/`foundCount` นอกช่วงที่กำหนด, `photoUrl` ไม่ใช่ URI ที่ถูกต้อง) |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบ side quest instance นี้ หรือไม่ใช่ของผู้ใช้ปัจจุบัน |
+
+---
+
+#### PATCH `/side-quests/:id/finish`
+
+ปิด side quest ด้วยสถานะ `completed` — ถ้า `found_count` ยังไม่ถึง `target_count` ระบบจะเติมให้เต็มอัตโนมัติ (`GREATEST(found_count, target_count)`)
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `id` | string (UUID) | ✅ | id ของ side quest instance |
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": {
+    "id": "...",
+    "targetCount": 3,
+    "foundCount": 3,
+    "status": "completed",
+    "completedAt": "..."
+  }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบ side quest instance นี้ หรือไม่ใช่ของผู้ใช้ปัจจุบัน |
+
+---
+
+#### GET `/side-quests/:id/album`
+
+ดึงรายการรูปที่แนบไว้ระหว่าง/ตอนจบ side quest instance นี้ (เรียงจากล่าสุดไปเก่าสุด)
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `id` | string (UUID) | ✅ | id ของ side quest instance |
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": [
+    {
+      "id": "...",
+      "user_side_quest_instance_id": "...",
+      "photo_url": "...",
+      "gps_lat": 13.7563,
+      "gps_lng": 100.5018,
+      "captured_at": "..."
+    }
+  ]
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบ side quest instance นี้ หรือไม่ใช่ของผู้ใช้ปัจจุบัน |
 
 ---
 
@@ -429,3 +635,4 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 - Rate limit บน endpoint ขอ/ยืนยัน OTP กันการยิงสแปม
 - Access token อายุสั้น (`15m` default) + refresh token หมุนทุกครั้งที่ใช้ (rotation) เพื่อลดความเสี่ยงจาก token รั่วไหล
 - Onboarding, Wellness Check-in, Main Quest (Program) และ Side Quest routes ทุกตัวถูกป้องกันด้วย JWT middleware (`requireAuth`)
+- POST `/quests/running-sessions/:id/side-quests` ครอบทั้ง batch ด้วย DB transaction พร้อม row-level lock (`FOR UPDATE`) เพื่อกัน race condition เวลามีคำขอพร้อมกันหลายอันมาแข่งกันผูกเควสเข้า session เดียวกัน
