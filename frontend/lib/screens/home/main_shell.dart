@@ -1,19 +1,36 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
+import '../../providers/wellness_provider.dart';
+import '../../providers/mission_provider.dart';
+
 import 'home_screen.dart';
 import '../stats/stats_screen.dart';
 import '../profile/profile_screen.dart';
 import '../settings/settings_screen.dart';
 
-class MainShell extends StatefulWidget {
+class MainShell extends ConsumerStatefulWidget {
   const MainShell({super.key});
 
   @override
-  State<MainShell> createState() => _MainShellState();
+  ConsumerState<MainShell> createState() => _MainShellState();
 }
 
-class _MainShellState extends State<MainShell> {
+class _MainShellState extends ConsumerState<MainShell> {
   int _index = 0;
+
+  @override
+  void initState() {
+    super.initState();
+
+    Future.microtask(() async {
+      await ref.read(wellnessProvider).loadToday();
+
+      if (ref.read(wellnessProvider).completedToday) {
+        ref.read(missionProvider).setDone('wellness', true);
+      }
+    });
+  }
 
   final _tabs = const [
     _TabItem('🏠', 'หน้าหลัก'),
@@ -35,7 +52,10 @@ class _MainShellState extends State<MainShell> {
       body: AppBackground(
         child: SafeArea(
           bottom: false,
-          child: IndexedStack(index: _index, children: _screens),
+          child: IndexedStack(
+            index: _index,
+            children: _screens,
+          ),
         ),
       ),
       bottomNavigationBar: SafeArea(
@@ -51,21 +71,31 @@ class _MainShellState extends State<MainShell> {
             children: List.generate(_tabs.length, (i) {
               final active = i == _index;
               final tab = _tabs[i];
+
               return Expanded(
                 child: GestureDetector(
-                  onTap: () => setState(() => _index = i),
                   behavior: HitTestBehavior.opaque,
+                  onTap: () {
+                    setState(() {
+                      _index = i;
+                    });
+                  },
                   child: Column(
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
-                      Text(tab.icon, style: const TextStyle(fontSize: 19)),
+                      Text(
+                        tab.icon,
+                        style: const TextStyle(fontSize: 19),
+                      ),
                       const SizedBox(height: 3),
                       Text(
                         tab.label,
                         style: AppText.body(
                           size: 10.5,
                           weight: FontWeight.w600,
-                          color: active ? AppColors.purple2 : AppColors.textTertiary,
+                          color: active
+                              ? AppColors.purple2
+                              : AppColors.textTertiary,
                         ),
                       ),
                     ],
@@ -83,5 +113,6 @@ class _MainShellState extends State<MainShell> {
 class _TabItem {
   final String icon;
   final String label;
+
   const _TabItem(this.icon, this.label);
 }

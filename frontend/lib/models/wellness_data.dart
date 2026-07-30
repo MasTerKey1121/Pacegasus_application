@@ -22,4 +22,13 @@ class WellnessEntry {
         'stressLevel': stressLevel,
         'motivation': motivation,
       };
+
+    factory WellnessEntry.fromRecord(Map<String, dynamic> record) => WellnessEntry(
+      sleepQuality: (record['sleep_quality'] as num?)?.toInt() ?? 3,
+      muscleSoreness: (record['muscle_soreness'] as num?)?.toInt() ?? 3,
+      energyLevel: (record['energy_level'] as num?)?.toInt() ?? 3,
+      stressLevel: (record['stress_level'] as num?)?.toInt() ?? 3,
+      motivation: (record['motivation'] as num?)?.toInt() ?? 3,
+      // sleepHours ไม่มีใน API (เก็บแค่ในแอป) ใช้ default ไปก่อน
+    );
 }

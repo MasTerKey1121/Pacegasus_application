@@ -58,10 +58,27 @@ class WellnessNotifier extends ChangeNotifier {
       return false;
     }
   }
+
+  Future<void> loadToday() async {
+    try {
+      final response = await api.getToday();
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final status = data['status'] as String?;
+      final record = data['record'] as Map<String, dynamic>?;
+
+      completedToday = status == 'done';
+      if (record != null) {
+        entry = WellnessEntry.fromRecord(record);
+      }
+      notifyListeners();
+    } catch (_) {
+      // เป็น informational เฉยๆ ตาม doc ของ 4.1 (ไม่ gate flow อื่น)
+      // ถ้าเช็คไม่สำเร็จ ปล่อยผ่าน ให้ user กดเช็คอินตามปกติ
+    }
+  }
 }
 
-final wellnessProvider =
-    ChangeNotifierProvider<WellnessNotifier>(
+final wellnessProvider = ChangeNotifierProvider<WellnessNotifier>(
   (ref) => WellnessNotifier(
     ref.read(wellnessApiProvider),
   ),
