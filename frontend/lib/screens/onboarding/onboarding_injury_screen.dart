@@ -22,13 +22,13 @@ class OnboardingInjuryScreen extends ConsumerWidget {
         ...d.pastInjuries.map((b) => {
               'category': 'injury',
               'bodyPart': b,
-              'injuryType': null,
+              'injuryType': 'egg',
               'isCurrent': false,
             }),
         ...d.currentInjuries.map((b) => {
               'category': 'injury',
               'bodyPart': b,
-              'injuryType': null,
+              'injuryType': 'egg',
               'isCurrent': true,
             }),
       ],

@@ -27,7 +27,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
 
     return {
       'hasRunBefore': d.hasRunningExperience,
-      'isCurrentlyRunning': d.hasRunningExperience == true ? d.isCurrentlyTraining : null,
+      'isCurrentlyRunning': d.hasRunningExperience == true ? d.isCurrentlyTraining : false,
       'weeksRunning': durationIndex >= 0 ? weeksByDuration[durationIndex] : null,
       'longestDistanceKm': distanceIndex >= 0 ? kmByLongestDistance[distanceIndex] : null,
       // yearsRunning / best5kSeconds / ... : ไม่มี UI เก็บค่า และเป็น optional ทั้งหมด เลยไม่ส่ง

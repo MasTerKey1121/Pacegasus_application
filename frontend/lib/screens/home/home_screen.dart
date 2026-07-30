@@ -199,7 +199,7 @@ class HomeScreen extends ConsumerWidget {
             ),
           ),
 
-          const SectionLabel(title: 'สัปดาห์นี้'),
+          const SectionLabel(title: 'แผนสัปดาห์นี้'),
           if (wellness.completedToday && program.quests.isNotEmpty)
             Wrap(
               spacing: 10,
