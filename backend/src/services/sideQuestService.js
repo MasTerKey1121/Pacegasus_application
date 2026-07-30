@@ -2,9 +2,10 @@ const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 
 const NUM_QUESTS_TO_RETURN = 3;
+const MAX_ACTIVE_QUESTS_PER_SESSION = 3;
 
 /**
- * คำนวณ target_count ต่อ template:
+ * คำนวณ target_count ต่อ template:a
  * - collect_distance (Easy/Long Run): ใช้ planned distance ของ main quest วันนี้
  *   (ถ้ามี และ unit=km) มาคิด floor(distance/km_per) แล้ว cap ด้วย cap_count
  *   ถ้าไม่มีข้อมูล distance เลย fallback เป็น cap_count เต็ม (สมมติฐานที่ยัง
@@ -98,40 +99,113 @@ async function getTodaySideQuests(userId, environment, trainingType) {
 
   return { environment, trainingType, plannedDistanceKm, quests: instances };
 }
+/**
+ * เริ่มหลาย side quest พร้อมกันใน 1 running session แบบ atomic
+ * ถ้ามีตัวใดตัวหนึ่ง fail จะ rollback ทั้งหมด
+ *
+ * instancesPayload: Array<{ instanceId?: number, sideQuestTemplateId?: number }>
+ */
+async function startSideQuests(userId, runningSessionId, instancesPayload) {
+  const client = await db.pool.connect(); // ปรับตาม db module จริงถ้าจำเป็น
 
-async function startSideQuest(userId, runningSessionId, payload) {
-  const { instanceId, sideQuestTemplateId } = payload;
+  try {
+    await client.query('BEGIN');
+
+    // 1) กันไม่ให้ session นี้มี active quest เกิน limit
+    //    lock แถวของ session ไว้ก่อน (ถ้ามีตาราง running_sessions) กัน race
+    //    ระหว่าง 2 request พร้อมกันมาชนกัน — ใช้ตรงนี้เพื่อ serialize
+    const { rows: existingActiveRows } = await client.query(
+      `SELECT id FROM user_side_quest_instances
+       WHERE running_session_id = $1
+         AND user_id = $2
+         AND status IN ('in_progress', 'completed')
+       FOR UPDATE`,
+      [runningSessionId, userId]
+    );
+
+    if (existingActiveRows.length + instancesPayload.length > MAX_ACTIVE_QUESTS_PER_SESSION) {
+      throw new ApiError(
+        400,
+        `running session นี้มี quest ผูกอยู่แล้ว ${existingActiveRows.length} ตัว ` +
+        `เกิน limit ${MAX_ACTIVE_QUESTS_PER_SESSION} ตัวต่อ session`
+      );
+    }
+
+    const results = [];
+    for (const item of instancesPayload) {
+      const instance = await startSingleSideQuest(client, userId, runningSessionId, item);
+      results.push(instance);
+    }
+
+    await client.query('COMMIT');
+    return results;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
+/**
+ * helper: เริ่ม quest เดียว ใช้ client เดียวกับ transaction ข้างนอก
+ * ต้องรับ client เข้ามาแทนที่จะเรียก db.query ตรงๆ เพื่อให้อยู่ transaction เดียวกัน
+ */
+async function startSingleSideQuest(client, userId, runningSessionId, item) {
+  const { instanceId, sideQuestTemplateId } = item;
 
   if (!instanceId && !sideQuestTemplateId) {
-    throw new ApiError(400, 'ต้องระบุ instanceId หรือ sideQuestTemplateId');
+    throw new ApiError(400, 'แต่ละ instance ต้องระบุ instanceId หรือ sideQuestTemplateId');
   }
 
   if (instanceId) {
-    const { rows } = await db.query(
-      `SELECT id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at
+    const { rows } = await client.query(
+      `SELECT id, running_session_id, user_id, side_quest_template_id, target_count,
+              found_count, status, coin_awarded, started_at, completed_at
        FROM user_side_quest_instances
-       WHERE id = $1 AND user_id = $2`,
+       WHERE id = $1 AND user_id = $2
+       FOR UPDATE`,
       [instanceId, userId]
     );
 
     if (rows.length === 0) {
-      throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+      throw new ApiError(404, `ไม่พบ side quest instance id=${instanceId}`);
     }
 
-    const { rows: updatedRows } = await db.query(
+    const current = rows[0];
+
+    // กัน reassign quest ที่ completed ไปแล้ว
+    if (current.status === 'completed') {
+      throw new ApiError(409, `instance id=${instanceId} เสร็จสิ้นไปแล้ว ไม่สามารถเริ่มใหม่ได้`);
+    }
+
+    // กัน overwrite quest ที่ผูกกับ session อื่นอยู่แล้ว (ที่ไม่ใช่ session นี้)
+    if (
+      current.running_session_id != null &&
+      String(current.running_session_id) !== String(runningSessionId)
+    ) {
+      throw new ApiError(
+        409,
+        `instance id=${instanceId} ถูกผูกกับ running session อื่นอยู่แล้ว`
+      );
+    }
+
+    const { rows: updatedRows } = await client.query(
       `UPDATE user_side_quest_instances
        SET running_session_id = $3,
            status = 'in_progress',
            started_at = COALESCE(started_at, now())
        WHERE id = $1 AND user_id = $2
-       RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+       RETURNING id, running_session_id, user_id, side_quest_template_id, target_count,
+                 found_count, status, coin_awarded, started_at, completed_at`,
       [instanceId, userId, runningSessionId]
     );
 
     return buildInstancePayload(updatedRows[0]);
   }
 
-  const { rows: templateRows } = await db.query(
+  // สร้างใหม่จาก template
+  const { rows: templateRows } = await client.query(
     `SELECT id, mechanic_type, km_per, cap_count, fixed_count
      FROM side_quest_templates
      WHERE id = $1 AND is_active = true`,
@@ -139,20 +213,40 @@ async function startSideQuest(userId, runningSessionId, payload) {
   );
 
   if (templateRows.length === 0) {
-    throw new ApiError(404, 'ไม่พบ side quest template ที่ระบุ');
+    throw new ApiError(404, `ไม่พบ side quest template id=${sideQuestTemplateId}`);
+  }
+
+  // กัน insert quest template เดิมซ้ำในระหว่าง session เดียวกัน
+  const { rows: dupRows } = await client.query(
+    `SELECT id FROM user_side_quest_instances
+     WHERE running_session_id = $1
+       AND user_id = $2
+       AND side_quest_template_id = $3
+       AND status IN ('in_progress', 'completed')`,
+    [runningSessionId, userId, sideQuestTemplateId]
+  );
+
+  if (dupRows.length > 0) {
+    throw new ApiError(
+      409,
+      `template id=${sideQuestTemplateId} ถูกเริ่มไปแล้วใน session นี้`
+    );
   }
 
   const targetCount = computeTargetCount(templateRows[0], null);
-  const { rows: insertedRows } = await db.query(
+  const { rows: insertedRows } = await client.query(
     `INSERT INTO user_side_quest_instances
        (user_id, side_quest_template_id, running_session_id, target_count)
      VALUES ($1, $2, $3, $4)
-     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
+     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count,
+               found_count, status, coin_awarded, started_at, completed_at`,
     [userId, sideQuestTemplateId, runningSessionId, targetCount]
   );
 
   return buildInstancePayload(insertedRows[0]);
 }
+
+// ... updateProgress, finishSideQuest, getQuestAlbum เหมือนเดิม ...
 
 async function updateProgress(userId, questId, payload) {
   const { rows: currentRows } = await db.query(
@@ -228,8 +322,10 @@ async function getQuestAlbum(userId, questId) {
 
 module.exports = {
   getTodaySideQuests,
-  startSideQuest,
+  startSideQuests,
   updateProgress,
   finishSideQuest,
   getQuestAlbum,
 };
+
+

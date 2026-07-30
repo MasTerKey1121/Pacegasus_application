@@ -2,7 +2,7 @@ const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const {
   getSideQuestsSchema,
-  startSideQuestSchema,
+  startSideQuestSchema, // จะรับ { instances: [...] } แทน field เดี่ยว
   updateProgressSchema,
   questIdParamSchema,
 } = require('../utils/questValidators');
@@ -26,15 +26,20 @@ const getSideQuests = asyncHandler(async (req, res) => {
 });
 
 // POST /api/quests/running-sessions/:id/side-quests
+// body: { instances: [{ instanceId }, ...] } หรือ [{ sideQuestTemplateId }, ...]
 const startSideQuest = asyncHandler(async (req, res) => {
   const { value, error } = startSideQuestSchema.validate(req.body);
   if (error) throw new ApiError(400, error.message);
 
-  const instance = await sideQuestService.startSideQuest(req.user.id, req.params.id, value);
+  const instances = await sideQuestService.startSideQuests(
+    req.user.id,
+    req.params.id,
+    value.instances
+  );
 
   res.status(201).json({
     success: true,
-    data: instance,
+    data: instances,
   });
 });
 

@@ -20,9 +20,26 @@ const getSideQuestsSchema = Joi.object({
     .required(),
 });
 
+const startSideQuestItemSchema = Joi.object({
+  instanceId: Joi.string().uuid(),
+  sideQuestTemplateId: Joi.string().uuid(),
+})
+  .xor('instanceId', 'sideQuestTemplateId')
+  .messages({
+    'object.xor': 'แต่ละ instance ต้องระบุ instanceId หรือ sideQuestTemplateId อย่างใดอย่างหนึ่งเท่านั้น',
+  });
+
 const startSideQuestSchema = Joi.object({
-  instanceId: Joi.string().uuid().optional(),
-  sideQuestTemplateId: Joi.string().uuid().optional(),
+  instances: Joi.array()
+    .items(startSideQuestItemSchema)
+    .min(1)
+    .max(3)
+    .required()
+    .messages({
+      'array.min': 'ต้องระบุ side quest อย่างน้อย 1 รายการ',
+      'array.max': 'ส่ง side quest ได้ไม่เกิน 3 รายการต่อครั้ง',
+      'any.required': 'ต้องระบุ instances',
+    }),
 });
 
 const updateProgressSchema = Joi.object({
