@@ -15,15 +15,15 @@ class QuestApi {
       );
 
   /// API 6.2
-  Future<Map<String, dynamic>> startSideQuest({
+  Future<Map<String, dynamic>> startSideQuests({
     required String sessionId,
-    required String instanceId,
+    required List<String> instanceIds,
   }) =>
-      client.post(
-        '/api/quests/running-sessions/$sessionId/side-quests',
-        body: {'instanceId': instanceId},
-        auth: true,
-      );
+    client.post(
+      '/api/quests/running-sessions/$sessionId/side-quests',
+      body: {'instances': instanceIds.map((id) => {'instanceId': id}).toList()},
+      auth: true,
+    );
 
   /// API 6.3
   Future<Map<String, dynamic>> updateSideQuestProgress({

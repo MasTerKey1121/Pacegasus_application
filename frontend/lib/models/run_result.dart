@@ -6,15 +6,19 @@ class RunResult {
   final String avgPace; // e.g. "6:30"
   final int calories;
 
-  int rpe = 5; // 1-10
-  int stressLevel = 5; // 0-10
-  int moodIndex = 2; // 0-4 (😩🙁🙂😃🤩)
-  bool hasInjury = false;
+  int rpe; // 1-10
+  int stressLevel; // 0-10
+  int moodIndex; // 0-4 (😩🙁🙂😃🤩)
+  bool hasInjury;
 
   RunResult({
     required this.distanceKm,
     required this.duration,
     required this.avgPace,
     required this.calories,
+    this.rpe = 5,
+    this.stressLevel = 5,
+    this.moodIndex = 2,
+    this.hasInjury = false,
   });
 }

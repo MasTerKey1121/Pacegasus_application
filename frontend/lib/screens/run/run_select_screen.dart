@@ -47,7 +47,10 @@ class RunTypeSelectScreen extends ConsumerWidget {
                   return GestureDetector(
                     onTap: () => ref
                         .read(runSetupProvider)
-                        .selectEnvironment(e['key']!, mainQuestSessionType: sessionType),
+                        .selectEnvironment(
+                          env: e['key']!,
+                          mainQuestSessionType: sessionType,
+                        ),
                     child: Container(
                       width: 96,
                       padding: const EdgeInsets.symmetric(vertical: 14),
@@ -75,7 +78,7 @@ class RunTypeSelectScreen extends ConsumerWidget {
                       style: AppText.body(size: 12, color: AppColors.textSecondary))
                 else
                   ...setup.sideQuests.map((q) {
-                    final selected = setup.selectedInstanceId == q.instanceId;
+                    final selected = setup.selectedInstanceIds.contains(q.instanceId);
                     return GestureDetector(
                       onTap: () => ref.read(runSetupProvider).selectSideQuest(q.instanceId),
                       child: AppCard(
@@ -114,6 +117,7 @@ class RunTypeSelectScreen extends ConsumerWidget {
               const Spacer(),
               GradientButton(
                 label: setup.isStarting ? 'กำลังเริ่ม...' : 'เริ่มต้นการวิ่ง',
+                loading: setup.isStarting,
                 onTap: setup.environment == null || setup.isStarting
                     ? null
                     : () async {

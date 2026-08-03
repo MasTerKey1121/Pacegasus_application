@@ -21,3 +21,21 @@ class SideQuest {
         icon: json['icon']?.toString(),
       );
 }
+
+class ActiveSideQuest {
+  final String sideQuestId;
+  final String title;
+  final String description;
+  final String? icon;
+  final int coinReward;
+  bool done;
+
+  ActiveSideQuest({
+    required this.sideQuestId,
+    required this.title,
+    required this.description,
+    required this.coinReward,
+    this.icon,
+    this.done = false,
+  });
+}

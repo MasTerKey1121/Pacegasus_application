@@ -4,11 +4,13 @@ import '../models/side_quest.dart';
 import '../services/quest_api.dart';
 import '../services/running_session_api.dart';
 import 'auth_provider.dart';
-import 'program_provider.dart';
 
-final questApiProvider = Provider<QuestApi>((ref) => QuestApi(ref.read(apiClientProvider)));
+final questApiProvider =
+    Provider<QuestApi>((ref) => QuestApi(ref.read(apiClientProvider)));
+
 final runningSessionApiProvider =
-    Provider<RunningSessionApi>((ref) => RunningSessionApi(ref.read(apiClientProvider)));
+    Provider<RunningSessionApi>(
+        (ref) => RunningSessionApi(ref.read(apiClientProvider)));
 
 /// map session_type ของ main quest (easy/tempo/vo2max/long_run)
 /// ไปเป็น trainingType ของ side quest (easy/tempo/interval/long_run)
@@ -28,36 +30,63 @@ String mapToSideQuestTrainingType(String? sessionType) {
 
 class RunSetupNotifier extends ChangeNotifier {
   RunSetupNotifier(this._questApi, this._sessionApi);
+
   final QuestApi _questApi;
   final RunningSessionApi _sessionApi;
 
   String? environment;
+
   List<SideQuest> sideQuests = [];
-  String? selectedInstanceId;
+
+  /// เปลี่ยนจากเลือกได้ตัวเดียว -> เลือกได้หลายตัว
+  Set<String> selectedInstanceIds = {};
+
+  List<String> sideQuestIds = [];
+
+  /// ภารกิจที่ "เริ่ม" ไปแล้วจริงๆ สำหรับ session นี้ (มี id ใช้ยิง finish ได้)
+  /// ใช้โชว์ในหน้าต่างเล็กๆ ของหน้า running session
+  List<ActiveSideQuest> activeSideQuests = [];
+
+  final Set<String> _completingIds = {};
+  bool isCompletingQuest(String sideQuestId) =>
+      _completingIds.contains(sideQuestId);
+
   bool isLoadingQuests = false;
   bool isStarting = false;
   String? errorMessage;
 
   String? sessionId;
 
-  Future<void> selectEnvironment(String env, {required String? mainQuestSessionType}) async {
+  Future<void> selectEnvironment({
+    required String env,
+    required String? mainQuestSessionType,
+  }) async {
     environment = env;
-    selectedInstanceId = null;
+    selectedInstanceIds = {};
+    sideQuestIds = [];
     isLoadingQuests = true;
     errorMessage = null;
     notifyListeners();
 
     try {
-      final trainingType = mapToSideQuestTrainingType(mainQuestSessionType);
+      final trainingType =
+          mapToSideQuestTrainingType(mainQuestSessionType);
+
       final response = await _questApi.getTodaySideQuests(
         environment: env,
         trainingType: trainingType,
       );
-      final data = response['data'] as Map<String, dynamic>? ?? const {};
-      final raw = (data['sideQuests'] ?? data['quests'] ?? []) as List<dynamic>;
+
+      final data =
+          response['data'] as Map<String, dynamic>? ?? const {};
+
+      final raw =
+          (data['sideQuests'] ?? data['quests'] ?? []) as List<dynamic>;
+
       sideQuests = raw
           .whereType<Map>()
-          .map((q) => SideQuest.fromJson(Map<String, dynamic>.from(q)))
+          .map((q) => SideQuest.fromJson(
+              Map<String, dynamic>.from(q)))
           .toList(growable: false);
     } catch (e) {
       errorMessage = e.toString();
@@ -69,14 +98,17 @@ class RunSetupNotifier extends ChangeNotifier {
   }
 
   void selectSideQuest(String instanceId) {
-    selectedInstanceId = selectedInstanceId == instanceId ? null : instanceId;
+    if (!selectedInstanceIds.remove(instanceId)) {
+      selectedInstanceIds.add(instanceId);
+    }
     notifyListeners();
   }
 
-  /// เรียก 7.1 (สร้าง session) แล้ว 6.2 (เริ่ม side quest ที่เลือก)
-  /// คืน true ถ้าสำเร็จ
-  Future<bool> startRun({required String? mainQuestSessionType}) async {
+  Future<bool> startRun({
+    required String? mainQuestSessionType,
+  }) async {
     if (environment == null) return false;
+
     isStarting = true;
     errorMessage = null;
     notifyListeners();
@@ -88,21 +120,60 @@ class RunSetupNotifier extends ChangeNotifier {
         startLat: 13.7563,
         startLng: 100.5018,
         routePoints: const [
-          {'lat': 13.7563, 'lng': 100.5018},
+          {
+            'lat': 13.7563,
+            'lng': 100.5018,
+          }
         ],
-        sideQuestInstanceIds: selectedInstanceId != null ? [selectedInstanceId!] : const [],
+        sideQuestInstanceIds: selectedInstanceIds.toList(),
       );
-      final data = res['data'] as Map<String, dynamic>? ?? const {};
-      sessionId = (data['id'] ?? data['sessionId'])?.toString();
 
-      if (selectedInstanceId != null && sessionId != null) {
-        await _questApi.startSideQuest(
+      final data =
+          res['data'] as Map<String, dynamic>? ?? const {};
+
+      sessionId =
+          (data['id'] ?? data['sessionId'])?.toString();
+
+      if (selectedInstanceIds.isNotEmpty &&
+          sessionId != null) {
+        final res = await _questApi.startSideQuests(
           sessionId: sessionId!,
-          instanceId: selectedInstanceId!,
+          instanceIds: selectedInstanceIds.toList(),
         );
+
+        final list =
+            (res['data'] as List).cast<Map<String, dynamic>>();
+
+        sideQuestIds =
+            list.map((e) => e['id'].toString()).toList();
+
+        // จับคู่ id ที่ backend คืนมา กับ title/description ของ quest ที่เลือกไว้
+        // (สมมติว่าลำดับที่คืนมาตรงกับลำดับที่ส่งไป — ดูหมายเหตุเรื่อง order ด้านบน)
+        final selected = selectedInstanceIds.toList();
+        activeSideQuests = List.generate(sideQuestIds.length, (i) {
+          final match = i < selected.length
+              ? sideQuests.firstWhere(
+                  (q) => q.instanceId == selected[i],
+                  orElse: () => SideQuest(
+                      instanceId: selected[i],
+                      title: 'ภารกิจ',
+                      description: '',
+                      coinReward: 0),
+                )
+              : null;
+          return ActiveSideQuest(
+            sideQuestId: sideQuestIds[i],
+            title: match?.title ?? 'ภารกิจ',
+            description: match?.description ?? '',
+            icon: match?.icon,
+            coinReward: match?.coinReward ?? 0,
+          );
+        });
       }
+
       isStarting = false;
       notifyListeners();
+
       return sessionId != null;
     } catch (e) {
       errorMessage = e.toString();
@@ -112,15 +183,44 @@ class RunSetupNotifier extends ChangeNotifier {
     }
   }
 
+  /// กดจบภารกิจทีละอันระหว่างวิ่ง (เรียก API 6.4 ทันที)
+  Future<void> completeSideQuest(String sideQuestId) async {
+    final idx =
+        activeSideQuests.indexWhere((q) => q.sideQuestId == sideQuestId);
+    if (idx == -1) return;
+    final quest = activeSideQuests[idx];
+    if (quest.done || _completingIds.contains(sideQuestId)) return;
+
+    _completingIds.add(sideQuestId);
+    notifyListeners();
+    try {
+      await _questApi.finishSideQuest(sideQuestId: sideQuestId);
+      quest.done = true;
+    } catch (e) {
+      errorMessage = e.toString();
+    } finally {
+      _completingIds.remove(sideQuestId);
+      notifyListeners();
+    }
+  }
+
   void reset() {
     environment = null;
     sideQuests = [];
-    selectedInstanceId = null;
+    selectedInstanceIds = {};
+    sideQuestIds = [];
+    activeSideQuests = [];
+    _completingIds.clear();
     sessionId = null;
     errorMessage = null;
+    notifyListeners();
   }
 }
 
-final runSetupProvider = ChangeNotifierProvider<RunSetupNotifier>(
-  (ref) => RunSetupNotifier(ref.read(questApiProvider), ref.read(runningSessionApiProvider)),
+final runSetupProvider =
+    ChangeNotifierProvider<RunSetupNotifier>(
+  (ref) => RunSetupNotifier(
+    ref.read(questApiProvider),
+    ref.read(runningSessionApiProvider),
+  ),
 );

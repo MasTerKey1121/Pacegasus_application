@@ -2,14 +2,23 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/run_result.dart';
+import '../models/side_quest.dart';
+import '../services/quest_api.dart';
+import '../services/running_session_api.dart';
+import 'run_setup_provider.dart';
 
 /// Drives the "กำลังวิ่ง" screen. Since there's no GPS/backend yet, distance
 /// is simulated at a plausible easy-run pace so the UI has real numbers to
 /// animate with.
 class RunSessionNotifier extends ChangeNotifier {
+  RunSessionNotifier(this._questApi, this._sessionApi);
+  final QuestApi _questApi;
+  final RunningSessionApi _sessionApi;
+
   Timer? _timer;
   bool isRunning = false;
   bool isPaused = false;
+  bool isStopping = false;
   int elapsedSeconds = 0;
   double distanceKm = 0;
 
@@ -17,6 +26,9 @@ class RunSessionNotifier extends ChangeNotifier {
   final String goalPace = '7 min/km';
 
   RunResult? lastResult;
+
+  /// ชื่อภารกิจที่ปิดไม่สำเร็จตอนจบการวิ่ง (โชว์เตือนแบบไม่บล็อกผู้ใช้)
+  List<String> failedQuestTitles = [];
 
   void start() {
     isRunning = true;
@@ -40,21 +52,65 @@ class RunSessionNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
-  RunResult stop() {
+  Future<RunResult?> stop({
+    required String sessionId,
+    required List<ActiveSideQuest> sideQuests,
+  }) async {
+    if (isStopping) return null; // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
     _timer?.cancel();
     isRunning = false;
-    final duration = Duration(seconds: elapsedSeconds);
-    final paceMinPerKm = distanceKm > 0 ? (elapsedSeconds / 60) / distanceKm : 0;
-    final mm = paceMinPerKm.floor();
-    final ss = ((paceMinPerKm - mm) * 60).round().toString().padLeft(2, '0');
-    lastResult = RunResult(
-      distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
-      duration: duration,
-      avgPace: distanceKm > 0 ? '$mm:$ss' : '--:--',
-      calories: (distanceKm * 62).round(),
-    );
+    isStopping = true;
+    failedQuestTitles = [];
     notifyListeners();
-    return lastResult!;
+
+    try {
+      final res = await _sessionApi.complete(
+        sessionId: sessionId,
+        distanceKm: distanceKm,
+        durationSeconds: elapsedSeconds,
+        endLat: 13.7563,
+        endLng: 100.5018,
+      );
+
+      // ปิดภารกิจที่ผู้ใช้ยังไม่ได้กดจบเองระหว่างวิ่ง ให้อัตโนมัติตอนจบการวิ่ง
+      // แยก try/catch ต่อภารกิจ เพื่อไม่ให้ 1 ภารกิจพังแล้วทำผลวิ่งทั้งหมดหายไปด้วย
+      for (final q in sideQuests.where((q) => !q.done)) {
+        try {
+          await _questApi.finishSideQuest(sideQuestId: q.sideQuestId);
+          q.done = true;
+        } catch (e) {
+          failedQuestTitles.add(q.title);
+          debugPrint('finishSideQuest(${q.sideQuestId}) failed: $e');
+        }
+      }
+
+      final duration = Duration(seconds: elapsedSeconds);
+
+      final paceMinPerKm =
+          distanceKm > 0 ? (elapsedSeconds / 60) / distanceKm : 0;
+
+      final mm = paceMinPerKm.floor();
+
+      final ss = ((paceMinPerKm - mm) * 60)
+          .round()
+          .toString()
+          .padLeft(2, '0');
+
+      lastResult = RunResult(
+        distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
+        duration: duration,
+        avgPace: distanceKm > 0 ? '$mm:$ss' : '--:--',
+        calories: (distanceKm * 62).round(),
+      );
+
+      return lastResult;
+    } catch (e) {
+      debugPrint(e.toString());
+      return null;
+    } finally {
+      isStopping = false;
+      notifyListeners();
+    }
   }
 
   String get elapsedLabel {
@@ -70,4 +126,10 @@ class RunSessionNotifier extends ChangeNotifier {
   }
 }
 
-final runProvider = ChangeNotifierProvider<RunSessionNotifier>((ref) => RunSessionNotifier());
+final runProvider =
+    ChangeNotifierProvider<RunSessionNotifier>(
+  (ref) => RunSessionNotifier(
+    ref.read(questApiProvider),
+    ref.read(runningSessionApiProvider),
+  ),
+);

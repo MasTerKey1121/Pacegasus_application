@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../app_theme.dart';
+import 'package:flutter/services.dart';
 
 /// Big pill CTA button with a gradient background (purple by default).
 class GradientButton extends StatelessWidget {
@@ -7,6 +8,7 @@ class GradientButton extends StatelessWidget {
   final VoidCallback? onTap;
   final Gradient? gradient;
   final double height;
+  final bool loading;
 
   const GradientButton({
     super.key,
@@ -14,11 +16,12 @@ class GradientButton extends StatelessWidget {
     required this.onTap,
     this.gradient,
     this.height = 54,
+    this.loading = false,
   });
 
   @override
   Widget build(BuildContext context) {
-    final disabled = onTap == null;
+    final disabled = onTap == null && !loading;
     final effectiveGradient = gradient ?? AppColors.purpleGradient;
     return SizedBox(
       width: double.infinity,
@@ -27,7 +30,7 @@ class GradientButton extends StatelessWidget {
         color: Colors.transparent,
         child: InkWell(
           borderRadius: BorderRadius.circular(999),
-          onTap: onTap,
+          onTap: loading ? null : onTap,
           child: Container(
             alignment: Alignment.center,
             decoration: BoxDecoration(
@@ -44,13 +47,22 @@ class GradientButton extends StatelessWidget {
                       ),
                     ],
             ),
-            child: Text(
-              label,
-              style: AppText.heading(
-                size: 15,
-                color: disabled ? AppColors.textTertiary : Colors.white,
-              ),
-            ),
+            child: loading
+                ? const SizedBox(
+                    width: 20,
+                    height: 20,
+                    child: CircularProgressIndicator(
+                      strokeWidth: 2.4,
+                      valueColor: AlwaysStoppedAnimation(Colors.white),
+                    ),
+                  )
+                : Text(
+                    label,
+                    style: AppText.heading(
+                      size: 15,
+                      color: disabled ? AppColors.textTertiary : Colors.white,
+                    ),
+                  ),
           ),
         ),
       ),
@@ -136,7 +148,8 @@ class SectionLabel extends StatelessWidget {
         children: [
           Text(title, style: AppText.heading(size: 15)),
           if (hint != null)
-            Text(hint!, style: AppText.body(size: 11.5, color: AppColors.textTertiary)),
+            Text(hint!,
+                style: AppText.body(size: 11.5, color: AppColors.textTertiary)),
         ],
       ),
     );
@@ -149,7 +162,11 @@ class SelectChip extends StatelessWidget {
   final bool active;
   final VoidCallback onTap;
 
-  const SelectChip({super.key, required this.label, required this.active, required this.onTap});
+  const SelectChip(
+      {super.key,
+      required this.label,
+      required this.active,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -162,7 +179,8 @@ class SelectChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           gradient: active ? AppColors.purpleGradient : null,
           color: active ? null : Colors.white.withOpacity(.03),
-          border: Border.all(color: active ? Colors.transparent : AppColors.border),
+          border:
+              Border.all(color: active ? Colors.transparent : AppColors.border),
         ),
         child: Text(
           label,
@@ -223,7 +241,8 @@ class AppSwitch extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           gradient: value ? AppColors.goldGradient : null,
           color: value ? null : Colors.white.withOpacity(.08),
-          border: Border.all(color: value ? Colors.transparent : AppColors.border),
+          border:
+              Border.all(color: value ? Colors.transparent : AppColors.border),
         ),
         child: AnimatedAlign(
           duration: const Duration(milliseconds: 150),
@@ -231,7 +250,8 @@ class AppSwitch extends StatelessWidget {
           child: Container(
             width: 18,
             height: 18,
-            decoration: const BoxDecoration(shape: BoxShape.circle, color: Colors.white),
+            decoration: const BoxDecoration(
+                shape: BoxShape.circle, color: Colors.white),
           ),
         ),
       ),
@@ -247,6 +267,7 @@ class AppTextField extends StatelessWidget {
   final TextEditingController? controller;
   final ValueChanged<String>? onChanged;
   final TextInputType? keyboardType;
+  final List<TextInputFormatter>? inputFormatters;
 
   const AppTextField({
     super.key,
@@ -256,15 +277,18 @@ class AppTextField extends StatelessWidget {
     this.controller,
     this.onChanged,
     this.keyboardType,
+    this.inputFormatters,
   });
-
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Text(label.toUpperCase(),
-            style: AppText.body(size: 11.5, color: AppColors.textSecondary, weight: FontWeight.w600)),
+            style: AppText.body(
+                size: 11.5,
+                color: AppColors.textSecondary,
+                weight: FontWeight.w600)),
         const SizedBox(height: 8),
         Container(
           decoration: BoxDecoration(
@@ -276,13 +300,15 @@ class AppTextField extends StatelessWidget {
             controller: controller,
             obscureText: obscure,
             keyboardType: keyboardType,
+            inputFormatters: inputFormatters,
             onChanged: onChanged,
             style: AppText.body(size: 14.5),
             decoration: InputDecoration(
               hintText: hint,
               hintStyle: AppText.body(size: 14, color: AppColors.textTertiary),
               border: InputBorder.none,
-              contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
+              contentPadding:
+                  const EdgeInsets.symmetric(horizontal: 16, vertical: 16),
             ),
           ),
         ),
@@ -317,7 +343,8 @@ class PacegasusLogo extends StatelessWidget {
 class OnboardingProgress extends StatelessWidget {
   final int steps;
   final int active;
-  const OnboardingProgress({super.key, required this.steps, required this.active});
+  const OnboardingProgress(
+      {super.key, required this.steps, required this.active});
 
   @override
   Widget build(BuildContext context) {
@@ -345,7 +372,11 @@ class MultiChip extends StatelessWidget {
   final String label;
   final bool selected;
   final VoidCallback onTap;
-  const MultiChip({super.key, required this.label, required this.selected, required this.onTap});
+  const MultiChip(
+      {super.key,
+      required this.label,
+      required this.selected,
+      required this.onTap});
 
   @override
   Widget build(BuildContext context) {
@@ -357,11 +388,14 @@ class MultiChip extends StatelessWidget {
           borderRadius: BorderRadius.circular(999),
           gradient: selected ? AppColors.purpleGradient : null,
           color: selected ? null : Colors.white.withOpacity(.03),
-          border: Border.all(color: selected ? Colors.transparent : AppColors.border),
+          border: Border.all(
+              color: selected ? Colors.transparent : AppColors.border),
         ),
         child: Text(label,
             style: AppText.body(
-                size: 13.5, weight: FontWeight.w500, color: selected ? Colors.white : AppColors.textSecondary)),
+                size: 13.5,
+                weight: FontWeight.w500,
+                color: selected ? Colors.white : AppColors.textSecondary)),
       ),
     );
   }
@@ -395,14 +429,17 @@ class LabeledSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final display = valueFormatter != null ? valueFormatter!(value) : value.round().toString();
+    final display = valueFormatter != null
+        ? valueFormatter!(value)
+        : value.round().toString();
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(label, style: AppText.body(size: 13.5, weight: FontWeight.w600)),
+            Text(label,
+                style: AppText.body(size: 13.5, weight: FontWeight.w600)),
             Container(
               width: 34,
               height: 26,
@@ -411,7 +448,8 @@ class LabeledSlider extends StatelessWidget {
                 color: AppColors.purple1.withOpacity(.18),
                 borderRadius: BorderRadius.circular(999),
               ),
-              child: Text(display, style: AppText.heading(size: 12.5, color: AppColors.purple2)),
+              child: Text(display,
+                  style: AppText.heading(size: 12.5, color: AppColors.purple2)),
             ),
           ],
         ),
@@ -424,13 +462,20 @@ class LabeledSlider extends StatelessWidget {
             overlayColor: AppColors.purple1.withOpacity(.15),
             thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 9),
           ),
-          child: Slider(value: value, min: min, max: max, divisions: divisions, onChanged: onChanged),
+          child: Slider(
+              value: value,
+              min: min,
+              max: max,
+              divisions: divisions,
+              onChanged: onChanged),
         ),
         Row(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            Text(minCaption, style: AppText.body(size: 11, color: AppColors.textTertiary)),
-            Text(maxCaption, style: AppText.body(size: 11, color: AppColors.textTertiary)),
+            Text(minCaption,
+                style: AppText.body(size: 11, color: AppColors.textTertiary)),
+            Text(maxCaption,
+                style: AppText.body(size: 11, color: AppColors.textTertiary)),
           ],
         ),
       ],
@@ -490,14 +535,22 @@ void showAppToast(BuildContext context, String message, {bool isError = true}) {
               color: const Color(0xFF1C1533),
               borderRadius: BorderRadius.circular(999),
               border: Border.all(
-                color: isError ? AppColors.red1.withOpacity(.4) : AppColors.green1.withOpacity(.4),
+                color: isError
+                    ? AppColors.red1.withOpacity(.4)
+                    : AppColors.green1.withOpacity(.4),
               ),
-              boxShadow: [BoxShadow(color: Colors.black.withOpacity(.4), blurRadius: 20, offset: const Offset(0, 10))],
+              boxShadow: [
+                BoxShadow(
+                    color: Colors.black.withOpacity(.4),
+                    blurRadius: 20,
+                    offset: const Offset(0, 10))
+              ],
             ),
             child: Text(
               message,
               textAlign: TextAlign.center,
-              style: AppText.body(size: 12.5, weight: FontWeight.w500, color: Colors.white),
+              style: AppText.body(
+                  size: 12.5, weight: FontWeight.w500, color: Colors.white),
             ),
           ),
         ),
@@ -507,3 +560,4 @@ void showAppToast(BuildContext context, String message, {bool isError = true}) {
   overlay.insert(entry);
   Future.delayed(const Duration(milliseconds: 2200), () => entry.remove());
 }
+

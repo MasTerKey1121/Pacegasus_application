@@ -6,6 +6,7 @@ import '../../providers/user_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
 import 'reward_screen.dart';
+import '../../providers/run_setup_provider.dart';
 
 const _moods = ['😩', '🙁', '🙂', '😃', '🤩'];
 
@@ -19,6 +20,50 @@ class RunSummaryScreen extends ConsumerStatefulWidget {
 
 class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   late RunResult result = widget.result;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      final setup = ref.read(runSetupProvider);
+      final sessionId = setup.sessionId;
+
+      // โหลดข้อมูลจริงจาก Backend
+      if (sessionId != null) {
+        final detail = await ref
+            .read(runningSessionApiProvider)
+            .getDetail(sessionId: sessionId);
+
+        final data = detail['data'];
+
+        if (mounted && data != null) {
+          setState(() {
+            result = RunResult(
+              distanceKm: (data['distanceKm'] ?? 0).toDouble(),
+              duration: Duration(
+                seconds: data['durationSeconds'] ?? 0,
+              ),
+              avgPace: data['avgPace'] ?? '-',
+              calories: data['calories'] ?? 0,
+              rpe: data['rpe'] ?? result.rpe,
+              stressLevel: data['stressLevel'] ?? result.stressLevel,
+              moodIndex: data['moodIndex'] ?? result.moodIndex,
+              hasInjury: data['hasInjury'] ?? result.hasInjury,
+            );
+          });
+        }
+      }
+
+      // อัปเดต Progress ของ Side Quest
+      for (final id in setup.sideQuestIds) {
+        await ref.read(questApiProvider).updateSideQuestProgress(
+              sideQuestId: id,
+              progressCount: 1,
+            );
+      }
+    });
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -38,27 +83,39 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                 Text('วิ่งเสร็จแล้ว!', style: AppText.heading(size: 20)),
                 const SizedBox(height: 4),
                 Text('บอกความรู้สึกหลังวิ่งให้เราหน่อย',
-                    style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                    style: AppText.body(
+                        size: 12.5, color: AppColors.textSecondary)),
                 Expanded(
                   child: SingleChildScrollView(
                     padding: const EdgeInsets.only(top: 20),
                     child: Column(
                       children: [
                         Row(children: [
-                          Expanded(child: _StatBox(value: result.distanceKm.toStringAsFixed(2), label: 'ระยะทาง (KM)')),
+                          Expanded(
+                              child: _StatBox(
+                                  value: result.distanceKm.toStringAsFixed(2),
+                                  label: 'ระยะทาง (KM)')),
                           const SizedBox(width: 10),
-                          Expanded(child: _StatBox(value: '$mm:$ss', label: 'เวลา')),
+                          Expanded(
+                              child: _StatBox(value: '$mm:$ss', label: 'เวลา')),
                         ]),
                         const SizedBox(height: 10),
                         Row(children: [
-                          Expanded(child: _StatBox(value: result.avgPace, label: 'Pace เฉลี่ย')),
+                          Expanded(
+                              child: _StatBox(
+                                  value: result.avgPace, label: 'Pace เฉลี่ย')),
                           const SizedBox(width: 10),
-                          Expanded(child: _StatBox(value: '${result.calories}', label: 'แคลอรี่')),
+                          Expanded(
+                              child: _StatBox(
+                                  value: '${result.calories}',
+                                  label: 'แคลอรี่')),
                         ]),
                         const SizedBox(height: 24),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('ความหนัก RPE', style: AppText.body(size: 13, weight: FontWeight.w600)),
+                          child: Text('ความหนัก RPE',
+                              style: AppText.body(
+                                  size: 13, weight: FontWeight.w600)),
                         ),
                         const SizedBox(height: 10),
                         Wrap(
@@ -74,12 +131,19 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 height: 36,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  gradient: active ? AppColors.purpleGradient : null,
-                                  color: active ? null : Colors.white.withOpacity(.05),
+                                  gradient:
+                                      active ? AppColors.purpleGradient : null,
+                                  color: active
+                                      ? null
+                                      : Colors.white.withOpacity(.05),
                                   borderRadius: BorderRadius.circular(10),
                                 ),
                                 child: Text('$v',
-                                    style: AppText.heading(size: 13, color: active ? Colors.white : AppColors.textSecondary)),
+                                    style: AppText.heading(
+                                        size: 13,
+                                        color: active
+                                            ? Colors.white
+                                            : AppColors.textSecondary)),
                               ),
                             );
                           }),
@@ -87,8 +151,10 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         const SizedBox(height: 6),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('ระดับ ${result.rpe} — ${result.rpe >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
-                              style: AppText.body(size: 11.5, color: AppColors.textTertiary)),
+                          child: Text(
+                              'ระดับ ${result.rpe} — ${result.rpe >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
+                              style: AppText.body(
+                                  size: 11.5, color: AppColors.textTertiary)),
                         ),
                         const SizedBox(height: 20),
                         LabeledSlider(
@@ -99,12 +165,15 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           divisions: 10,
                           minCaption: 'ผ่อนคลาย',
                           maxCaption: 'เครียดมาก',
-                          onChanged: (v) => setState(() => result.stressLevel = v.round()),
+                          onChanged: (v) =>
+                              setState(() => result.stressLevel = v.round()),
                         ),
                         const SizedBox(height: 20),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('อารมณ์หลังวิ่ง', style: AppText.body(size: 13, weight: FontWeight.w600)),
+                          child: Text('อารมณ์หลังวิ่ง',
+                              style: AppText.body(
+                                  size: 13, weight: FontWeight.w600)),
                         ),
                         const SizedBox(height: 10),
                         Row(
@@ -118,11 +187,17 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 height: 48,
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
-                                  color: active ? AppColors.purple1.withOpacity(.25) : Colors.white.withOpacity(.04),
+                                  color: active
+                                      ? AppColors.purple1.withOpacity(.25)
+                                      : Colors.white.withOpacity(.04),
                                   shape: BoxShape.circle,
-                                  border: Border.all(color: active ? AppColors.purple2 : AppColors.border),
+                                  border: Border.all(
+                                      color: active
+                                          ? AppColors.purple2
+                                          : AppColors.border),
                                 ),
-                                child: Text(_moods[i], style: const TextStyle(fontSize: 20)),
+                                child: Text(_moods[i],
+                                    style: const TextStyle(fontSize: 20)),
                               ),
                             );
                           }),
@@ -130,21 +205,29 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         const SizedBox(height: 20),
                         Align(
                           alignment: Alignment.centerLeft,
-                          child: Text('มีอาการบาดเจ็บไหม?', style: AppText.body(size: 13, weight: FontWeight.w600)),
+                          child: Text('มีอาการบาดเจ็บไหม?',
+                              style: AppText.body(
+                                  size: 13, weight: FontWeight.w600)),
                         ),
                         const SizedBox(height: 10),
                         Row(children: [
                           Expanded(
                             child: GradientButton(
                               label: 'ไม่มี',
-                              gradient: !result.hasInjury ? AppColors.greenGradient : null,
+                              gradient: !result.hasInjury
+                                  ? AppColors.greenGradient
+                                  : null,
                               height: 46,
-                              onTap: () => setState(() => result.hasInjury = false),
+                              onTap: () =>
+                                  setState(() => result.hasInjury = false),
                             ),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: OutlineButton(label: 'มีอาการ', onTap: () => setState(() => result.hasInjury = true)),
+                            child: OutlineButton(
+                                label: 'มีอาการ',
+                                onTap: () =>
+                                    setState(() => result.hasInjury = true)),
                           ),
                         ]),
                       ],
@@ -154,10 +237,15 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                 GradientButton(
                   label: 'ส่งข้อมูล',
                   onTap: () {
-                    ref.read(userProvider).addRunStats(km: result.distanceKm, sessions: 1);
+                    ref
+                        .read(userProvider)
+                        .addRunStats(km: result.distanceKm, sessions: 1);
                     ref.read(missionProvider).setDone('run', true);
+                    ref.read(runSetupProvider).reset(); // เพิ่มบรรทัดนี้
                     Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const RewardScreen(coin: 20, exp: 50)),
+                      MaterialPageRoute(
+                          builder: (_) =>
+                              const RewardScreen(coin: 20, exp: 50)),
                     );
                   },
                 ),
@@ -183,7 +271,8 @@ class _StatBox extends StatelessWidget {
         children: [
           Text(value, style: AppText.heading(size: 20)),
           const SizedBox(height: 4),
-          Text(label, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
+          Text(label,
+              style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
         ],
       ),
     );

@@ -26,6 +26,10 @@ class RunningSessionApi {
         auth: true,
       );
 
+  /// API 7.2
+  Future<Map<String, dynamic>> getDetail({required String sessionId}) =>
+      client.get('/api/running-sessions/$sessionId', auth: true);
+
   /// API 7.3
   Future<Map<String, dynamic>> complete({
     required String sessionId,
