@@ -125,7 +125,10 @@ class RunSetupNotifier extends ChangeNotifier {
             'lng': 100.5018,
           }
         ],
-        sideQuestInstanceIds: selectedInstanceIds.toList(),
+        // Start side quests through QuestApi below.  Supplying the IDs here
+        // would activate them once in the running-session API and then try to
+        // activate the same instances again, which makes multiple selections
+        // exceed the backend's active-quest limit.
       );
 
       final data =
