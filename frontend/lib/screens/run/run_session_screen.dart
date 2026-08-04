@@ -113,6 +113,37 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                     ],
                   ),
                   const SizedBox(height: 18),
+                  if (quests.isNotEmpty)
+                    Center(
+                      child: GestureDetector(
+                        onTap: _openMissionsSheet,
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                              horizontal: 18, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: const Color(0xFF211B3D),
+                            borderRadius: BorderRadius.circular(999),
+                            border: Border.all(color: AppColors.border),
+                            boxShadow: [
+                              BoxShadow(
+                                  color: Colors.black.withOpacity(.25),
+                                  blurRadius: 10,
+                                  offset: const Offset(0, 4)),
+                            ],
+                          ),
+                          child: Row(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              const Text('🎯', style: TextStyle(fontSize: 14)),
+                              const SizedBox(width: 8),
+                              Text('ภารกิจ $doneCount/${quests.length}',
+                                  style: AppText.heading(size: 13)),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  const SizedBox(height: 18),
                   Row(
                     children: [
                       GestureDetector(
@@ -203,40 +234,6 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                 ],
               ),
             ),
-
-            // หน้าต่างเล็ก ๆ แสดงจำนวนภารกิจที่เลือกไว้ กดเพื่อเปิดรายการ
-            if (quests.isNotEmpty)
-              Positioned(
-                top: 0,
-                right: 20,
-                child: GestureDetector(
-                  onTap: _openMissionsSheet,
-                  child: Container(
-                    padding:
-                        const EdgeInsets.symmetric(horizontal: 14, vertical: 9),
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF211B3D),
-                      borderRadius: BorderRadius.circular(999),
-                      border: Border.all(color: AppColors.border),
-                      boxShadow: [
-                        BoxShadow(
-                            color: Colors.black.withOpacity(.35),
-                            blurRadius: 14,
-                            offset: const Offset(0, 6)),
-                      ],
-                    ),
-                    child: Row(
-                      mainAxisSize: MainAxisSize.min,
-                      children: [
-                        const Text('🎯', style: TextStyle(fontSize: 14)),
-                        const SizedBox(width: 6),
-                        Text('ภารกิจ $doneCount/${quests.length}',
-                            style: AppText.heading(size: 12.5)),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
           ],
         ),
       ),
