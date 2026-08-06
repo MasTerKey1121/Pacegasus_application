@@ -156,9 +156,37 @@ async function getSessionDetail(userId, sessionId) {
   return rows[0];
 }
 
+/**
+ * ดึงประวัติ session ที่วิ่งเสร็จแล้ว โดยสามารถเรียงตามวัน เดือน หรือปีได้
+ */
+async function getSessionHistory(userId, sortBy, order) {
+  const sessionDateExpression = 'COALESCE(ended_at, started_at)';
+  const sortExpressions = {
+    date: sessionDateExpression,
+    month: `DATE_TRUNC('month', ${sessionDateExpression})`,
+    year: `DATE_TRUNC('year', ${sessionDateExpression})`,
+  };
+  const sortExpression = sortExpressions[sortBy] || sortExpressions.date;
+  const direction = order === 'asc' ? 'ASC' : 'DESC';
+
+  const { rows } = await db.query(
+    `SELECT id, environment, session_type, status, started_at, ended_at,
+            distance_km, duration_seconds, avg_heart_rate_bpm,
+            max_heart_rate_bpm, created_at,
+            ${sessionDateExpression} AS session_date
+     FROM running_sessions
+     WHERE user_id = $1 AND status = 'completed'
+     ORDER BY ${sortExpression} ${direction}, ${sessionDateExpression} ${direction}`,
+    [userId]
+  );
+
+  return { sortBy, order, sessions: rows };
+}
+
 module.exports = {
   startSession,
   completeSession,
   abandonSession,
   getSessionDetail,
+  getSessionHistory,
 };

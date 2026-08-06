@@ -100,6 +100,7 @@ CREATE TABLE program_templates (
   level              program_level_enum NOT NULL UNIQUE,
   require_exp_level  experience_level_enum,          -- NULL = ไม่มี prerequisite
   goal_label         VARCHAR(50),                     -- 'sub_50' / '10k_sub_1.40' / '21k_sub_3.30'
+  description        TEXT,
   duration_weeks_min SMALLINT,
   duration_weeks_max SMALLINT,
   created_at         TIMESTAMPTZ NOT NULL DEFAULT now()
@@ -421,8 +422,8 @@ CREATE TRIGGER trg_explorer_badge_check
 
 -- ---- Beginner (single-phase, 6-10 สัปดาห์, sub 50) ----
 WITH tpl AS (
-  INSERT INTO program_templates (level, require_exp_level, goal_label, duration_weeks_min, duration_weeks_max)
-  VALUES ('beginner', NULL, 'sub_50', 6, 10)
+  INSERT INTO program_templates (level, require_exp_level, goal_label, description, duration_weeks_min, duration_weeks_max)
+  VALUES ('beginner', NULL, 'sub_50', 'โปรแกรมเริ่มต้นเพื่อสร้างความสม่ำเสมอในการวิ่งและพัฒนาความอึดพื้นฐาน', 6, 10)
   RETURNING id
 )
 INSERT INTO session_type_specs (program_template_id, phase_id, session_type, unit, multiplier, weekly_cap, program_total_target, value_low, value_high, is_bonus)
@@ -440,8 +441,8 @@ SELECT id, 'rest_after', 'threshold', NULL FROM program_templates WHERE level = 
 
 -- ---- Lower Intermediate (goal 10k, 8-10 สัปดาห์, sub 1.40) ----
 WITH tpl AS (
-  INSERT INTO program_templates (level, require_exp_level, goal_label, duration_weeks_min, duration_weeks_max)
-  VALUES ('lower_intermediate', 'beginner', '10k_sub_1.40', 8, 10)
+  INSERT INTO program_templates (level, require_exp_level, goal_label, description, duration_weeks_min, duration_weeks_max)
+  VALUES ('lower_intermediate', 'beginner', '10k_sub_1.40', 'โปรแกรมพัฒนาความเร็วและความอึดสำหรับเป้าหมายวิ่ง 10 กิโลเมตร', 8, 10)
   RETURNING id
 ),
 phases AS (
@@ -482,8 +483,8 @@ SELECT id, 'cannot_adjacent', 'tempo', 'long_run' FROM program_templates WHERE l
 
 -- ---- Upper Intermediate (goal 21k, 10-12 สัปดาห์, sub 3.30) ----
 WITH tpl AS (
-  INSERT INTO program_templates (level, require_exp_level, goal_label, duration_weeks_min, duration_weeks_max)
-  VALUES ('upper_intermediate', 'lower_intermediate', '21k_sub_3.30', 10, 12)
+  INSERT INTO program_templates (level, require_exp_level, goal_label, description, duration_weeks_min, duration_weeks_max)
+  VALUES ('upper_intermediate', 'lower_intermediate', '21k_sub_3.30', 'โปรแกรมยกระดับความทนทานและการคุมเพซสำหรับเป้าหมายฮาล์ฟมาราธอน', 10, 12)
   RETURNING id
 ),
 phases AS (

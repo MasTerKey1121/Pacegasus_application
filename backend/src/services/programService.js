@@ -11,6 +11,59 @@ const ApiError = require('../utils/ApiError');
 
 const LEVELS_BLOCKED = ['advanced', 'elite'];
 
+/**
+ * ดึงรายการ Main Quest program template สำหรับให้หน้าเลือกโปรแกรมแสดงผล
+ */
+async function getProgramTemplates() {
+  const [templatesResult, phasesResult, specsResult, rulesResult] = await Promise.all([
+    db.query(
+      `SELECT id, level, require_exp_level, goal_label, description,
+              duration_weeks_min, duration_weeks_max, created_at
+     FROM program_templates
+     ORDER BY CASE level
+       WHEN 'beginner' THEN 1
+       WHEN 'lower_intermediate' THEN 2
+       WHEN 'upper_intermediate' THEN 3
+     END`
+    ),
+    db.query(
+      `SELECT id, program_template_id, phase_code, phase_order, duration_weeks
+       FROM program_phases
+       ORDER BY program_template_id, phase_order`
+    ),
+    db.query(
+      `SELECT id, program_template_id, phase_id, session_type, unit, multiplier,
+              weekly_cap, program_total_target, value_low, value_high, is_bonus
+       FROM session_type_specs
+       ORDER BY program_template_id, phase_id NULLS FIRST, session_type`
+    ),
+    db.query(
+      `SELECT id, program_template_id, rule_type, session_type_a, session_type_b,
+              applies_to_phase_id
+       FROM program_sequencing_rules
+       ORDER BY program_template_id, id`
+    ),
+  ]);
+
+  const groupByTemplateId = (rows) => rows.reduce((groups, row) => {
+    const templateRows = groups.get(row.program_template_id) || [];
+    templateRows.push(row);
+    groups.set(row.program_template_id, templateRows);
+    return groups;
+  }, new Map());
+
+  const phasesByTemplate = groupByTemplateId(phasesResult.rows);
+  const specsByTemplate = groupByTemplateId(specsResult.rows);
+  const rulesByTemplate = groupByTemplateId(rulesResult.rows);
+
+  return templatesResult.rows.map((template) => ({
+    ...template,
+    programPhases: phasesByTemplate.get(template.id) || [],
+    sessionTypeSpecs: specsByTemplate.get(template.id) || [],
+    programSequencingRules: rulesByTemplate.get(template.id) || [],
+  }));
+}
+
 // ---- Weekly template: [day_offset (0=วันเริ่มสัปดาห์), session_type] ----
 // day_offset 0-6 = จันทร์-อาทิตย์ (สัมพัทธ์กับ start_date ของ user_programs)
 const AUTO_TEMPLATES = {
@@ -351,6 +404,42 @@ async function addManualQuest(userId, scheduledDate, sessionType) {
 }
 
 /**
+ * เพิ่ม Main Quest หลายรายการสำหรับโปรแกรม manual ใน transaction เดียว
+ * เรียงตามวันที่ก่อน insert เพื่อให้ database trigger ตรวจ sequencing rule
+ * ได้ถูกต้อง แม้ frontend จะส่ง array มาไม่เรียงลำดับ
+ */
+async function addManualQuestsBatch(userId, quests) {
+  const program = await assertManualModeActiveProgram(userId);
+  const orderedQuests = [...quests].sort(
+    (first, second) => new Date(first.scheduledDate) - new Date(second.scheduledDate)
+  );
+  const client = await db.getClient();
+
+  try {
+    await client.query('BEGIN');
+    const createdQuests = [];
+
+    for (const quest of orderedQuests) {
+      const { rows } = await client.query(
+        `INSERT INTO main_quest_instances (user_program_id, scheduled_date, session_type)
+         VALUES ($1, $2, $3)
+         RETURNING id, scheduled_date, session_type, planned_value, unit, status, phase_id`,
+        [program.id, quest.scheduledDate, quest.sessionType]
+      );
+      createdQuests.push(rows[0]);
+    }
+
+    await client.query('COMMIT');
+    return createdQuests;
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw translateDbError(err);
+  } finally {
+    client.release();
+  }
+}
+
+/**
  * DELETE /api/v1/programs/quests/:questId — ลบเควสที่ลงผิด (แก้เฉพาะที่ยัง
  * pending เท่านั้น กันลบของที่ทำไปแล้ว/กระทบ user_program_completion)
  */
@@ -419,9 +508,11 @@ async function getQuestsInRange(userId, from, to) {
 }
 
 module.exports = {
+  getProgramTemplates,
   startProgram,
   getCurrentWeek,
   addManualQuest,
+  addManualQuestsBatch,
   deleteManualQuest,
   getQuestsInRange,
 };
