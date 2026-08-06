@@ -55,6 +55,9 @@ class RunSessionNotifier extends ChangeNotifier {
   Future<RunResult?> stop({
     required String sessionId,
     required List<ActiveSideQuest> sideQuests,
+    double? endLat,
+    double? endLng,
+    List<Map<String, double>> routePoints = const [],
   }) async {
     if (isStopping) return null; // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
     _timer?.cancel();
@@ -68,8 +71,9 @@ class RunSessionNotifier extends ChangeNotifier {
         sessionId: sessionId,
         distanceKm: distanceKm,
         durationSeconds: elapsedSeconds,
-        endLat: 13.7563,
-        endLng: 100.5018,
+        endLat: endLat ?? 13.7563,
+        endLng: endLng ?? 100.5018,
+        routePoints: routePoints,
       );
 
       // ปิดภารกิจที่ผู้ใช้ยังไม่ได้กดจบเองระหว่างวิ่ง ให้อัตโนมัติตอนจบการวิ่ง

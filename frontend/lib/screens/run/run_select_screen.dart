@@ -1,9 +1,11 @@
+import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/program_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/common.dart';
+import '../home/main_shell.dart';
 import 'run_session_screen.dart';
 
 const _environments = [
@@ -14,11 +16,83 @@ const _environments = [
   {'key': 'trail', 'label': 'Trail', 'icon': '⛰️'},
 ];
 
-class RunTypeSelectScreen extends ConsumerWidget {
+class RunTypeSelectScreen extends ConsumerStatefulWidget {
   const RunTypeSelectScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<RunTypeSelectScreen> createState() =>
+      _RunTypeSelectScreenState();
+}
+
+class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      await _requestGpsAccess(context);
+    });
+  }
+
+  Future<bool> _requestGpsAccess(BuildContext context) async {
+    final accepted = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        title: const Text('อนุญาตการเข้าถึง GPS'),
+        content: const Text(
+          'Pacegasus ต้องใช้ตำแหน่งของคุณเพื่อบันทึกระยะทางและเส้นทางการวิ่ง',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: const Text('ไม่อนุญาต'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: const Text('อนุญาต'),
+          ),
+        ],
+      ),
+    );
+
+    if (accepted != true) {
+      if (context.mounted) {
+        _returnToHome(context);
+      }
+      return false;
+    }
+
+    try {
+      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+      var permission = await Geolocator.checkPermission();
+      if (permission == LocationPermission.denied) {
+        permission = await Geolocator.requestPermission();
+      }
+
+      if (serviceEnabled &&
+          permission != LocationPermission.denied &&
+          permission != LocationPermission.deniedForever) {
+        return true;
+      }
+    } catch (_) {
+      // Treat a platform/location-service failure like unavailable GPS.
+    }
+
+    if (context.mounted) {
+      _returnToHome(context);
+    }
+    return false;
+  }
+
+  void _returnToHome(BuildContext context) {
+    Navigator.of(context).pushAndRemoveUntil(
+      MaterialPageRoute(builder: (_) => const MainShell()),
+      (route) => false,
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final setup = ref.watch(runSetupProvider);
     final program = ref.watch(programProvider);
     final todayQuest = program.todayQuest;

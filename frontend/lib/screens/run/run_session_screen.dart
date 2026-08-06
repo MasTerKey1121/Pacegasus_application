@@ -1,5 +1,10 @@
+import 'dart:async';
+import 'dart:io';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:google_maps_flutter/google_maps_flutter.dart';
+import 'package:geolocator/geolocator.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
 import '../../providers/run_provider.dart';
@@ -18,8 +23,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance
-        .addPostFrameCallback((_) => ref.read(runProvider).start());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      ref.read(runProvider).start();
+      _startLocationTracking();
+    });
   }
 
   void _openMissionsSheet() {
@@ -29,6 +36,68 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       isScrollControlled: true,
       builder: (_) => const _MissionsMiniWindow(),
     );
+  }
+
+  GoogleMapController? _mapController;
+  StreamSubscription<Position>? _positionSub;
+  LatLng _currentPosition = const LatLng(13.7563, 100.5018);
+  final List<LatLng> _routePoints = [];
+  bool _hasLocationPermission = false;
+  String? _locationMessage;
+
+  Future<void> _startLocationTracking() async {
+    var permission = await Geolocator.checkPermission();
+    if (permission == LocationPermission.denied) {
+      permission = await Geolocator.requestPermission();
+    }
+    if (permission == LocationPermission.denied ||
+        permission == LocationPermission.deniedForever) {
+      if (mounted) {
+        setState(
+            () => _locationMessage = 'อนุญาตตำแหน่งเพื่อบันทึกเส้นทางการวิ่ง');
+      }
+      return;
+    }
+    if (!await Geolocator.isLocationServiceEnabled()) {
+      if (mounted) {
+        setState(() => _locationMessage = 'กรุณาเปิดบริการตำแหน่ง');
+      }
+      return;
+    }
+
+    if (mounted) setState(() => _hasLocationPermission = true);
+
+    _positionSub = Geolocator.getPositionStream(
+      locationSettings: const LocationSettings(
+        accuracy: LocationAccuracy.high,
+        distanceFilter: 5,
+      ),
+    ).listen((pos) {
+      final latLng = LatLng(pos.latitude, pos.longitude);
+      if (!mounted) return;
+      setState(() {
+        _currentPosition = latLng;
+        if (_routePoints.isEmpty ||
+            Geolocator.distanceBetween(
+                  _routePoints.last.latitude,
+                  _routePoints.last.longitude,
+                  latLng.latitude,
+                  latLng.longitude,
+                ) >=
+                5) {
+          _routePoints.add(latLng);
+        }
+        _locationMessage = null;
+      });
+      _mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
+    });
+  }
+
+  @override
+  void dispose() {
+    _positionSub?.cancel();
+    _mapController?.dispose();
+    super.dispose();
   }
 
   @override
@@ -61,28 +130,62 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                   ),
                   const SizedBox(height: 22),
                   Expanded(
-                    child: Container(
-                      width: double.infinity,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFF211B3D),
-                        borderRadius: BorderRadius.circular(24),
-                      ),
-                      child: Center(
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 300),
-                          width: 26,
-                          height: 26,
-                          decoration: BoxDecoration(
-                            color: AppColors.purple2,
-                            shape: BoxShape.circle,
-                            boxShadow: [
-                              BoxShadow(
-                                  color: AppColors.purple1.withOpacity(.5),
-                                  blurRadius: 18,
-                                  spreadRadius: 6)
-                            ],
+                    child: ClipRRect(
+                      borderRadius: BorderRadius.circular(24),
+                      child: Stack(
+                        children: [
+                          if (Platform.isWindows)
+                            _WindowsLocationPanel(
+                              position: _currentPosition,
+                              hasLocation: _hasLocationPermission,
+                            )
+                          else
+                            GoogleMap(
+                            initialCameraPosition: CameraPosition(
+                              target: _currentPosition,
+                              zoom: 16,
+                            ),
+                            onMapCreated: (controller) => _mapController = controller,
+                            myLocationEnabled: _hasLocationPermission,
+                            myLocationButtonEnabled: _hasLocationPermission,
+                            zoomControlsEnabled: false,
+                            mapToolbarEnabled: false,
+                            markers: {
+                              Marker(
+                                markerId: const MarkerId('runner'),
+                                position: _currentPosition,
+                                infoWindow: const InfoWindow(title: 'ตำแหน่งปัจจุบัน'),
+                              ),
+                            },
+                            polylines: {
+                              if (_routePoints.length > 1)
+                                Polyline(
+                                  polylineId: const PolylineId('running-route'),
+                                  points: _routePoints,
+                                  color: AppColors.purple2,
+                                  width: 6,
+                                ),
+                            },
                           ),
-                        ),
+                          if (_locationMessage != null)
+                            Positioned(
+                              left: 12,
+                              right: 12,
+                              bottom: 12,
+                              child: Container(
+                                padding: const EdgeInsets.all(10),
+                                decoration: BoxDecoration(
+                                  color: AppColors.card.withOpacity(.94),
+                                  borderRadius: BorderRadius.circular(12),
+                                ),
+                                child: Text(
+                                  _locationMessage!,
+                                  textAlign: TextAlign.center,
+                                  style: AppText.body(size: 12),
+                                ),
+                              ),
+                            ),
+                        ],
                       ),
                     ),
                   ),
@@ -194,13 +297,21 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                   );
                                   if (confirmed != true) return;
                                   final result =
-                                      await ref.read(runProvider).stop(
+                                          await ref.read(runProvider).stop(
                                             sessionId: ref
                                                 .read(runSetupProvider)
                                                 .sessionId!,
                                             sideQuests: ref
                                                 .read(runSetupProvider)
                                                 .activeSideQuests,
+                                            endLat: _currentPosition.latitude,
+                                            endLng: _currentPosition.longitude,
+                                            routePoints: _routePoints
+                                                .map((point) => {
+                                                      'lat': point.latitude,
+                                                      'lng': point.longitude,
+                                                    })
+                                                .toList(),
                                           );
                                   if (!context.mounted) return;
                                   final failed =
@@ -243,6 +354,55 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
 /// หน้าต่างเล็ก ๆ (modal bottom sheet) แสดงภารกิจที่เลือกไว้ตอนหน้าเลือกประเภทการวิ่ง
 /// กดจบทีละภารกิจได้เลยระหว่างที่ยังวิ่งอยู่
+class _WindowsLocationPanel extends StatelessWidget {
+  const _WindowsLocationPanel({
+    required this.position,
+    required this.hasLocation,
+  });
+
+  final LatLng position;
+  final bool hasLocation;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: double.infinity,
+      color: const Color(0xFF211B3D),
+      child: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const Icon(Icons.location_on_rounded,
+                  color: AppColors.purple2, size: 48),
+              const SizedBox(height: 12),
+              Text(
+                hasLocation ? 'กำลังบันทึกตำแหน่ง GPS' : 'กำลังเชื่อมต่อ GPS',
+                style: AppText.heading(size: 16),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                'แผนที่ยังไม่รองรับบน Windows',
+                textAlign: TextAlign.center,
+                style: AppText.body(size: 12, color: AppColors.textSecondary),
+              ),
+              if (hasLocation) ...[
+                const SizedBox(height: 12),
+                Text(
+                  '${position.latitude.toStringAsFixed(5)}, '
+                  '${position.longitude.toStringAsFixed(5)}',
+                  style: AppText.body(size: 12, color: AppColors.textTertiary),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
 class _MissionsMiniWindow extends ConsumerWidget {
   const _MissionsMiniWindow();
 
