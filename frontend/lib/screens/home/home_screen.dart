@@ -10,6 +10,7 @@ import '../wellness/daily_wellness_screen.dart';
 import '../home/daily_missions_screen.dart';
 import '../run/run_select_screen.dart';
 import '../training/training_schedule_screen.dart';
+import '../training/training_registration_screen.dart';
 
 
 class HomeScreen extends ConsumerWidget {
@@ -121,8 +122,16 @@ class HomeScreen extends ConsumerWidget {
 */
 
           GestureDetector(
-            onTap: () =>
-                Navigator.of(context).push(MaterialPageRoute(builder: (_) => const TrainingScheduleScreen())),
+            onTap: program.isLoading ||
+                    (!program.isRegistered && !wellness.completedToday)
+                ? null
+                : () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => program.isRegistered
+                            ? const TrainingScheduleScreen()
+                            : const TrainingRegistrationScreen(),
+                      ),
+                    ),
             child: AppCard(
               child: Row(
                 children: [
@@ -155,9 +164,17 @@ class HomeScreen extends ConsumerWidget {
           ),
 
           const SectionLabel(title: 'แผนวันนี้'),
-          AppCard(
-            child: Column(
-              children: [
+          GestureDetector(
+            onTap: wellness.completedToday && !program.isRegistered
+                ? () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TrainingRegistrationScreen(),
+                      ),
+                    )
+                : null,
+            child: AppCard(
+              child: Column(
+                children: [
                 Text(wellness.completedToday ? '🏃' : '🔒',
                     style: const TextStyle(fontSize: 30)),
                 const SizedBox(height: 10),
@@ -172,7 +189,24 @@ class HomeScreen extends ConsumerWidget {
                     color: wellness.completedToday ? AppColors.textPrimary : AppColors.gold1,
                   ),
                 ),
-                if (wellness.completedToday && todayQuest != null) ...[
+                if (wellness.completedToday && !program.isRegistered) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'ลงทะเบียนตารางซ้อม',
+                    textAlign: TextAlign.center,
+                    style: AppText.body(
+                      size: 13,
+                      weight: FontWeight.w600,
+                      color: AppColors.purple2,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    'เลือกแผนที่ต้องการก่อนเริ่มตารางซ้อม',
+                    textAlign: TextAlign.center,
+                    style: AppText.body(size: 12, color: AppColors.textSecondary),
+                  ),
+                ] else if (wellness.completedToday && todayQuest != null) ...[
                   const SizedBox(height: 6),
                   Text(
                     _todayQuestLabel(todayQuest),
@@ -196,12 +230,13 @@ class HomeScreen extends ConsumerWidget {
                     style: AppText.body(size: 12, color: AppColors.textSecondary),
                   ),
                 ],
-              ],
+                ],
+              ),
             ),
           ),
 
           const SectionLabel(title: 'แผนสัปดาห์นี้'),
-          if (wellness.completedToday && program.quests.isNotEmpty)
+          if (wellness.completedToday && program.isRegistered && program.quests.isNotEmpty)
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -225,9 +260,12 @@ class HomeScreen extends ConsumerWidget {
             )
           else
             Text(
-              wellness.completedToday
-                  ? 'ยังไม่มีเควสสำหรับสัปดาห์นี้'
-                  : 'ทำ Daily Wellness Check-in เพื่อดูเควสสัปดาห์นี้',
+              !wellness.completedToday
+                  ? 'ทำ Daily Wellness Check-in เพื่อดูเควสสัปดาห์นี้'
+                  : !program.isRegistered
+                      ? 'ลงทะเบียนตารางซ้อมเพื่อเริ่มแผนสัปดาห์นี้'
+                  :
+                    'ยังไม่มีเควสสำหรับสัปดาห์นี้',
               style: AppText.body(size: 12, color: AppColors.textSecondary),
             ),
         ],

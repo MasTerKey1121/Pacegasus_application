@@ -224,7 +224,10 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 );
                               }
 
-                              await ref.read(programApiProvider).start(level: level);
+                              // Keep the derived level locally for the plan
+                              // registration step.  Do not call API 5.1 here:
+                              // the user registers the plan after Daily Wellness.
+                              ref.read(programProvider).setOnboardingLevel(level);
                             },
                           );
                           if (ok && context.mounted) {

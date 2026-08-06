@@ -6,7 +6,11 @@ const { step1Schema, step2Schema, step3Schema, step4Schema } = require('../utils
 // GET /api/onboarding/status
 const getStatus = asyncHandler(async (req, res) => {
   const { rows } = await db.query(
-    `SELECT onboarding_step, onboarding_completed FROM users WHERE id = $1`,
+    `SELECT u.onboarding_step, u.onboarding_completed,
+            ubi.running_experience_level
+     FROM users u
+     LEFT JOIN user_basic_info ubi ON ubi.user_id = u.id
+     WHERE u.id = $1`,
     [req.user.id]
   );
   if (rows.length === 0) throw new ApiError(404, 'ไม่พบผู้ใช้งาน');
@@ -16,6 +20,7 @@ const getStatus = asyncHandler(async (req, res) => {
     data: {
       currentStep: rows[0].onboarding_step,
       completed: rows[0].onboarding_completed,
+      runningExperienceLevel: rows[0].running_experience_level,
     },
   });
 });

@@ -79,7 +79,13 @@ class WellnessNotifier extends ChangeNotifier {
 }
 
 final wellnessProvider = ChangeNotifierProvider<WellnessNotifier>(
-  (ref) => WellnessNotifier(
-    ref.read(wellnessApiProvider),
-  ),
+  (ref) {
+    final notifier = WellnessNotifier(ref.read(wellnessApiProvider));
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      final previousUserId = previous?.user?['id'];
+      final nextUserId = next.user?['id'];
+      if (previousUserId != nextUserId) notifier.reset();
+    });
+    return notifier;
+  },
 );

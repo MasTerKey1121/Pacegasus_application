@@ -161,6 +161,22 @@ async function generateAutoSchedule(client, userProgramId, level, startDate, dur
  * POST /api/v1/programs/start
  */
 async function startProgram(userId, level, scheduleMode) {
+  // Program registration is unlocked only after today's Daily Wellness check-in.
+  // Enforce this on the server so a direct API request cannot bypass the flow.
+  const { rows: wellnessRows } = await db.query(
+    `SELECT 1
+     FROM daily_wellness_checkins
+     WHERE user_id = $1 AND checkin_date = CURRENT_DATE
+     LIMIT 1`,
+    [userId]
+  );
+  if (wellnessRows.length === 0) {
+    throw new ApiError(
+      400,
+      "Please complete today's Daily Wellness check-in before registering a program"
+    );
+  }
+
   // 1. ดึง running_experience_level ปัจจุบันของผู้ใช้
   const { rows: userRows } = await db.query(
     `SELECT running_experience_level FROM user_basic_info WHERE user_id = $1`,

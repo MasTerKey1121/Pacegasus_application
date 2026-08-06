@@ -4,7 +4,6 @@ import '../../app_theme.dart';
 import '../../providers/wellness_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/mission_provider.dart';
-import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
 
 class DailyWellnessScreen extends ConsumerWidget {
@@ -117,8 +116,6 @@ class DailyWellnessScreen extends ConsumerWidget {
                           if (!context.mounted) return;
 
                           if (ok) {
-                            await ref.read(programProvider).loadCurrentWeek();
-                            if (!context.mounted) return;
                             ref.read(missionProvider).setDone('wellness', true);
                             ref.read(userProvider).addReward(coin: 10);
                             Navigator.of(context).pop();

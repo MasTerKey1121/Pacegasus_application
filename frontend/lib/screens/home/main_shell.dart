@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/wellness_provider.dart';
 import '../../providers/mission_provider.dart';
+import '../../providers/program_provider.dart';
 
 import 'home_screen.dart';
 import '../stats/stats_screen.dart';
@@ -24,6 +25,7 @@ class _MainShellState extends ConsumerState<MainShell> {
     super.initState();
 
     Future.microtask(() async {
+      await ref.read(programProvider).restore();
       await ref.read(wellnessProvider).loadToday();
 
       if (ref.read(wellnessProvider).completedToday) {
