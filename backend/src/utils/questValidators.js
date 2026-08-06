@@ -73,6 +73,21 @@ const addManualQuestSchema = Joi.object({
     }),
 });
 
+const addManualQuestsBatchSchema = Joi.object({
+  quests: Joi.array()
+    .items(addManualQuestSchema)
+    .min(1)
+    .max(7)
+    .unique('scheduledDate')
+    .required()
+    .messages({
+      'array.min': 'ต้องระบุ quest อย่างน้อย 1 รายการ',
+      'array.max': 'เพิ่ม quest แบบ batch ได้ไม่เกิน 7 รายการต่อครั้ง',
+      'array.unique': 'ไม่สามารถระบุ scheduledDate ซ้ำกันใน batch เดียวกัน',
+      'any.required': 'ต้องระบุ quests',
+    }),
+});
+
 const questIdParamSchema = Joi.object({
   questId: Joi.string().uuid().required().messages({
     'string.guid': '"questId" ต้องเป็น UUID ที่ถูกต้อง',
@@ -93,6 +108,7 @@ module.exports = {
   startSideQuestSchema,
   updateProgressSchema,
   addManualQuestSchema,
+  addManualQuestsBatchSchema,
   questIdParamSchema,
   getQuestsInRangeSchema,
 };

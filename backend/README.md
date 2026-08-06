@@ -255,9 +255,11 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 | Method | Path | Body / Query | คำอธิบาย |
 |---|---|---|---|
+| GET | `/programs/templates` | – | ดึง Main Quest program template พร้อม description, phases, session specs และ sequencing rules สำหรับหน้าเลือกโปรแกรม |
 | POST | `/v1/programs/start` | `{ level, scheduleMode }` | สมัครโปรแกรมฝึกซ้อมให้ผู้ใช้ (ทำครั้งเดียว) |
 | GET | `/v1/programs/current/week` | – | ดึงตารางฝึกของสัปดาห์ปัจจุบัน (ต้องสมัครโปรแกรมก่อน) |
 | POST | `/v1/programs/quests` | `{ scheduledDate, sessionType }` | เพิ่มเควสวันเดียวเอง — ใช้ได้เฉพาะโปรแกรมที่ `scheduleMode = "manual"` |
+| POST | `/programs/quests/batch` | `{ quests: [{ scheduledDate, sessionType }] }` | เพิ่มเควสแบบหลายรายการ (1-7 รายการ) ใน transaction เดียว สำหรับโปรแกรม manual |
 | DELETE | `/v1/programs/quests/:questId` | – (path param `questId`) | ลบเควสที่ยังอยู่สถานะ pending |
 | GET | `/v1/programs/quests?from=&to=` | query `from`, `to` (ไม่บังคับ) | ดูเควสตามช่วงวันที่ ถ้าไม่ส่งจะ fallback เป็นสัปดาห์ปัจจุบัน |
 

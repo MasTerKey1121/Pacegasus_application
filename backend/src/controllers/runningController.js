@@ -1,6 +1,7 @@
 const asyncHandler = require('../utils/asyncHandler');
 const ApiError = require('../utils/ApiError');
 const runningService = require('../services/runningService');
+const { getSessionHistorySchema } = require('../utils/runningValidators');
 
 // POST /api/running-sessions
 const startSession = asyncHandler(async (req, res) => {
@@ -26,9 +27,23 @@ const getSessionDetail = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: detail });
 });
 
+// GET /api/running-sessions/history?sortBy=date|month|year&order=asc|desc
+const getSessionHistory = asyncHandler(async (req, res) => {
+  const { value, error } = getSessionHistorySchema.validate(req.query);
+  if (error) throw new ApiError(400, error.message);
+
+  const history = await runningService.getSessionHistory(
+    req.user.id,
+    value.sortBy,
+    value.order
+  );
+  res.status(200).json({ success: true, data: history });
+});
+
 module.exports = {
   startSession,
   completeSession,
   abandonSession,
   getSessionDetail,
+  getSessionHistory,
 };

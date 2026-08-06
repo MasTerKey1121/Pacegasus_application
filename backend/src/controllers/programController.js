@@ -3,10 +3,21 @@ const ApiError = require('../utils/ApiError');
 const {
   startProgramSchema,
   addManualQuestSchema,
+  addManualQuestsBatchSchema,
   getQuestsInRangeSchema,
   questIdParamSchema,
 } = require('../utils/questValidators');
 const programService = require('../services/programService');
+
+// GET /api/programs/templates
+const getProgramTemplates = asyncHandler(async (req, res) => {
+  const templates = await programService.getProgramTemplates();
+
+  res.status(200).json({
+    success: true,
+    data: templates,
+  });
+});
 
 // POST /api/v1/programs/start
 const startProgram = asyncHandler(async (req, res) => {
@@ -57,6 +68,20 @@ const addManualQuest = asyncHandler(async (req, res) => {
   });
 });
 
+// POST /api/programs/quests/batch — เพิ่ม quest หลายรายการ (manual mode เท่านั้น)
+const addManualQuestsBatch = asyncHandler(async (req, res) => {
+  const { value, error } = addManualQuestsBatchSchema.validate(req.body);
+  if (error) throw new ApiError(400, error.message);
+
+  const quests = await programService.addManualQuestsBatch(req.user.id, value.quests);
+
+  res.status(201).json({
+    success: true,
+    message: 'เพิ่มเควสรายสัปดาห์สำเร็จ',
+    data: { quests },
+  });
+});
+
 // DELETE /api/v1/programs/quests/:questId — ลบเควสที่ยัง pending
 const deleteManualQuest = asyncHandler(async (req, res) => {
   const { value, error } = questIdParamSchema.validate(req.params);
@@ -92,9 +117,11 @@ const getQuestsInRange = asyncHandler(async (req, res) => {
 });
 
 module.exports = {
+  getProgramTemplates,
   startProgram,
   getCurrentWeek,
   addManualQuest,
+  addManualQuestsBatch,
   deleteManualQuest,
   getQuestsInRange,
 };
