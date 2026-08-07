@@ -4,6 +4,10 @@ class ProgramApi {
   final ApiClient client;
   ProgramApi(this.client);
 
+  /// API 5.0: retrieve the available training-program templates.
+  Future<Map<String, dynamic>> getTemplates() =>
+      client.get('/api/programs/templates', auth: true);
+
   /// API 5.1: create the user's automatically generated training program.
   Future<Map<String, dynamic>> start({required String level}) => client.post(
         '/api/programs/start',

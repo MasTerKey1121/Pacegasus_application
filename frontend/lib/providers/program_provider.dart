@@ -16,7 +16,9 @@ class ProgramNotifier extends ChangeNotifier {
   final ProgramApi _api;
   final OnboardingApi _onboardingApi;
   List<Map<String, dynamic>> quests = const [];
+  List<Map<String, dynamic>> templates = const [];
   bool isLoading = false;
+  bool isLoadingTemplates = false;
   bool isRegistering = false;
   String? errorMessage;
   String? _onboardingLevel;
@@ -26,6 +28,14 @@ class ProgramNotifier extends ChangeNotifier {
   /// API 5.1 must only be called after the user explicitly registers a plan.
   bool get isRegistered => _isRegistered;
 
+  /// The API 5.0 template that matches the level determined in onboarding.
+  Map<String, dynamic>? get registrationTemplate {
+    for (final template in templates) {
+      if (template['level'] == _onboardingLevel) return template;
+    }
+    return templates.isEmpty ? null : templates.first;
+  }
+
   void setOnboardingLevel(String level) {
     _onboardingLevel = level;
   }
@@ -33,7 +43,9 @@ class ProgramNotifier extends ChangeNotifier {
   /// Clears all account-specific state before a different user signs in.
   void reset() {
     quests = const [];
+    templates = const [];
     isLoading = false;
+    isLoadingTemplates = false;
     isRegistering = false;
     errorMessage = null;
     _onboardingLevel = null;
@@ -80,6 +92,28 @@ class ProgramNotifier extends ChangeNotifier {
       if (level != null && level.isNotEmpty) _onboardingLevel = level;
     } catch (_) {
       // Keep the program state usable if this optional restore request fails.
+    }
+  }
+
+  /// API 5.0: load data used by the training-registration screen.
+  Future<void> loadTemplates() async {
+    if (isLoadingTemplates || templates.isNotEmpty) return;
+
+    isLoadingTemplates = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final response = await _api.getTemplates();
+      final data = response['data'] as List<dynamic>? ?? const [];
+      templates = data
+          .whereType<Map>()
+          .map((template) => Map<String, dynamic>.from(template))
+          .toList(growable: false);
+    } catch (error) {
+      errorMessage = error.toString();
+    } finally {
+      isLoadingTemplates = false;
+      notifyListeners();
     }
   }
 
