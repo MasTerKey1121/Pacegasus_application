@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_theme.dart';
+import '../../providers/onboarding_provider.dart';
 import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
 
@@ -26,6 +27,7 @@ class _TrainingRegistrationScreenState
   @override
   Widget build(BuildContext context) {
     final program = ref.watch(programProvider);
+    final distanceGoal = ref.watch(onboardingProvider).data.distanceGoal;
     final template = program.registrationTemplate;
     final isLoading = program.isLoadingTemplates ||
         (program.isLoading && !program.isRegistered);
@@ -53,6 +55,7 @@ class _TrainingRegistrationScreenState
                 Expanded(
                   child: _TemplateContent(
                     template: template,
+                    distanceGoal: distanceGoal,
                     loading: program.isLoadingTemplates,
                     onRetry: () => ref.read(programProvider).loadTemplates(),
                   ),
@@ -99,36 +102,69 @@ class _TrainingRegistrationScreenState
   }
 }
 
-class _TemplateContent extends StatelessWidget {
+class _TemplateContent extends StatefulWidget {
   const _TemplateContent({
     required this.template,
+    required this.distanceGoal,
     required this.loading,
     required this.onRetry,
   });
 
   final Map<String, dynamic>? template;
+  final String? distanceGoal;
   final bool loading;
   final VoidCallback onRetry;
 
   @override
+  State<_TemplateContent> createState() => _TemplateContentState();
+}
+
+class _TemplateContentState extends State<_TemplateContent> {
+  int? _selectedWeeks;
+
+  @override
+  void didUpdateWidget(covariant _TemplateContent oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    final minWeeks = _weekValue(widget.template?['duration_weeks_min']);
+    final maxWeeks =
+        _weekValue(widget.template?['duration_weeks_max']) ?? minWeeks;
+    if (minWeeks != null &&
+        (_selectedWeeks == null ||
+            _selectedWeeks! < minWeeks ||
+            _selectedWeeks! > (maxWeeks ?? minWeeks))) {
+      _selectedWeeks = minWeeks;
+    }
+  }
+
+  @override
   Widget build(BuildContext context) {
-    if (loading && template == null) {
+    final template = widget.template;
+    if (widget.loading && template == null) {
       return const Center(child: CircularProgressIndicator());
     }
     if (template == null) {
       return Center(
         child: TextButton.icon(
-          onPressed: onRetry,
+          onPressed: widget.onRetry,
           icon: const Icon(Icons.refresh),
           label: const Text('โหลดแผนฝึกอีกครั้ง'),
         ),
       );
     }
 
-    final phases = _mapList(template!['programPhases']);
-    final sessionSpecs = _uniqueSessionSpecs(template!['sessionTypeSpecs']);
-    final minWeeks = template!['duration_weeks_min']?.toString() ?? '-';
-    final maxWeeks = template!['duration_weeks_max']?.toString() ?? minWeeks;
+    final phases = _mapList(template['programPhases']);
+    final sessionSpecs = _uniqueSessionSpecs(template['sessionTypeSpecs']);
+    final minWeeks = _weekValue(template['duration_weeks_min']);
+    final maxWeeks = _weekValue(template['duration_weeks_max']) ?? minWeeks;
+    final weekOptions = minWeeks == null || maxWeeks == null
+        ? const <int>[]
+        : List<int>.generate(
+            maxWeeks - minWeeks + 1,
+            (index) => minWeeks + index,
+          );
+    final selectedWeeks = _selectedWeeks ?? minWeeks;
+    final goalLabel =
+        widget.distanceGoal ?? _goalLabel(template['goal_label']?.toString());
 
     return SingleChildScrollView(
       child: Column(
@@ -150,16 +186,16 @@ class _TemplateContent extends StatelessWidget {
                   runSpacing: 8,
                   crossAxisAlignment: WrapCrossAlignment.center,
                   children: [
-                    _LevelBadge(label: _levelLabel(template!['level']?.toString())),
+                    _LevelBadge(label: _levelLabel(template['level']?.toString())),
                     Text(
-                      '${_goalLabel(template!['goal_label']?.toString())} · $minWeeks–$maxWeeks สัปดาห์',
+                      '$goalLabel · ${selectedWeeks ?? '-'} สัปดาห์',
                       style: AppText.heading(size: 14.5),
                     ),
                   ],
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  template!['description']?.toString() ?? '',
+                  template['description']?.toString() ?? '',
                   style: AppText.body(size: 12.5, color: AppColors.textSecondary),
                 ),
                 if (phases.isNotEmpty) ...[
@@ -177,6 +213,42 @@ class _TemplateContent extends StatelessWidget {
               ],
             ),
           ),
+          /*const SectionLabel(title: 'ระยะและระยะเวลา'),
+          Text(
+            widget.distanceGoal == null
+                ? 'ไม่พบเป้าหมายระยะจาก Onboarding'
+                : 'เป้าหมายระยะจาก Onboarding',
+            style: AppText.body(size: 12.5, color: AppColors.textSecondary),
+          ),*/
+          const SizedBox(height: 8),
+          SelectChip(
+            label: goalLabel,
+            active: true,
+            onTap: () {},
+          ),
+          const SizedBox(height: 18),
+          Text(
+            'เลือกระยะเวลา (ตัวอย่าง)',
+            style: AppText.body(size: 12.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 8),
+          if (weekOptions.isEmpty)
+            Text('ไม่พบช่วงสัปดาห์ของแผน',
+                style: AppText.body(size: 12, color: AppColors.textSecondary))
+          else
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: weekOptions
+                  .map((weeks) => SelectChip(
+                        label: '$weeks สัปดาห์',
+                        active: selectedWeeks == weeks,
+                        // API 5.1 does not accept a week duration. This is a
+                        // local, mock selection for the registration UI only.
+                        onTap: () => setState(() => _selectedWeeks = weeks),
+                      ))
+                  .toList(),
+            ),
           const SectionLabel(title: 'องค์ประกอบการซ้อม'),
           if (sessionSpecs.isEmpty)
             Text('ไม่พบรายละเอียดรูปแบบการฝึก',
@@ -282,6 +354,12 @@ List<Map<String, dynamic>> _mapList(dynamic value) => (value as List<dynamic>? ?
     .whereType<Map>()
     .map((item) => Map<String, dynamic>.from(item))
     .toList(growable: false);
+
+int? _weekValue(dynamic value) => switch (value) {
+      int weeks when weeks > 0 => weeks,
+      num weeks when weeks > 0 => weeks.toInt(),
+      _ => int.tryParse(value?.toString() ?? ''),
+    };
 
 List<Map<String, dynamic>> _uniqueSessionSpecs(dynamic value) {
   final seen = <String>{};
