@@ -28,9 +28,10 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
   @override
   void initState() {
     super.initState();
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      await _requestGpsAccess(context);
-    });
+    // Comment out ไว้ก่อน เพราะกด "อนุญาต" GPS ทุกครั้งตอนเทสมันยุ่งยาก
+    // WidgetsBinding.instance.addPostFrameCallback((_) async {
+    //   await _requestGpsAccess(context);
+    // });
   }
 
   Future<bool> _requestGpsAccess(BuildContext context) async {
@@ -152,27 +153,20 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                       style: AppText.body(size: 12, color: AppColors.textSecondary))
                 else
                   ...setup.sideQuests.map((q) {
-                    final selected = setup.selectedInstanceIds.contains(q.instanceId);
-                    return GestureDetector(
-                      onTap: () => ref.read(runSetupProvider).selectSideQuest(q.instanceId),
-                      child: AppCard(
-                        borderColor: selected ? AppColors.purple2 : AppColors.border,
-                        child: Row(children: [
-                          Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
-                          const SizedBox(width: 10),
-                          Expanded(
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.start,
-                              children: [
-                                Text(q.title, style: AppText.heading(size: 13.5)),
-                                Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
-                              ],
-                            ),
+                    return AppCard(
+                      child: Row(children: [
+                        Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(q.title, style: AppText.heading(size: 13.5)),
+                              Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
+                            ],
                           ),
-                          Icon(selected ? Icons.check_circle : Icons.circle_outlined,
-                              color: selected ? AppColors.purple2 : AppColors.textTertiary),
-                        ]),
-                      ),
+                        ),
+                      ]),
                     );
                   }),
               ],

@@ -88,6 +88,9 @@ class RunSetupNotifier extends ChangeNotifier {
           .map((q) => SideQuest.fromJson(
               Map<String, dynamic>.from(q)))
           .toList(growable: false);
+
+      // เลือก side quest ทั้งหมดให้อัตโนมัติ ไม่ต้องให้ user เลือกเอง
+      selectedInstanceIds = sideQuests.map((q) => q.instanceId).toSet();
     } catch (e) {
       errorMessage = e.toString();
       sideQuests = [];
@@ -95,13 +98,6 @@ class RunSetupNotifier extends ChangeNotifier {
       isLoadingQuests = false;
       notifyListeners();
     }
-  }
-
-  void selectSideQuest(String instanceId) {
-    if (!selectedInstanceIds.remove(instanceId)) {
-      selectedInstanceIds.add(instanceId);
-    }
-    notifyListeners();
   }
 
   Future<bool> startRun({
