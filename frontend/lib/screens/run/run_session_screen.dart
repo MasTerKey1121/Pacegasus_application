@@ -2,9 +2,10 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:google_maps_flutter/google_maps_flutter.dart';
 import 'package:geolocator/geolocator.dart';
+import 'package:sphere_maps_flutter/sphere_maps_flutter.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
 import '../../providers/run_provider.dart';
@@ -38,12 +39,34 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     );
   }
 
-  GoogleMapController? _mapController;
+  final _mapKey = GlobalKey<SphereMapState>();
   StreamSubscription<Position>? _positionSub;
-  LatLng _currentPosition = const LatLng(13.7563, 100.5018);
-  final List<LatLng> _routePoints = [];
+  _MapPoint _currentPosition = const _MapPoint(13.7563, 100.5018);
+  final List<_MapPoint> _routePoints = [];
   bool _hasLocationPermission = false;
+  bool _mapReady = false;
   String? _locationMessage;
+
+  String get _gistdaApiKey => dotenv.env['GISTDA_MAP_API_KEY'] ?? '';
+  String get _gistdaBundleId =>
+      dotenv.env['GISTDA_BUNDLE_ID'] ?? 'pacegasus_application';
+
+  void _syncMap() {
+    if (!_mapReady || _mapKey.currentState == null) return;
+    final map = _mapKey.currentState!;
+    map.call('location', args: [_currentPosition.toSphereLocation()]);
+    map.call('Overlays.clear');
+    map.call('Overlays.add', args: [Sphere.SphereObject('Marker', args: [
+      _currentPosition.toSphereLocation(),
+      {'title': 'Current location'},
+    ])]);
+    if (_routePoints.length > 1) {
+      map.call('Overlays.add', args: [Sphere.SphereObject('Polyline', args: [
+        _routePoints.map((point) => point.toSphereLocation()).toList(),
+        {'lineWidth': 6, 'lineColor': 'rgba(169, 112, 255, 0.9)'},
+      ])]);
+    }
+  }
 
   Future<void> _startLocationTracking() async {
     var permission = await Geolocator.checkPermission();
@@ -73,7 +96,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         distanceFilter: 5,
       ),
     ).listen((pos) {
-      final latLng = LatLng(pos.latitude, pos.longitude);
+      final latLng = _MapPoint(pos.latitude, pos.longitude);
       if (!mounted) return;
       setState(() {
         _currentPosition = latLng;
@@ -89,14 +112,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         }
         _locationMessage = null;
       });
-      _mapController?.animateCamera(CameraUpdate.newLatLng(latLng));
+      _syncMap();
     });
   }
 
   @override
   void dispose() {
     _positionSub?.cancel();
-    _mapController?.dispose();
+    _mapKey.currentState?.remove();
     super.dispose();
   }
 
@@ -139,34 +162,30 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                               position: _currentPosition,
                               hasLocation: _hasLocationPermission,
                             )
+                          else if (_gistdaApiKey.isEmpty)
+                            const _MapConfigurationPanel()
                           else
-                            GoogleMap(
-                            initialCameraPosition: CameraPosition(
-                              target: _currentPosition,
-                              zoom: 16,
-                            ),
-                            onMapCreated: (controller) => _mapController = controller,
-                            myLocationEnabled: _hasLocationPermission,
-                            myLocationButtonEnabled: _hasLocationPermission,
-                            zoomControlsEnabled: false,
-                            mapToolbarEnabled: false,
-                            markers: {
-                              Marker(
-                                markerId: const MarkerId('runner'),
-                                position: _currentPosition,
-                                infoWindow: const InfoWindow(title: 'ตำแหน่งปัจจุบัน'),
-                              ),
-                            },
-                            polylines: {
-                              if (_routePoints.length > 1)
-                                Polyline(
-                                  polylineId: const PolylineId('running-route'),
-                                  points: _routePoints,
-                                  color: AppColors.purple2,
-                                  width: 6,
+                            SphereMapWidget(
+                              key: _mapKey,
+                              apiKey: _gistdaApiKey,
+                              bundleId: _gistdaBundleId,
+                              eventName: [
+                                IJavascriptChannel(
+                                  name: 'Ready',
+                                  onMessageReceived: (_) {
+                                    _mapReady = true;
+                                    _syncMap();
+                                  },
                                 ),
-                            },
-                          ),
+                              ],
+                              options: {
+                                'layer': Sphere.SphereStatic('Layers', 'NORMAL'),
+                                'zoom': 16,
+                                'zoomRange': {'min': 3, 'max': 20},
+                                'location': _currentPosition.toSphereLocation(),
+                                'lastView': false,
+                              },
+                            ),
                           if (_locationMessage != null)
                             Positioned(
                               left: 12,
@@ -354,13 +373,38 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
 /// หน้าต่างเล็ก ๆ (modal bottom sheet) แสดงภารกิจที่เลือกไว้ตอนหน้าเลือกประเภทการวิ่ง
 /// กดจบทีละภารกิจได้เลยระหว่างที่ยังวิ่งอยู่
+class _MapPoint {
+  const _MapPoint(this.latitude, this.longitude);
+
+  final double latitude;
+  final double longitude;
+
+  Map<String, double> toSphereLocation() => {'lat': latitude, 'lon': longitude};
+}
+
+class _MapConfigurationPanel extends StatelessWidget {
+  const _MapConfigurationPanel();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: const Color(0xFF211B3D),
+        alignment: Alignment.center,
+        padding: const EdgeInsets.all(24),
+        child: Text(
+          'GISTDA_MAP_API_KEY is missing from .env',
+          textAlign: TextAlign.center,
+          style: AppText.body(size: 13, color: AppColors.textSecondary),
+        ),
+      );
+}
+
 class _WindowsLocationPanel extends StatelessWidget {
   const _WindowsLocationPanel({
     required this.position,
     required this.hasLocation,
   });
 
-  final LatLng position;
+  final _MapPoint position;
   final bool hasLocation;
 
   @override
