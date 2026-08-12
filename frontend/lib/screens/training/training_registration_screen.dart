@@ -28,7 +28,15 @@ class _TrainingRegistrationScreenState
   Widget build(BuildContext context) {
     final program = ref.watch(programProvider);
     final distanceGoal = ref.watch(onboardingProvider).data.distanceGoal;
-    final template = program.registrationTemplate;
+    Map<String, dynamic>? template;
+    for (final candidate in program.templates) {
+      if (candidate['level'] == program.selectedTemplateLevel) {
+        template = candidate;
+        break;
+      }
+    }
+    template ??= program.registrationTemplate;
+    final selectedLevel = template?['level']?.toString();
     final isLoading = program.isLoadingTemplates ||
         (program.isLoading && !program.isRegistered);
 
@@ -54,10 +62,14 @@ class _TrainingRegistrationScreenState
                 const SizedBox(height: 20),
                 Expanded(
                   child: _TemplateContent(
-                    template: template,
+                    templates: program.templates,
+                    recommendedTemplate: program.registrationTemplate,
                     distanceGoal: distanceGoal,
                     loading: program.isLoadingTemplates,
                     onRetry: () => ref.read(programProvider).loadTemplates(),
+                    onTemplateSelected: (selected) => ref
+                        .read(programProvider)
+                        .selectTemplate(selected['level']?.toString() ?? ''),
                   ),
                 ),
                 if (program.errorMessage != null) ...[
@@ -75,13 +87,13 @@ class _TrainingRegistrationScreenState
                       : 'บันทึกและลงทะเบียนตารางซ้อม',
                   gradient: AppColors.greenGradient,
                   loading: program.isRegistering || isLoading,
-                  onTap: program.isRegistering || isLoading || template == null
+                  onTap: program.isRegistering || isLoading || selectedLevel == null
                       ? null
                       : () async {
                           // API 5.1 creates and persists the user's program.
                           final ok = await ref
                               .read(programProvider)
-                              .registerPlan();
+                              .registerPlan(level: selectedLevel);
                           if (!context.mounted) return;
                           if (ok) {
                             Navigator.of(context).pop();
@@ -104,16 +116,20 @@ class _TrainingRegistrationScreenState
 
 class _TemplateContent extends StatefulWidget {
   const _TemplateContent({
-    required this.template,
+    required this.templates,
+    required this.recommendedTemplate,
     required this.distanceGoal,
     required this.loading,
     required this.onRetry,
+    required this.onTemplateSelected,
   });
 
-  final Map<String, dynamic>? template;
+  final List<Map<String, dynamic>> templates;
+  final Map<String, dynamic>? recommendedTemplate;
   final String? distanceGoal;
   final bool loading;
   final VoidCallback onRetry;
+  final ValueChanged<Map<String, dynamic>> onTemplateSelected;
 
   @override
   State<_TemplateContent> createState() => _TemplateContentState();
@@ -121,13 +137,22 @@ class _TemplateContent extends StatefulWidget {
 
 class _TemplateContentState extends State<_TemplateContent> {
   int? _selectedWeeks;
+  Map<String, dynamic>? _selectedTemplate;
 
   @override
   void didUpdateWidget(covariant _TemplateContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final minWeeks = _weekValue(widget.template?['duration_weeks_min']);
+    final availableLevels = widget.templates
+        .map((template) => template['level']?.toString())
+        .toSet();
+    if (_selectedTemplate == null ||
+        !availableLevels.contains(_selectedTemplate!['level']?.toString())) {
+      _selectedTemplate = widget.recommendedTemplate ??
+          (widget.templates.isEmpty ? null : widget.templates.first);
+    }
+    final minWeeks = _weekValue(_selectedTemplate?['duration_weeks_min']);
     final maxWeeks =
-        _weekValue(widget.template?['duration_weeks_max']) ?? minWeeks;
+        _weekValue(_selectedTemplate?['duration_weeks_max']) ?? minWeeks;
     if (minWeeks != null &&
         (_selectedWeeks == null ||
             _selectedWeeks! < minWeeks ||
@@ -138,8 +163,10 @@ class _TemplateContentState extends State<_TemplateContent> {
 
   @override
   Widget build(BuildContext context) {
-    final template = widget.template;
-    if (widget.loading && template == null) {
+    _selectedTemplate ??= widget.recommendedTemplate ??
+        (widget.templates.isEmpty ? null : widget.templates.first);
+    final template = _selectedTemplate;
+    if (widget.loading && widget.templates.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     if (template == null) {
@@ -170,6 +197,23 @@ class _TemplateContentState extends State<_TemplateContent> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          const SectionLabel(title: 'เลือกตารางซ้อม'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: widget.templates
+                .map((candidate) => SelectChip(
+                      label: _templateGoalLabel(candidate['goal_label']?.toString()),
+                      active: candidate['level'] == template['level'],
+                      onTap: () => setState(() {
+                        _selectedTemplate = candidate;
+                        _selectedWeeks = _weekValue(candidate['duration_weeks_min']);
+                        widget.onTemplateSelected(candidate);
+                      }),
+                    ))
+                .toList(),
+          ),
+          const SizedBox(height: 16),
           AppCard(
             borderColor: AppColors.purple2.withOpacity(.35),
             backgroundGradient: LinearGradient(
@@ -376,6 +420,13 @@ String _levelLabel(String? level) => switch (level) {
     };
 
 String _goalLabel(String? goal) => (goal ?? 'Training plan').replaceAll('_', ' ').toUpperCase();
+
+String _templateGoalLabel(String? goal) => switch (goal) {
+      'sub_50' => '5K',
+      '10k_sub_1.40' => '10K',
+      '21k_sub_3.30' => 'Half Marathon',
+      _ => _goalLabel(goal),
+    };
 
 String _phaseLabel(String? phase) => (phase ?? '').replaceAll('_', ' ').toUpperCase();
 

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../services/onboarding_api.dart';
 import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
@@ -39,6 +40,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
     final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
     final data = ob.data;
+    final user = ref.watch(authProvider).user;
     final hasAnsweredExperience = data.hasRunningExperience != null;
     final needsTrainingAnswer = data.hasRunningExperience == true;
     final hasAnsweredTraining = !needsTrainingAnswer || data.isCurrentlyTraining != null;
@@ -187,10 +189,25 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 Text('สรุปประวัติการวิ่ง', style: AppText.heading(size: 14)),
                                 const SizedBox(height: 12),
                                 _SummaryRow(
-                                  'ประสบการณ์',
+                                  'ประสบการณ์การวิ่ง',
                                   data.hasRunningExperience == true ? 'เคยซ้อม/แข่งวิ่ง' : 'ไม่เคย',
                                 ),
-                                _SummaryRow('เป้าหมาย', data.distanceGoal ?? data.healthGoal ?? '-'),
+                                _SummaryRow('ชื่อ', _displayName(user)),
+                                _SummaryRow('เพศ', data.gender),
+                                _SummaryRow('อายุ', _ageLabel(data)),
+                                _SummaryRow('น้ำหนัก', _withUnit(data.weightKg, 'กก.')),
+                                _SummaryRow('ส่วนสูง', _withUnit(data.heightCm, 'ซม.')),
+                                _SummaryRow('เป้าหมายสุขภาพ', data.healthGoal ?? 'ไม่ได้ตั้งเป้าหมาย'),
+                                _SummaryRow('เป้าหมายระยะทาง', data.distanceGoal ?? 'ไม่ได้ตั้งเป้าหมาย'),
+                                _SummaryRow(
+                                  'เป้าหมายเวลา',
+                                  data.distanceGoal == null
+                                      ? 'ไม่ได้เลือกเป้าหมายระยะทาง'
+                                      : _finishTimeLabel(data.targetFinishTime),
+                                ),
+                                _SummaryRow('โรคประจำตัว', _selectedItems(data.conditions)),
+                                _SummaryRow('อาการบาดเจ็บที่เคยเป็น', _selectedItems(data.pastInjuries)),
+                                _SummaryRow('อาการบาดเจ็บปัจจุบัน', _selectedItems(data.currentInjuries)),
                                 _SummaryRow('ระยะวิ่งไกลสุด', data.longestDistance),
                               ],
                             ),
@@ -248,6 +265,41 @@ class OnboardingHistoryScreen extends ConsumerWidget {
   }
 }
 
+String _displayName(Map<String, dynamic>? user) {
+  final name = user?['displayName']?.toString().trim();
+  if (name != null && name.isNotEmpty) return name;
+  final email = user?['email']?.toString().trim();
+  return email == null || email.isEmpty ? 'ไม่ระบุ' : email;
+}
+
+String _ageLabel(OnboardingData data) {
+  final day = int.tryParse(data.day);
+  final month = int.tryParse(data.month);
+  final year = int.tryParse(data.year);
+  if (day == null || month == null || year == null) return 'ไม่ระบุ';
+
+  final today = DateTime.now();
+  var age = today.year - year;
+  if (month > today.month || (month == today.month && day > today.day)) age--;
+  return age < 0 ? 'ไม่ระบุ' : '$age ปี';
+}
+
+String _withUnit(String value, String unit) =>
+    value.trim().isEmpty ? 'ไม่ระบุ' : '${value.trim()} $unit';
+
+String _selectedItems(Set<String> values) =>
+    values.isEmpty ? 'ไม่มี' : values.join(', ');
+
+String _finishTimeLabel(String value) {
+  if (value.trim().isEmpty) return 'ไม่ได้ตั้งเป้าเวลา';
+  final parts = value.split(':');
+  if (parts.length != 2) return value;
+  final hours = int.tryParse(parts[0]);
+  final minutes = int.tryParse(parts[1]);
+  if (hours == null || minutes == null) return value;
+  return '${hours.toString().padLeft(2, '0')}:${minutes.toString().padLeft(2, '0')} ชม.';
+}
+
 class _SummaryRow extends StatelessWidget {
   final String label;
   final String value;
@@ -258,10 +310,22 @@ class _SummaryRow extends StatelessWidget {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 6),
       child: Row(
-        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: AppText.body(size: 13, color: AppColors.textSecondary)),
-          Text(value, style: AppText.body(size: 13, weight: FontWeight.w600)),
+          Expanded(
+            flex: 4,
+            child: Text(label,
+                style: AppText.body(size: 13, color: AppColors.textSecondary)),
+          ),
+          const SizedBox(width: 12),
+          Expanded(
+            flex: 6,
+            child: Text(
+              value,
+              textAlign: TextAlign.end,
+              style: AppText.body(size: 13, weight: FontWeight.w600),
+            ),
+          ),
         ],
       ),
     );

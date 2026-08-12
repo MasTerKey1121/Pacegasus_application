@@ -22,6 +22,7 @@ class ProgramNotifier extends ChangeNotifier {
   bool isRegistering = false;
   String? errorMessage;
   String? _onboardingLevel;
+  String? selectedTemplateLevel;
   bool _isRegistered = false;
   bool _hasRestored = false;
 
@@ -40,6 +41,11 @@ class ProgramNotifier extends ChangeNotifier {
     _onboardingLevel = level;
   }
 
+  void selectTemplate(String level) {
+    selectedTemplateLevel = level;
+    notifyListeners();
+  }
+
   /// Clears all account-specific state before a different user signs in.
   void reset() {
     quests = const [];
@@ -49,6 +55,7 @@ class ProgramNotifier extends ChangeNotifier {
     isRegistering = false;
     errorMessage = null;
     _onboardingLevel = null;
+    selectedTemplateLevel = null;
     _isRegistered = false;
     _hasRestored = false;
     notifyListeners();
@@ -117,12 +124,12 @@ class ProgramNotifier extends ChangeNotifier {
     }
   }
 
-  Future<bool> registerPlan() async {
-    if (_onboardingLevel == null || _onboardingLevel!.isEmpty) {
+  Future<bool> registerPlan({String? level}) async {
+    if (level == null && (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
       await _restoreOnboardingLevel();
     }
-    final level = _onboardingLevel;
-    if (level == null || level.isEmpty) {
+    final selectedLevel = level ?? _onboardingLevel;
+    if (selectedLevel == null || selectedLevel.isEmpty) {
       errorMessage = 'ไม่พบระดับการวิ่งจาก Onboarding';
       notifyListeners();
       return false;
@@ -132,7 +139,7 @@ class ProgramNotifier extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      await _api.start(level: level);
+      await _api.start(level: selectedLevel);
       // A training program is available to the UI only after its schedule
       // (API 5.2) has been retrieved successfully.
       final loaded = await loadCurrentWeek();
