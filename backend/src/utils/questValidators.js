@@ -77,7 +77,7 @@ const addManualQuestsBatchSchema = Joi.object({
   quests: Joi.array()
     .items(addManualQuestSchema)
     .min(1)
-    .max(7)
+    .max(70)
     .unique('scheduledDate')
     .required()
     .messages({

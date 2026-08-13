@@ -128,7 +128,6 @@ class HomeScreen extends ConsumerWidget {
 
           GestureDetector(
             onTap: program.isLoading ||
-                    program.isScheduleSaved ||
                     (!program.isRegistered && !wellness.completedToday)
                 ? null
                 : () => Navigator.of(context).push(
@@ -164,12 +163,8 @@ class HomeScreen extends ConsumerWidget {
                     ),
                   ),
                   Icon(
-                    program.isScheduleSaved
-                        ? Icons.check_circle_outline_rounded
-                        : Icons.chevron_right_rounded,
-                    color: program.isScheduleSaved
-                        ? AppColors.green2
-                        : AppColors.textSecondary,
+                    Icons.chevron_right_rounded,
+                    color: AppColors.textSecondary,
                   ),
                 ],
               ),

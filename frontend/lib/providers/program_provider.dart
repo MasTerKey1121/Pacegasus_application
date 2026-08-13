@@ -200,8 +200,11 @@ class ProgramNotifier extends ChangeNotifier {
     }
   }
 
-  /// Persists the schedule the user arranged, one week per API request.
-  Future<bool> saveManualSchedule(List<List<SessionType?>> weeks) async {
+  /// Persists one completed week so the user may continue planning later.
+  Future<bool> saveManualScheduleWeek({
+    required int weekIndex,
+    required List<SessionType?> week,
+  }) async {
     if (isSavingSchedule) return false;
     if (_programStartDate == null) {
       errorMessage = 'ไม่พบวันเริ่มต้นของแผน กรุณาลองเปิดหน้าตารางใหม่';
@@ -213,18 +216,16 @@ class ProgramNotifier extends ChangeNotifier {
     notifyListeners();
     try {
       final quests = <Map<String, String>>[];
-      for (var weekIndex = 0; weekIndex < weeks.length; weekIndex++) {
-        for (var dayIndex = 0; dayIndex < weeks[weekIndex].length; dayIndex++) {
-          final type = weeks[weekIndex][dayIndex];
-          if (type == null || type == SessionType.race || type == SessionType.restForced) {
-            continue;
-          }
-          final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
-          quests.add({
-            'scheduledDate': _dateOnly(date),
-            'sessionType': _sessionTypeValue(type),
-          });
+      for (var dayIndex = 0; dayIndex < week.length; dayIndex++) {
+        final type = week[dayIndex];
+        if (type == null || type == SessionType.race || type == SessionType.restForced) {
+          continue;
         }
+        final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
+        quests.add({
+          'scheduledDate': _dateOnly(date),
+          'sessionType': _sessionTypeValue(type),
+        });
       }
       if (quests.isEmpty) throw StateError('ไม่พบรายการซ้อมสำหรับบันทึก');
       // The backend inserts this single batch in one transaction. A failed

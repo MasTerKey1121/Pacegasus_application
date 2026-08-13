@@ -127,6 +127,8 @@ class _ScheduleBuilder extends ConsumerWidget {
         .map((entry) => entry.key)
         .toList();
     final isCurrentWeekComplete = plan.isWeekComplete(plan.currentWeek);
+    final isCurrentWeekSaved = plan.isWeekSaved(plan.currentWeek);
+    final hasPhases = _mapList(template?['programPhases']).isNotEmpty;
     final progress = plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
     final duration = _durationLabel(
       _weekValue(template?['duration_weeks_min']),
@@ -150,28 +152,22 @@ class _ScheduleBuilder extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(
-                  'ระยะที่ลงทะเบียน  ${_planName(template?['goal_label']?.toString())}',
-                  style: AppText.heading(size: 13),
+                Row(
+                  children: [
+                    _ExperienceBadge(level: template?['level']?.toString()),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: Text(
+                        '${_experienceLabel(template?['level']?.toString())} $duration',
+                        style: AppText.heading(size: 16),
+                      ),
+                    ),
+                  ],
                 ),
-                const SizedBox(height: 3),
+                const SizedBox(height: 8),
                 Text(
-                  'ระยะเวลาฝึก $duration',
-                  style: AppText.body(size: 11.5, color: AppColors.textSecondary),
-                ),
-                const SizedBox(height: 10),
-                Wrap(
-                  spacing: 6,
-                  runSpacing: 6,
-                  children: PlanPhase.values
-                      .map((item) => _PhaseChip(
-                            phase: item,
-                            active: item == phase,
-                            onTap: () => ref
-                                .read(trainingPlanProvider)
-                                .goToWeek(plan.phaseStartWeeks[item]!),
-                          ))
-                      .toList(),
+                  _planName(template?['goal_label']?.toString()),
+                  style: AppText.body(size: 12, color: AppColors.textSecondary),
                 ),
               ],
             ),
@@ -188,25 +184,27 @@ class _ScheduleBuilder extends ConsumerWidget {
                     ))
                 .toList(),
           ),
-          const SectionLabel(title: 'แผนการฝึกของคุณ'),
-          Text(
-            'เลือก Phase เพื่อข้ามไปดูและจัดตารางสัปดาห์ของ Phase นั้น',
-            style: AppText.body(size: 12, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 10),
-          Wrap(
-            spacing: 6,
-            runSpacing: 6,
-            children: PlanPhase.values
-                .map((item) => _PhaseChip(
-                      phase: item,
-                      active: item == phase,
-                      onTap: () => ref
-                          .read(trainingPlanProvider)
-                          .goToWeek(plan.phaseStartWeeks[item]!),
-                    ))
-                .toList(),
-          ),
+          if (hasPhases) ...[
+            const SectionLabel(title: 'แผนการฝึกของคุณ'),
+            Text(
+              'เลือก Phase เพื่อข้ามไปดูและจัดตารางสัปดาห์ของ Phase นั้น',
+              style: AppText.body(size: 12, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 10),
+            Wrap(
+              spacing: 6,
+              runSpacing: 6,
+              children: PlanPhase.values
+                  .map((item) => _PhaseChip(
+                        phase: item,
+                        active: item == phase,
+                        onTap: () => ref
+                            .read(trainingPlanProvider)
+                            .goToWeek(plan.phaseStartWeeks[item]!),
+                      ))
+                  .toList(),
+            ),
+          ],
           Padding(
             padding: const EdgeInsets.only(top: 26, bottom: 10),
             child: Row(
@@ -224,7 +222,9 @@ class _ScheduleBuilder extends ConsumerWidget {
             ),
           ),
           Text(
-            'สัปดาห์ที่ ${plan.currentWeek + 1} · ${phase.label}',
+            hasPhases
+                ? 'สัปดาห์ที่ ${plan.currentWeek + 1} · ${phase.label}'
+                : 'สัปดาห์ที่ ${plan.currentWeek + 1}',
             style: AppText.heading(size: 14),
           ),
           const SizedBox(height: 12),
@@ -309,17 +309,23 @@ class _ScheduleBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           GradientButton(
-            label: plan.allWeeksComplete
-                ? 'บันทึกแผนฝึกทั้งหมด'
-                : 'จัดตารางให้ครบทุกสัปดาห์ก่อน',
+            label: isCurrentWeekSaved
+                ? 'บันทึกสัปดาห์นี้แล้ว'
+                : 'บันทึกตารางสัปดาห์นี้',
             loading: ref.watch(programProvider).isSavingSchedule,
-            onTap: plan.allWeeksComplete
+            onTap: isCurrentWeekComplete && !isCurrentWeekSaved
                 ? () async {
                     final ok = await ref
                         .read(programProvider)
-                        .saveManualSchedule(plan.weekSchedules);
+                        .saveManualScheduleWeek(
+                          weekIndex: plan.currentWeek,
+                          week: plan.currentWeekData,
+                        );
                     if (!context.mounted) return;
                     if (ok) {
+                      ref
+                          .read(trainingPlanProvider)
+                          .markWeekSaved(plan.currentWeek);
                       showAppToast(
                         context,
                         'บันทึกตารางฝึกเสร็จสิ้นแล้ว',
@@ -406,6 +412,25 @@ class _PhaseChip extends StatelessWidget {
         label: '${phase.shortNumber} ${phase.label}',
         active: active,
         onTap: onTap,
+      );
+}
+
+class _ExperienceBadge extends StatelessWidget {
+  const _ExperienceBadge({required this.level});
+
+  final String? level;
+
+  @override
+  Widget build(BuildContext context) => Container(
+        padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 11),
+        decoration: BoxDecoration(
+          gradient: AppColors.purpleGradient,
+          borderRadius: BorderRadius.circular(999),
+        ),
+        child: Text(
+          _experienceBadgeLabel(level),
+          style: AppText.heading(size: 13, color: Colors.white),
+        ),
       );
 }
 
@@ -553,6 +578,26 @@ int? _weekValue(dynamic value) => switch (value) {
       int weeks when weeks > 0 => weeks,
       num weeks when weeks > 0 => weeks.toInt(),
       _ => int.tryParse(value?.toString() ?? ''),
+    };
+
+List<Map<String, dynamic>> _mapList(dynamic value) =>
+    (value as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
+
+String _experienceBadgeLabel(String? level) => switch (level) {
+      'beginner' => 'Beginner',
+      'lower_intermediate' => 'Intermediate',
+      'upper_intermediate' => 'Advanced',
+      _ => 'Training',
+    };
+
+String _experienceLabel(String? level) => switch (level) {
+      'beginner' => 'ระดับเริ่มต้น',
+      'lower_intermediate' => 'ระดับกลาง',
+      'upper_intermediate' => 'ระดับสูง',
+      _ => 'แผนการฝึก',
     };
 
 String _durationLabel(int? minWeeks, int? maxWeeks) {

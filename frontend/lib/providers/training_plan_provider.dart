@@ -16,6 +16,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
   SessionType? selectedType;
   late List<List<SessionType?>> weekSchedules;
   List<int> availablePlanLengths = const [8, 9, 10];
+  final Set<int> _savedWeekIndexes = <int>{};
 
   TrainingPlanNotifier() {
     rebuildWeeks();
@@ -87,6 +88,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
   void rebuildWeeks() {
     weekSchedules = List.generate(planWeeks, (i) => _initWeek(i));
+    _savedWeekIndexes.clear();
     currentWeek = 0;
     selectedType = null;
     notifyListeners();
@@ -202,6 +204,13 @@ class TrainingPlanNotifier extends ChangeNotifier {
       if (count != entry.value) return false;
     }
     return true;
+  }
+
+  bool isWeekSaved(int weekIndex) => _savedWeekIndexes.contains(weekIndex);
+
+  void markWeekSaved(int weekIndex) {
+    _savedWeekIndexes.add(weekIndex);
+    notifyListeners();
   }
 
   int get overallDoneCount =>
