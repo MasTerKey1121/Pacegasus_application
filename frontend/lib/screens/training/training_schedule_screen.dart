@@ -21,6 +21,12 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
   String? _configuredTemplateLevel;
 
   @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(programProvider).loadTemplates());
+  }
+
+  @override
   Widget build(BuildContext context) {
     final program = ref.watch(programProvider);
     final template = _selectedTemplate(program);
@@ -45,7 +51,7 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('ตารางซ้อม', style: AppText.heading(size: 19)),
+                        Text('ลงตารางซ้อม', style: AppText.heading(size: 19)),
                         Text(
                           _planName(template?['goal_label']?.toString()),
                           style: AppText.body(
@@ -117,7 +123,7 @@ class _ScheduleBuilder extends ConsumerWidget {
     final phase = plan.getPhase(plan.currentWeek);
     final caps = plan.getCaps(plan.currentWeek);
     final workouts = caps.asMap.entries
-        .where((entry) => entry.value > 0)
+        .where((entry) => plan.remainingFor(entry.key) > 0)
         .map((entry) => entry.key)
         .toList();
     final isCurrentWeekComplete = plan.isWeekComplete(plan.currentWeek);
@@ -144,7 +150,15 @@ class _ScheduleBuilder extends ConsumerWidget {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('ระยะที่คุณเลือก  $duration', style: AppText.heading(size: 13)),
+                Text(
+                  'ระยะที่ลงทะเบียน  ${_planName(template?['goal_label']?.toString())}',
+                  style: AppText.heading(size: 13),
+                ),
+                const SizedBox(height: 3),
+                Text(
+                  'ระยะเวลาฝึก $duration',
+                  style: AppText.body(size: 11.5, color: AppColors.textSecondary),
+                ),
                 const SizedBox(height: 10),
                 Wrap(
                   spacing: 6,
@@ -193,7 +207,22 @@ class _ScheduleBuilder extends ConsumerWidget {
                     ))
                 .toList(),
           ),
-          const SectionLabel(title: 'จัดตารางรายสัปดาห์'),
+          Padding(
+            padding: const EdgeInsets.only(top: 26, bottom: 10),
+            child: Row(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Text('จัดตารางรายสัปดาห์', style: AppText.heading(size: 15)),
+                const SizedBox(width: 2),
+              IconButton(
+                tooltip: 'เพิ่มเติม',
+                onPressed: () => _showSchedulingRules(context),
+                icon: const Icon(Icons.info_outline_rounded, size: 20),
+                color: AppColors.purple2,
+              ),
+              ],
+            ),
+          ),
           Text(
             'สัปดาห์ที่ ${plan.currentWeek + 1} · ${phase.label}',
             style: AppText.heading(size: 14),
@@ -206,7 +235,7 @@ class _ScheduleBuilder extends ConsumerWidget {
               children: workouts
                   .map((type) => _WorkoutChoice(
                         type: type,
-                        count: caps.capFor(type),
+                        count: plan.remainingFor(type),
                         selected: plan.selectedType == type,
                         onTap: () => ref.read(trainingPlanProvider).selectType(type),
                       ))
@@ -222,6 +251,10 @@ class _ScheduleBuilder extends ConsumerWidget {
           const SizedBox(height: 10),
           _WeekGrid(
             schedule: plan.currentWeekData,
+            blockedDays: List<bool>.generate(
+              7,
+              plan.isBlockedForSelectedType,
+            ),
             onTap: (day) {
               final error = ref.read(trainingPlanProvider).handleDayTap(day);
               if (error != null) showAppToast(context, error);
@@ -279,18 +312,86 @@ class _ScheduleBuilder extends ConsumerWidget {
             label: plan.allWeeksComplete
                 ? 'บันทึกแผนฝึกทั้งหมด'
                 : 'จัดตารางให้ครบทุกสัปดาห์ก่อน',
+            loading: ref.watch(programProvider).isSavingSchedule,
             onTap: plan.allWeeksComplete
-                ? () => showAppToast(
-                      context,
-                      'บันทึกตารางฝึกเรียบร้อย',
-                      isError: false,
-                    )
+                ? () async {
+                    final ok = await ref
+                        .read(programProvider)
+                        .saveManualSchedule(plan.weekSchedules);
+                    if (!context.mounted) return;
+                    if (ok) {
+                      showAppToast(
+                        context,
+                        'บันทึกตารางฝึกเสร็จสิ้นแล้ว',
+                        isError: false,
+                      );
+                      await Future<void>.delayed(
+                        const Duration(milliseconds: 800),
+                      );
+                      if (!context.mounted) return;
+                      Navigator.of(context, rootNavigator: true)
+                          .popUntil((route) => route.isFirst);
+                    } else {
+                      showAppToast(
+                        context,
+                        ref.read(programProvider).errorMessage ??
+                            'บันทึกตารางฝึกไม่สำเร็จ',
+                      );
+                    }
+                  }
                 : null,
           ),
         ],
       ),
     );
   }
+}
+
+void _showSchedulingRules(BuildContext context) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      backgroundColor: AppColors.bg2,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 24),
+      child: AppCard(
+        padding: const EdgeInsets.all(20),
+        borderColor: AppColors.purple2.withOpacity(.4),
+        backgroundGradient: const LinearGradient(
+          colors: [AppColors.bg2, Color(0xFF211941)],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Row(
+              children: [
+                const Icon(Icons.info_outline_rounded, color: AppColors.purple2),
+                const SizedBox(width: 8),
+                Text('เพิ่มเติม', style: AppText.heading(size: 17)),
+                const Spacer(),
+                IconButton(
+                  onPressed: () => Navigator.of(dialogContext).pop(),
+                  icon: const Icon(Icons.close_rounded),
+                  color: AppColors.textSecondary,
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Text(
+              'วิธีจัดตาราง\n'
+              '1. เลือกรายการซ้อม แล้วแตะวันที่ว่างเพื่อวางรายการนั้น\n'
+              '2. Interval, Tempo และ Long Run เป็นการซ้อมหนัก จึงห้ามวางติดกัน วันที่ที่ใช้ไม่ได้จะแสดงสีเทาเมื่อเลือกรายการซ้อมหนัก\n'
+              '3. แตะรายการที่วางแล้วอีกครั้งเพื่อลบและจัดใหม่\n'
+              '4. จัดให้ครบทุกประเภทก่อนกดไปสัปดาห์ถัดไป หรือบันทึกแผนทั้งหมด',
+              style: AppText.body(size: 13, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
 }
 
 class _PhaseChip extends StatelessWidget {
@@ -326,6 +427,7 @@ class _WorkoutChoice extends StatelessWidget {
     final meta = sessionMeta[type]!;
     return GestureDetector(
       onTap: onTap,
+      onLongPress: () => _showWorkoutInfo(context, meta.label),
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 150),
         width: 96,
@@ -350,10 +452,43 @@ class _WorkoutChoice extends StatelessWidget {
   }
 }
 
+void _showWorkoutInfo(BuildContext context, String title) {
+  showDialog<void>(
+    context: context,
+    builder: (dialogContext) => Dialog(
+      backgroundColor: AppColors.bg2,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 46),
+      child: AppCard(
+        padding: const EdgeInsets.all(20),
+        backgroundGradient: const LinearGradient(
+          colors: [AppColors.bg2, Color(0xFF211941)],
+        ),
+        child: Row(
+          children: [
+            const Icon(Icons.fitness_center_rounded, color: AppColors.purple2),
+            const SizedBox(width: 10),
+            Expanded(child: Text(title, style: AppText.heading(size: 16))),
+            IconButton(
+              onPressed: () => Navigator.of(dialogContext).pop(),
+              icon: const Icon(Icons.close_rounded),
+              color: AppColors.textSecondary,
+            ),
+          ],
+        ),
+      ),
+    ),
+  );
+}
+
 class _WeekGrid extends StatelessWidget {
-  const _WeekGrid({required this.schedule, required this.onTap});
+  const _WeekGrid({
+    required this.schedule,
+    required this.blockedDays,
+    required this.onTap,
+  });
 
   final List<SessionType?> schedule;
+  final List<bool> blockedDays;
   final ValueChanged<int> onTap;
   static const _days = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 
@@ -362,6 +497,7 @@ class _WeekGrid extends StatelessWidget {
         children: List.generate(7, (index) {
           final type = schedule[index];
           final meta = type == null ? null : sessionMeta[type];
+          final blocked = type == null && blockedDays[index];
           return Expanded(
             child: Padding(
               padding: EdgeInsets.only(right: index == 6 ? 0 : 5),
@@ -370,18 +506,31 @@ class _WeekGrid extends StatelessWidget {
                   Text(_days[index], style: AppText.body(size: 10, color: AppColors.textTertiary)),
                   const SizedBox(height: 5),
                   GestureDetector(
-                    onTap: () => onTap(index),
+                    onTap: blocked ? null : () => onTap(index),
                     child: Container(
                       height: 54,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: type == null ? Colors.white.withOpacity(.025) : AppColors.purple1.withOpacity(.18),
+                        color: blocked
+                            ? Colors.white.withOpacity(.08)
+                            : type == null
+                                ? Colors.white.withOpacity(.025)
+                                : AppColors.purple1.withOpacity(.18),
                         borderRadius: BorderRadius.circular(10),
-                        border: Border.all(color: type == null ? AppColors.border : AppColors.purple2.withOpacity(.55)),
+                        border: Border.all(
+                          color: blocked
+                              ? Colors.white.withOpacity(.05)
+                              : type == null
+                                  ? AppColors.border
+                                  : AppColors.purple2.withOpacity(.55),
+                        ),
                       ),
                       child: type == SessionType.restForced
                           ? const Icon(Icons.lock_outline, size: 14, color: AppColors.textTertiary)
-                          : type == null
+                          : blocked
+                              ? const Icon(Icons.block_rounded,
+                                  size: 14, color: AppColors.textTertiary)
+                              : type == null
                               ? const Icon(Icons.add, size: 14, color: AppColors.textTertiary)
                               : Column(
                                   mainAxisAlignment: MainAxisAlignment.center,

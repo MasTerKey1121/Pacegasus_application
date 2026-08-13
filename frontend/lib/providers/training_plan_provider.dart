@@ -126,6 +126,26 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
   List<SessionType?> get currentWeekData => weekSchedules[currentWeek];
 
+  int remainingFor(SessionType type, {int? weekIndex}) {
+    final index = weekIndex ?? currentWeek;
+    final placed = weekSchedules[index].where((item) => item == type).length;
+    return (getCaps(index).capFor(type) - placed).clamp(0, 99);
+  }
+
+  /// A hard workout cannot be placed immediately before or after another.
+  /// Used by the UI to show unavailable days before the user taps them.
+  bool isBlockedForSelectedType(int dayIndex) {
+    if (selectedType == null || !hardSessionTypes.contains(selectedType)) {
+      return false;
+    }
+    final week = currentWeekData;
+    if (week[dayIndex] != null) return false;
+    final previous = dayIndex > 0 ? week[dayIndex - 1] : null;
+    final next = dayIndex < week.length - 1 ? week[dayIndex + 1] : null;
+    return (previous != null && hardSessionTypes.contains(previous)) ||
+        (next != null && hardSessionTypes.contains(next));
+  }
+
   /// Attempts to place the currently-selected chip on [dayIndex], or clears
   /// that day if it's already filled. Returns a human-readable error
   /// message on failure, or null on success (including no-op taps).
@@ -143,6 +163,10 @@ class TrainingPlanNotifier extends ChangeNotifier {
     }
     if (selectedType == null) return null;
 
+    if (isBlockedForSelectedType(dayIndex)) {
+      return 'วันติดกับการซ้อมหนัก ใช้ลง Interval, Tempo หรือ Long Run ไม่ได้';
+    }
+
     final caps = getCaps(currentWeek);
     final cap = caps.capFor(selectedType!);
     final placedCount = w.where((d) => d == selectedType).length;
@@ -159,7 +183,12 @@ class TrainingPlanNotifier extends ChangeNotifier {
       }
     }
     w[dayIndex] = selectedType;
-    if (placedCount + 1 >= cap) selectedType = null;
+    // Keep a completed hard-session selection briefly so adjacent days remain
+    // visibly locked. It resets when the user selects another workout or
+    // changes week.
+    if (placedCount + 1 >= cap && !hardSessionTypes.contains(selectedType)) {
+      selectedType = null;
+    }
     notifyListeners();
     return null;
   }

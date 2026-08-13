@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../services/program_api.dart';
 import '../services/onboarding_api.dart';
 import '../services/api_client.dart';
+import '../models/training_models.dart';
 import 'auth_provider.dart';
 
 final programApiProvider = Provider<ProgramApi>(
@@ -20,14 +21,18 @@ class ProgramNotifier extends ChangeNotifier {
   bool isLoading = false;
   bool isLoadingTemplates = false;
   bool isRegistering = false;
+  bool isSavingSchedule = false;
   String? errorMessage;
   String? _onboardingLevel;
   String? selectedTemplateLevel;
   bool _isRegistered = false;
+  bool _isScheduleSaved = false;
+  DateTime? _programStartDate;
   bool _hasRestored = false;
 
   /// API 5.1 must only be called after the user explicitly registers a plan.
   bool get isRegistered => _isRegistered;
+  bool get isScheduleSaved => _isScheduleSaved;
 
   /// Running experience calculated during onboarding.
   String? get onboardingLevel => _onboardingLevel;
@@ -56,10 +61,13 @@ class ProgramNotifier extends ChangeNotifier {
     isLoading = false;
     isLoadingTemplates = false;
     isRegistering = false;
+    isSavingSchedule = false;
     errorMessage = null;
     _onboardingLevel = null;
     selectedTemplateLevel = null;
     _isRegistered = false;
+    _isScheduleSaved = false;
+    _programStartDate = null;
     _hasRestored = false;
     notifyListeners();
   }
@@ -139,6 +147,9 @@ class ProgramNotifier extends ChangeNotifier {
     }
 
     isRegistering = true;
+    // Keep the registered plan available to the schedule builder immediately
+    // after API 5.1 succeeds (and while the app remains open).
+    selectedTemplateLevel = selectedLevel;
     errorMessage = null;
     notifyListeners();
     try {
@@ -189,14 +200,75 @@ class ProgramNotifier extends ChangeNotifier {
     }
   }
 
+  /// Persists the schedule the user arranged, one week per API request.
+  Future<bool> saveManualSchedule(List<List<SessionType?>> weeks) async {
+    if (isSavingSchedule) return false;
+    if (_programStartDate == null) {
+      errorMessage = 'ไม่พบวันเริ่มต้นของแผน กรุณาลองเปิดหน้าตารางใหม่';
+      notifyListeners();
+      return false;
+    }
+    isSavingSchedule = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final quests = <Map<String, String>>[];
+      for (var weekIndex = 0; weekIndex < weeks.length; weekIndex++) {
+        for (var dayIndex = 0; dayIndex < weeks[weekIndex].length; dayIndex++) {
+          final type = weeks[weekIndex][dayIndex];
+          if (type == null || type == SessionType.race || type == SessionType.restForced) {
+            continue;
+          }
+          final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
+          quests.add({
+            'scheduledDate': _dateOnly(date),
+            'sessionType': _sessionTypeValue(type),
+          });
+        }
+      }
+      if (quests.isEmpty) throw StateError('ไม่พบรายการซ้อมสำหรับบันทึก');
+      // The backend inserts this single batch in one transaction. A failed
+      // rule check therefore cannot leave a partially saved plan behind.
+      await _api.addQuestsBatch(quests);
+      _isScheduleSaved = true;
+      isSavingSchedule = false;
+      await loadCurrentWeek();
+      notifyListeners();
+      return true;
+    } catch (error) {
+      errorMessage = error.toString();
+      isSavingSchedule = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   void _setQuests(Map<String, dynamic> response) {
     final data = response['data'] as Map<String, dynamic>? ?? const {};
+    _isScheduleSaved = data['scheduleSaved'] == true;
+    final templateLevel = data['templateLevel']?.toString();
+    if (templateLevel != null && templateLevel.isNotEmpty) {
+      selectedTemplateLevel = templateLevel;
+    }
+    final startDate = DateTime.tryParse(data['startDate']?.toString() ?? '');
+    if (startDate != null) _programStartDate = startDate;
     final rawQuests = data['quests'] as List<dynamic>? ?? const [];
     quests = rawQuests
         .whereType<Map>()
         .map((quest) => Map<String, dynamic>.from(quest))
         .toList(growable: false);
   }
+
+  String _sessionTypeValue(SessionType type) => switch (type) {
+        SessionType.easy => 'easy',
+        SessionType.long => 'long_run',
+        SessionType.tempo => 'tempo',
+        SessionType.vo2max => 'vo2max',
+        _ => throw ArgumentError('Unsupported scheduled session: $type'),
+      };
+
+  String _dateOnly(DateTime value) =>
+      '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';
 }
 
 final programProvider = ChangeNotifierProvider<ProgramNotifier>((ref) {

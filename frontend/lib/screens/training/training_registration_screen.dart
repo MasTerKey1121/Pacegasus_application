@@ -232,7 +232,7 @@ class _TemplateContentState extends State<_TemplateContent> {
                 ),
                 if (phases.isNotEmpty) ...[
                   const SizedBox(height: 14),
-                  Text('เลือก Phase', style: AppText.heading(size: 12.5)),
+                  Text('แบ่งออกเป็น Phase', style: AppText.heading(size: 12.5)),
                   const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
@@ -254,7 +254,7 @@ class _TemplateContentState extends State<_TemplateContent> {
           const SectionLabel(title: 'องค์ประกอบการซ้อม'),
           if (selectedPhase != null) ...[
             Text(
-              'รายละเอียดการซ้อมใน Phase ${_phaseLabel(selectedPhase['phase_code']?.toString())}',
+              'รายละเอียดการซ้อมในแต่ละ Phase "${_phaseLabel(selectedPhase['phase_code']?.toString())}"',
               style: AppText.body(size: 12.5, color: AppColors.textSecondary),
             ),
             const SizedBox(height: 8),

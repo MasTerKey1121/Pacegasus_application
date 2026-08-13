@@ -306,8 +306,11 @@ async function startProgram(userId, level, scheduleMode) {
  */
 async function getCurrentWeek(userId) {
   const { rows: programRows } = await db.query(
-    `SELECT id, start_date, schedule_mode, program_template_id
-     FROM user_programs WHERE user_id = $1 AND status = 'active'`,
+    `SELECT up.id, up.start_date, up.schedule_mode, up.program_template_id,
+            pt.level AS template_level
+     FROM user_programs up
+     JOIN program_templates pt ON pt.id = up.program_template_id
+     WHERE up.user_id = $1 AND up.status = 'active'`,
     [userId]
   );
   if (programRows.length === 0) {
@@ -336,9 +339,20 @@ async function getCurrentWeek(userId) {
     [program.id, week_start, week_end]
   );
 
+  const { rows: scheduleRows } = await db.query(
+    `SELECT EXISTS(
+       SELECT 1 FROM main_quest_instances WHERE user_program_id = $1
+     ) AS schedule_saved`,
+    [program.id]
+  );
+
   return {
     userProgramId: program.id,
+    programTemplateId: program.program_template_id,
+    templateLevel: program.template_level,
+    startDate: program.start_date,
     scheduleMode: program.schedule_mode,
+    scheduleSaved: scheduleRows[0].schedule_saved,
     weekNumber: Number(week_number) + 1, // แสดงเป็น 1-indexed ให้ user
     weekStart: week_start,
     weekEnd: week_end,

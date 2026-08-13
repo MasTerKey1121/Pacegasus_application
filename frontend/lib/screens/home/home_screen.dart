@@ -23,6 +23,11 @@ class HomeScreen extends ConsumerWidget {
     final missions = ref.watch(missionProvider);
     final program = ref.watch(programProvider);
     final todayQuest = program.todayQuest;
+    final scheduleActionLabel = !program.isRegistered
+        ? 'ลงทะเบียนตารางซ้อม'
+        : !program.isScheduleSaved
+            ? 'จัดตารางซ้อมของฉัน'
+            : 'แผนการซ้อมของฉัน';
 
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
@@ -123,6 +128,7 @@ class HomeScreen extends ConsumerWidget {
 
           GestureDetector(
             onTap: program.isLoading ||
+                    program.isScheduleSaved ||
                     (!program.isRegistered && !wellness.completedToday)
                 ? null
                 : () => Navigator.of(context).push(
@@ -151,13 +157,20 @@ class HomeScreen extends ConsumerWidget {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text('จัดตารางซ้อมของฉัน', style: AppText.heading(size: 14.5)),
+                        Text(scheduleActionLabel, style: AppText.heading(size: 14.5)),
                         const SizedBox(height: 2),
                         Text(user.goalLabel, style: AppText.body(size: 12, color: AppColors.textSecondary)),
                       ],
                     ),
                   ),
-                  Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                  Icon(
+                    program.isScheduleSaved
+                        ? Icons.check_circle_outline_rounded
+                        : Icons.chevron_right_rounded,
+                    color: program.isScheduleSaved
+                        ? AppColors.green2
+                        : AppColors.textSecondary,
+                  ),
                 ],
               ),
             ),
@@ -178,7 +191,7 @@ class HomeScreen extends ConsumerWidget {
                 Text(wellness.completedToday ? '🏃' : '🔒',
                     style: const TextStyle(fontSize: 30)),
                 const SizedBox(height: 10),
-                if (!wellness.completedToday) Text(
+                if (!wellness.completedToday && !program.isScheduleSaved) Text(
                   wellness.completedToday
                       ? 'Easy run 5 km · Zone 2 · ประมาณ 35 นาที'
                       : 'ทำ Daily Wellness Check-in เพื่อปลดล็อค',
@@ -206,7 +219,14 @@ class HomeScreen extends ConsumerWidget {
                     textAlign: TextAlign.center,
                     style: AppText.body(size: 12, color: AppColors.textSecondary),
                   ),
-                ] else if (wellness.completedToday && todayQuest != null) ...[
+                ] else if (!program.isScheduleSaved) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    'จัดตารางฝึกและบันทึกให้เรียบร้อยก่อน แผนวันนี้จึงจะแสดง',
+                    textAlign: TextAlign.center,
+                    style: AppText.body(size: 12, color: AppColors.textSecondary),
+                  ),
+                ] else if (todayQuest != null) ...[
                   const SizedBox(height: 6),
                   Text(
                     _todayQuestLabel(todayQuest),
@@ -217,13 +237,13 @@ class HomeScreen extends ConsumerWidget {
                       color: AppColors.green2,
                     ),
                   ),
-                ] else if (wellness.completedToday && program.isLoading) ...[
+                ] else if (program.isLoading) ...[
                   const SizedBox(height: 6),
                   Text(
                     'กำลังโหลดเควสของวันนี้...',
                     style: AppText.body(size: 12, color: AppColors.textSecondary),
                   ),
-                ] else if (wellness.completedToday) ...[
+                ] else ...[
                   const SizedBox(height: 6),
                   Text(
                     'วันนี้ไม่มีเควสในตารางฝึก',
@@ -236,7 +256,7 @@ class HomeScreen extends ConsumerWidget {
           ),
 
           const SectionLabel(title: 'แผนสัปดาห์นี้'),
-          if (wellness.completedToday && program.isRegistered && program.quests.isNotEmpty)
+          if (program.isScheduleSaved && program.quests.isNotEmpty)
             Wrap(
               spacing: 10,
               runSpacing: 10,
@@ -260,11 +280,13 @@ class HomeScreen extends ConsumerWidget {
             )
           else
             Text(
-              !wellness.completedToday
+              !wellness.completedToday && !program.isScheduleSaved
                   ? 'ทำ Daily Wellness Check-in เพื่อดูเควสสัปดาห์นี้'
                   : !program.isRegistered
                       ? 'ลงทะเบียนตารางซ้อมเพื่อเริ่มแผนสัปดาห์นี้'
-                  :
+                      : !program.isScheduleSaved
+                          ? 'จัดตารางฝึกและบันทึกให้เรียบร้อยก่อน'
+                      :
                     'ยังไม่มีเควสสำหรับสัปดาห์นี้',
               style: AppText.body(size: 12, color: AppColors.textSecondary),
             ),
