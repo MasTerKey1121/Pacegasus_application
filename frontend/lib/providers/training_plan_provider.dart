@@ -15,12 +15,24 @@ class TrainingPlanNotifier extends ChangeNotifier {
   int currentWeek = 0;
   SessionType? selectedType;
   late List<List<SessionType?>> weekSchedules;
+  List<int> availablePlanLengths = const [8, 9, 10];
 
   TrainingPlanNotifier() {
     rebuildWeeks();
   }
 
-  static const availablePlanLengths = [8, 9, 10];
+  /// Align the local schedule builder with the duration range of the plan
+  /// selected during registration.
+  void configurePlanDuration({required int minWeeks, required int maxWeeks}) {
+    final options = List<int>.generate(
+      maxWeeks - minWeeks + 1,
+      (index) => minWeeks + index,
+    );
+    if (_sameList(availablePlanLengths, options)) return;
+    availablePlanLengths = options;
+    planWeeks = options.last;
+    rebuildWeeks();
+  }
 
   _Boundaries _computeBoundaries() {
     final block = planWeeks - 2;
@@ -167,6 +179,14 @@ class TrainingPlanNotifier extends ChangeNotifier {
       List.generate(planWeeks, (i) => i).where((i) => isWeekComplete(i)).length;
 
   bool get allWeeksComplete => overallDoneCount == planWeeks;
+
+  bool _sameList(List<int> first, List<int> second) {
+    if (first.length != second.length) return false;
+    for (var index = 0; index < first.length; index++) {
+      if (first[index] != second[index]) return false;
+    }
+    return true;
+  }
 }
 
 final trainingPlanProvider = ChangeNotifierProvider<TrainingPlanNotifier>((ref) => TrainingPlanNotifier());

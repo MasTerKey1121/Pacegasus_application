@@ -29,6 +29,9 @@ class ProgramNotifier extends ChangeNotifier {
   /// API 5.1 must only be called after the user explicitly registers a plan.
   bool get isRegistered => _isRegistered;
 
+  /// Running experience calculated during onboarding.
+  String? get onboardingLevel => _onboardingLevel;
+
   /// The API 5.0 template that matches the level determined in onboarding.
   Map<String, dynamic>? get registrationTemplate {
     for (final template in templates) {

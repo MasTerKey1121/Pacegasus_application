@@ -2,16 +2,30 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_theme.dart';
+import '../../models/training_models.dart';
 import '../../providers/program_provider.dart';
+import '../../providers/training_plan_provider.dart';
 import '../../widgets/common.dart';
 
-/// Displays the schedule returned by API 5.2 for the active program.
-class TrainingScheduleScreen extends ConsumerWidget {
+/// A week-by-week builder where the user chooses the training day for each
+/// workout in the registered plan.
+class TrainingScheduleScreen extends ConsumerStatefulWidget {
   const TrainingScheduleScreen({super.key});
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<TrainingScheduleScreen> createState() =>
+      _TrainingScheduleScreenState();
+}
+
+class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen> {
+  String? _configuredTemplateLevel;
+
+  @override
+  Widget build(BuildContext context) {
     final program = ref.watch(programProvider);
+    final template = _selectedTemplate(program);
+    _configurePlan(template);
+    final plan = ref.watch(trainingPlanProvider);
 
     return Scaffold(
       body: AppBackground(
@@ -28,50 +42,36 @@ class TrainingScheduleScreen extends ConsumerWidget {
                       onTap: () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: 14),
-                    Text('Training schedule', style: AppText.heading(size: 19)),
+                    Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text('ตารางซ้อม', style: AppText.heading(size: 19)),
+                        Text(
+                          _planName(template?['goal_label']?.toString()),
+                          style: AppText.body(
+                            size: 11.5,
+                            color: AppColors.textSecondary,
+                          ),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
-                const SizedBox(height: 20),
+                const SizedBox(height: 18),
                 if (program.isLoading)
-                  const Expanded(
-                    child: Center(child: CircularProgressIndicator()),
-                  )
+                  const Expanded(child: Center(child: CircularProgressIndicator()))
                 else if (!program.isRegistered)
                   Expanded(
                     child: Center(
                       child: Text(
-                        'Register a training plan before viewing the schedule.',
-                        textAlign: TextAlign.center,
-                        style: AppText.body(
-                          size: 13,
-                          color: AppColors.textSecondary,
-                        ),
-                      ),
-                    ),
-                  )
-                else if (program.quests.isEmpty)
-                  Expanded(
-                    child: Center(
-                      child: Text(
-                        'No workouts are scheduled for this week.',
-                        textAlign: TextAlign.center,
-                        style: AppText.body(
-                          size: 13,
-                          color: AppColors.textSecondary,
-                        ),
+                        'กรุณาลงทะเบียนตารางซ้อมก่อน',
+                        style: AppText.body(color: AppColors.textSecondary),
                       ),
                     ),
                   )
                 else
                   Expanded(
-                    child: ListView.separated(
-                      itemCount: program.quests.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 10),
-                      itemBuilder: (context, index) {
-                        final quest = program.quests[index];
-                        return _QuestCard(quest: quest);
-                      },
-                    ),
+                    child: _ScheduleBuilder(template: template, plan: plan),
                   ),
               ],
             ),
@@ -80,61 +80,341 @@ class TrainingScheduleScreen extends ConsumerWidget {
       ),
     );
   }
+
+  Map<String, dynamic>? _selectedTemplate(ProgramNotifier program) {
+    for (final candidate in program.templates) {
+      if (candidate['level'] == program.selectedTemplateLevel) return candidate;
+    }
+    return program.registrationTemplate;
+  }
+
+  void _configurePlan(Map<String, dynamic>? template) {
+    final level = template?['level']?.toString();
+    if (template == null || level == _configuredTemplateLevel) return;
+    final min = _weekValue(template['duration_weeks_min']);
+    final max = _weekValue(template['duration_weeks_max']);
+    if (min == null || max == null || max < min) return;
+    _configuredTemplateLevel = level;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) {
+        ref.read(trainingPlanProvider).configurePlanDuration(
+              minWeeks: min,
+              maxWeeks: max,
+            );
+      }
+    });
+  }
 }
 
-class _QuestCard extends StatelessWidget {
-  const _QuestCard({required this.quest});
+class _ScheduleBuilder extends ConsumerWidget {
+  const _ScheduleBuilder({required this.template, required this.plan});
 
-  final Map<String, dynamic> quest;
+  final Map<String, dynamic>? template;
+  final TrainingPlanNotifier plan;
 
   @override
-  Widget build(BuildContext context) {
-    final type = quest['session_type']?.toString() ?? 'run';
-    final value = quest['planned_value'];
-    final unit = quest['unit']?.toString();
-    final date = quest['scheduled_date']?.toString() ?? '';
-    final target = value == null ? '' : ' $value${unit == null ? '' : ' $unit'}';
+  Widget build(BuildContext context, WidgetRef ref) {
+    final phase = plan.getPhase(plan.currentWeek);
+    final caps = plan.getCaps(plan.currentWeek);
+    final workouts = caps.asMap.entries
+        .where((entry) => entry.value > 0)
+        .map((entry) => entry.key)
+        .toList();
+    final isCurrentWeekComplete = plan.isWeekComplete(plan.currentWeek);
+    final progress = plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
+    final duration = _durationLabel(
+      _weekValue(template?['duration_weeks_min']),
+      _weekValue(template?['duration_weeks_max']),
+    );
 
-    return AppCard(
-      child: Row(
+    return SingleChildScrollView(
+      padding: const EdgeInsets.only(bottom: 4),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Container(
-            width: 42,
-            height: 42,
-            alignment: Alignment.center,
-            decoration: BoxDecoration(
-              color: AppColors.purple1.withOpacity(.16),
-              borderRadius: BorderRadius.circular(12),
+          AppCard(
+            padding: const EdgeInsets.all(15),
+            borderColor: AppColors.purple2.withOpacity(.35),
+            backgroundGradient: LinearGradient(
+              colors: [
+                AppColors.purple1.withOpacity(.20),
+                AppColors.purple2.withOpacity(.05),
+              ],
             ),
-            child: const Icon(Icons.directions_run, color: Colors.white),
-          ),
-          const SizedBox(width: 12),
-          Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(_titleFor(type), style: AppText.heading(size: 14)),
-                const SizedBox(height: 3),
-                Text(
-                  '$date$target',
-                  style: AppText.body(
-                    size: 12,
-                    color: AppColors.textSecondary,
-                  ),
+                Text('ระยะที่คุณเลือก  $duration', style: AppText.heading(size: 13)),
+                const SizedBox(height: 10),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: PlanPhase.values
+                      .map((item) => _PhaseChip(
+                            phase: item,
+                            active: item == phase,
+                            onTap: () => ref
+                                .read(trainingPlanProvider)
+                                .goToWeek(plan.phaseStartWeeks[item]!),
+                          ))
+                      .toList(),
                 ),
               ],
             ),
+          ),
+          const SectionLabel(title: 'เลือกระยะเวลาฝึกของคุณ'),
+          Wrap(
+            spacing: 8,
+            runSpacing: 8,
+            children: plan.availablePlanLengths
+                .map((weeks) => SelectChip(
+                      label: '$weeks สัปดาห์',
+                      active: plan.planWeeks == weeks,
+                      onTap: () => ref.read(trainingPlanProvider).setPlanWeeks(weeks),
+                    ))
+                .toList(),
+          ),
+          const SectionLabel(title: 'แผนการฝึกของคุณ'),
+          Text(
+            'เลือก Phase เพื่อข้ามไปดูและจัดตารางสัปดาห์ของ Phase นั้น',
+            style: AppText.body(size: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: PlanPhase.values
+                .map((item) => _PhaseChip(
+                      phase: item,
+                      active: item == phase,
+                      onTap: () => ref
+                          .read(trainingPlanProvider)
+                          .goToWeek(plan.phaseStartWeeks[item]!),
+                    ))
+                .toList(),
+          ),
+          const SectionLabel(title: 'จัดตารางรายสัปดาห์'),
+          Text(
+            'สัปดาห์ที่ ${plan.currentWeek + 1} · ${phase.label}',
+            style: AppText.heading(size: 14),
+          ),
+          const SizedBox(height: 12),
+          if (workouts.isNotEmpty)
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: workouts
+                  .map((type) => _WorkoutChoice(
+                        type: type,
+                        count: caps.capFor(type),
+                        selected: plan.selectedType == type,
+                        onTap: () => ref.read(trainingPlanProvider).selectType(type),
+                      ))
+                  .toList(),
+            ),
+          const SizedBox(height: 16),
+          Text(
+            plan.selectedType == null
+                ? 'เลือกการซ้อม แล้วแตะวันที่ต้องการลงตาราง'
+                : 'กำลังเลือก ${sessionMeta[plan.selectedType]!.label} แล้วแตะวันที่ว่าง',
+            style: AppText.body(size: 12, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 10),
+          _WeekGrid(
+            schedule: plan.currentWeekData,
+            onTap: (day) {
+              final error = ref.read(trainingPlanProvider).handleDayTap(day);
+              if (error != null) showAppToast(context, error);
+            },
+          ),
+          const SizedBox(height: 16),
+          Row(
+            children: [
+              NavArrowButton(
+                icon: Icons.chevron_left_rounded,
+                onTap: plan.currentWeek == 0
+                    ? null
+                    : () => ref.read(trainingPlanProvider).prevWeek(),
+              ),
+              const SizedBox(width: 10),
+              Expanded(
+                child: GradientButton(
+                  height: 46,
+                  label: plan.currentWeek == plan.planWeeks - 1
+                      ? 'สัปดาห์สุดท้าย'
+                      : 'ไปสัปดาห์ที่ ${plan.currentWeek + 2}',
+                  onTap: isCurrentWeekComplete && plan.currentWeek < plan.planWeeks - 1
+                      ? () => ref.read(trainingPlanProvider).nextWeek()
+                      : null,
+                ),
+              ),
+              const SizedBox(width: 10),
+              NavArrowButton(
+                icon: Icons.chevron_right_rounded,
+                onTap: plan.currentWeek == plan.planWeeks - 1
+                    ? null
+                    : () => ref.read(trainingPlanProvider).nextWeek(),
+              ),
+            ],
+          ),
+          const SizedBox(height: 18),
+          Text('ความคืบหน้าตารางฝึก', style: AppText.body(size: 12)),
+          const SizedBox(height: 6),
+          ClipRRect(
+            borderRadius: BorderRadius.circular(99),
+            child: LinearProgressIndicator(
+              value: progress,
+              minHeight: 7,
+              color: AppColors.purple2,
+              backgroundColor: Colors.white.withOpacity(.08),
+            ),
+          ),
+          const SizedBox(height: 5),
+          Text(
+            'จัดครบแล้ว ${plan.overallDoneCount} / ${plan.planWeeks} สัปดาห์',
+            style: AppText.body(size: 11.5, color: AppColors.textSecondary),
+          ),
+          const SizedBox(height: 20),
+          GradientButton(
+            label: plan.allWeeksComplete
+                ? 'บันทึกแผนฝึกทั้งหมด'
+                : 'จัดตารางให้ครบทุกสัปดาห์ก่อน',
+            onTap: plan.allWeeksComplete
+                ? () => showAppToast(
+                      context,
+                      'บันทึกตารางฝึกเรียบร้อย',
+                      isError: false,
+                    )
+                : null,
           ),
         ],
       ),
     );
   }
-
-  String _titleFor(String type) => switch (type) {
-        'easy' => 'Easy Run',
-        'tempo' => 'Tempo Run',
-        'vo2max' => 'VO2 Max',
-        'long_run' => 'Long Run',
-        _ => type,
-      };
 }
+
+class _PhaseChip extends StatelessWidget {
+  const _PhaseChip({required this.phase, required this.active, required this.onTap});
+
+  final PlanPhase phase;
+  final bool active;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) => SelectChip(
+        label: '${phase.shortNumber} ${phase.label}',
+        active: active,
+        onTap: onTap,
+      );
+}
+
+class _WorkoutChoice extends StatelessWidget {
+  const _WorkoutChoice({
+    required this.type,
+    required this.count,
+    required this.selected,
+    required this.onTap,
+  });
+
+  final SessionType type;
+  final int count;
+  final bool selected;
+  final VoidCallback onTap;
+
+  @override
+  Widget build(BuildContext context) {
+    final meta = sessionMeta[type]!;
+    return GestureDetector(
+      onTap: onTap,
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 150),
+        width: 96,
+        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 11),
+        decoration: BoxDecoration(
+          color: selected ? AppColors.purple1.withOpacity(.20) : AppColors.card,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(
+            color: selected ? AppColors.purple2 : AppColors.border,
+          ),
+        ),
+        child: Column(
+          children: [
+            Text(meta.icon, style: const TextStyle(fontSize: 18)),
+            const SizedBox(height: 4),
+            Text(meta.label, textAlign: TextAlign.center, style: AppText.heading(size: 10)),
+            Text('เหลือ $count', style: AppText.body(size: 9.5, color: AppColors.textSecondary)),
+          ],
+        ),
+      ),
+    );
+  }
+}
+
+class _WeekGrid extends StatelessWidget {
+  const _WeekGrid({required this.schedule, required this.onTap});
+
+  final List<SessionType?> schedule;
+  final ValueChanged<int> onTap;
+  static const _days = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
+
+  @override
+  Widget build(BuildContext context) => Row(
+        children: List.generate(7, (index) {
+          final type = schedule[index];
+          final meta = type == null ? null : sessionMeta[type];
+          return Expanded(
+            child: Padding(
+              padding: EdgeInsets.only(right: index == 6 ? 0 : 5),
+              child: Column(
+                children: [
+                  Text(_days[index], style: AppText.body(size: 10, color: AppColors.textTertiary)),
+                  const SizedBox(height: 5),
+                  GestureDetector(
+                    onTap: () => onTap(index),
+                    child: Container(
+                      height: 54,
+                      alignment: Alignment.center,
+                      decoration: BoxDecoration(
+                        color: type == null ? Colors.white.withOpacity(.025) : AppColors.purple1.withOpacity(.18),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: type == null ? AppColors.border : AppColors.purple2.withOpacity(.55)),
+                      ),
+                      child: type == SessionType.restForced
+                          ? const Icon(Icons.lock_outline, size: 14, color: AppColors.textTertiary)
+                          : type == null
+                              ? const Icon(Icons.add, size: 14, color: AppColors.textTertiary)
+                              : Column(
+                                  mainAxisAlignment: MainAxisAlignment.center,
+                                  children: [
+                                    Text(meta!.icon, style: const TextStyle(fontSize: 15)),
+                                    Text(meta.label.split(' ').first, style: AppText.body(size: 8.5)),
+                                  ],
+                                ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          );
+        }),
+      );
+}
+
+int? _weekValue(dynamic value) => switch (value) {
+      int weeks when weeks > 0 => weeks,
+      num weeks when weeks > 0 => weeks.toInt(),
+      _ => int.tryParse(value?.toString() ?? ''),
+    };
+
+String _durationLabel(int? minWeeks, int? maxWeeks) {
+  if (minWeeks == null) return 'ไม่ระบุระยะเวลา';
+  if (maxWeeks == null || minWeeks == maxWeeks) return '$minWeeks สัปดาห์';
+  return '$minWeeks-$maxWeeks สัปดาห์';
+}
+
+String _planName(String? goal) => switch (goal) {
+      'sub_50' => '5K Sub 50',
+      '10k_sub_1.40' => '10K Sub 1.40',
+      '21k_sub_3.30' => 'Half Marathon Sub 3.30',
+      _ => 'แผนการฝึกของคุณ',
+    };

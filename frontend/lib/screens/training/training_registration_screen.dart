@@ -2,12 +2,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../app_theme.dart';
-import '../../providers/onboarding_provider.dart';
 import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
+import 'training_schedule_screen.dart';
 
-/// Shows the API 5.0 program template before the user creates a program with
-/// API 5.1.
+/// Lets a user preview a plan before registering it.
 class TrainingRegistrationScreen extends ConsumerStatefulWidget {
   const TrainingRegistrationScreen({super.key});
 
@@ -27,7 +26,6 @@ class _TrainingRegistrationScreenState
   @override
   Widget build(BuildContext context) {
     final program = ref.watch(programProvider);
-    final distanceGoal = ref.watch(onboardingProvider).data.distanceGoal;
     Map<String, dynamic>? template;
     for (final candidate in program.templates) {
       if (candidate['level'] == program.selectedTemplateLevel) {
@@ -37,6 +35,7 @@ class _TrainingRegistrationScreenState
     }
     template ??= program.registrationTemplate;
     final selectedLevel = template?['level']?.toString();
+    final isEligible = _canSelectTemplate(template, program.onboardingLevel);
     final isLoading = program.isLoadingTemplates ||
         (program.isLoading && !program.isRegistered);
 
@@ -64,7 +63,6 @@ class _TrainingRegistrationScreenState
                   child: _TemplateContent(
                     templates: program.templates,
                     recommendedTemplate: program.registrationTemplate,
-                    distanceGoal: distanceGoal,
                     loading: program.isLoadingTemplates,
                     onRetry: () => ref.read(programProvider).loadTemplates(),
                     onTemplateSelected: (selected) => ref
@@ -84,23 +82,32 @@ class _TrainingRegistrationScreenState
                 GradientButton(
                   label: program.isRegistering
                       ? 'กำลังลงทะเบียน...'
-                      : 'บันทึกและลงทะเบียนตารางซ้อม',
-                  gradient: AppColors.greenGradient,
+                      : !isEligible
+                          ? 'ระดับการวิ่งของคุณยังไม่ถึงสำหรับแผนนี้'
+                          : 'บันทึกและลงทะเบียนตารางซ้อม',
+                  gradient: isEligible ? AppColors.greenGradient : AppColors.goldGradient,
                   loading: program.isRegistering || isLoading,
-                  onTap: program.isRegistering || isLoading || selectedLevel == null
+                  onTap: program.isRegistering ||
+                          isLoading ||
+                          selectedLevel == null ||
+                          !isEligible
                       ? null
                       : () async {
-                          // API 5.1 creates and persists the user's program.
                           final ok = await ref
                               .read(programProvider)
                               .registerPlan(level: selectedLevel);
                           if (!context.mounted) return;
                           if (ok) {
-                            Navigator.of(context).pop();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) => const TrainingScheduleScreen(),
+                              ),
+                            );
                           } else {
                             showAppToast(
                               context,
-                              program.errorMessage ?? 'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่',
+                              program.errorMessage ??
+                                  'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่',
                             );
                           }
                         },
@@ -118,7 +125,6 @@ class _TemplateContent extends StatefulWidget {
   const _TemplateContent({
     required this.templates,
     required this.recommendedTemplate,
-    required this.distanceGoal,
     required this.loading,
     required this.onRetry,
     required this.onTemplateSelected,
@@ -126,7 +132,6 @@ class _TemplateContent extends StatefulWidget {
 
   final List<Map<String, dynamic>> templates;
   final Map<String, dynamic>? recommendedTemplate;
-  final String? distanceGoal;
   final bool loading;
   final VoidCallback onRetry;
   final ValueChanged<Map<String, dynamic>> onTemplateSelected;
@@ -136,35 +141,25 @@ class _TemplateContent extends StatefulWidget {
 }
 
 class _TemplateContentState extends State<_TemplateContent> {
-  int? _selectedWeeks;
   Map<String, dynamic>? _selectedTemplate;
+  String? _selectedPhaseId;
 
   @override
   void didUpdateWidget(covariant _TemplateContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final availableLevels = widget.templates
-        .map((template) => template['level']?.toString())
-        .toSet();
-    if (_selectedTemplate == null ||
-        !availableLevels.contains(_selectedTemplate!['level']?.toString())) {
+    final levels = widget.templates.map((item) => item['level']?.toString()).toSet();
+    if (_selectedTemplate == null || !levels.contains(_selectedTemplate!['level'])) {
       _selectedTemplate = widget.recommendedTemplate ??
           (widget.templates.isEmpty ? null : widget.templates.first);
     }
-    final minWeeks = _weekValue(_selectedTemplate?['duration_weeks_min']);
-    final maxWeeks =
-        _weekValue(_selectedTemplate?['duration_weeks_max']) ?? minWeeks;
-    if (minWeeks != null &&
-        (_selectedWeeks == null ||
-            _selectedWeeks! < minWeeks ||
-            _selectedWeeks! > (maxWeeks ?? minWeeks))) {
-      _selectedWeeks = minWeeks;
-    }
+    _ensureSelectedPhase();
   }
 
   @override
   Widget build(BuildContext context) {
     _selectedTemplate ??= widget.recommendedTemplate ??
         (widget.templates.isEmpty ? null : widget.templates.first);
+    _ensureSelectedPhase();
     final template = _selectedTemplate;
     if (widget.loading && widget.templates.isEmpty) {
       return const Center(child: CircularProgressIndicator());
@@ -180,18 +175,18 @@ class _TemplateContentState extends State<_TemplateContent> {
     }
 
     final phases = _mapList(template['programPhases']);
-    final sessionSpecs = _uniqueSessionSpecs(template['sessionTypeSpecs']);
-    final minWeeks = _weekValue(template['duration_weeks_min']);
-    final maxWeeks = _weekValue(template['duration_weeks_max']) ?? minWeeks;
-    final weekOptions = minWeeks == null || maxWeeks == null
-        ? const <int>[]
-        : List<int>.generate(
-            maxWeeks - minWeeks + 1,
-            (index) => minWeeks + index,
-          );
-    final selectedWeeks = _selectedWeeks ?? minWeeks;
-    final goalLabel =
-        widget.distanceGoal ?? _goalLabel(template['goal_label']?.toString());
+    final selectedPhase = phases.cast<Map<String, dynamic>?>().firstWhere(
+          (phase) => phase?['id']?.toString() == _selectedPhaseId,
+          orElse: () => null,
+        );
+    final sessionSpecs = _sessionSpecsForPhase(
+      template['sessionTypeSpecs'],
+      _selectedPhaseId,
+    );
+    final duration = _durationLabel(
+      _weekValue(template['duration_weeks_min']),
+      _weekValue(template['duration_weeks_max']),
+    );
 
     return SingleChildScrollView(
       child: Column(
@@ -207,7 +202,8 @@ class _TemplateContentState extends State<_TemplateContent> {
                       active: candidate['level'] == template['level'],
                       onTap: () => setState(() {
                         _selectedTemplate = candidate;
-                        _selectedWeeks = _weekValue(candidate['duration_weeks_min']);
+                        _selectedPhaseId = null;
+                        _ensureSelectedPhase();
                         widget.onTemplateSelected(candidate);
                       }),
                     ))
@@ -225,17 +221,9 @@ class _TemplateContentState extends State<_TemplateContent> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 8,
-                  crossAxisAlignment: WrapCrossAlignment.center,
-                  children: [
-                    _LevelBadge(label: _levelLabel(template['level']?.toString())),
-                    Text(
-                      '$goalLabel · ${selectedWeeks ?? '-'} สัปดาห์',
-                      style: AppText.heading(size: 14.5),
-                    ),
-                  ],
+                Text(
+                  '${_planName(template['goal_label']?.toString())} · $duration',
+                  style: AppText.heading(size: 14.5),
                 ),
                 const SizedBox(height: 10),
                 Text(
@@ -243,60 +231,39 @@ class _TemplateContentState extends State<_TemplateContent> {
                   style: AppText.body(size: 12.5, color: AppColors.textSecondary),
                 ),
                 if (phases.isNotEmpty) ...[
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 14),
+                  Text('เลือก Phase', style: AppText.heading(size: 12.5)),
+                  const SizedBox(height: 8),
                   Wrap(
                     spacing: 6,
                     runSpacing: 6,
                     children: phases
-                        .map((phase) => _PhasePill(_phaseLabel(
-                              phase['phase_code']?.toString(),
-                            )))
+                        .map((phase) => SelectChip(
+                              label: _phaseLabel(phase['phase_code']?.toString()),
+                              active: phase['id']?.toString() == _selectedPhaseId,
+                              onTap: () => setState(
+                                () => _selectedPhaseId = phase['id']?.toString(),
+                              ),
+                            ))
                         .toList(),
                   ),
                 ],
               ],
             ),
           ),
-          /*const SectionLabel(title: 'ระยะและระยะเวลา'),
-          Text(
-            widget.distanceGoal == null
-                ? 'ไม่พบเป้าหมายระยะจาก Onboarding'
-                : 'เป้าหมายระยะจาก Onboarding',
-            style: AppText.body(size: 12.5, color: AppColors.textSecondary),
-          ),*/
-          const SizedBox(height: 8),
-          SelectChip(
-            label: goalLabel,
-            active: true,
-            onTap: () {},
-          ),
-          const SizedBox(height: 18),
-          Text(
-            'เลือกระยะเวลา (ตัวอย่าง)',
-            style: AppText.body(size: 12.5, color: AppColors.textSecondary),
-          ),
-          const SizedBox(height: 8),
-          if (weekOptions.isEmpty)
-            Text('ไม่พบช่วงสัปดาห์ของแผน',
-                style: AppText.body(size: 12, color: AppColors.textSecondary))
-          else
-            Wrap(
-              spacing: 8,
-              runSpacing: 8,
-              children: weekOptions
-                  .map((weeks) => SelectChip(
-                        label: '$weeks สัปดาห์',
-                        active: selectedWeeks == weeks,
-                        // API 5.1 does not accept a week duration. This is a
-                        // local, mock selection for the registration UI only.
-                        onTap: () => setState(() => _selectedWeeks = weeks),
-                      ))
-                  .toList(),
-            ),
           const SectionLabel(title: 'องค์ประกอบการซ้อม'),
+          if (selectedPhase != null) ...[
+            Text(
+              'รายละเอียดการซ้อมใน Phase ${_phaseLabel(selectedPhase['phase_code']?.toString())}',
+              style: AppText.body(size: 12.5, color: AppColors.textSecondary),
+            ),
+            const SizedBox(height: 8),
+          ],
           if (sessionSpecs.isEmpty)
-            Text('ไม่พบรายละเอียดรูปแบบการฝึก',
-                style: AppText.body(size: 12, color: AppColors.textSecondary))
+            Text(
+              'ไม่พบรายละเอียดรูปแบบการฝึกใน Phase นี้',
+              style: AppText.body(size: 12, color: AppColors.textSecondary),
+            )
           else
             ...sessionSpecs.map((spec) => Padding(
                   padding: const EdgeInsets.only(bottom: 10),
@@ -312,38 +279,17 @@ class _TemplateContentState extends State<_TemplateContent> {
       ),
     );
   }
-}
 
-class _LevelBadge extends StatelessWidget {
-  const _LevelBadge({required this.label});
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 11, vertical: 6),
-        decoration: BoxDecoration(
-          gradient: AppColors.purpleGradient,
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(label, style: AppText.heading(size: 11.5, color: Colors.white)),
-      );
-}
-
-class _PhasePill extends StatelessWidget {
-  const _PhasePill(this.label);
-
-  final String label;
-
-  @override
-  Widget build(BuildContext context) => Container(
-        padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 5),
-        decoration: BoxDecoration(
-          color: Colors.white.withOpacity(.08),
-          borderRadius: BorderRadius.circular(999),
-        ),
-        child: Text(label, style: AppText.heading(size: 10.5)),
-      );
+  void _ensureSelectedPhase() {
+    final phases = _mapList(_selectedTemplate?['programPhases']);
+    if (phases.isEmpty) {
+      _selectedPhaseId = null;
+      return;
+    }
+    if (!phases.any((phase) => phase['id']?.toString() == _selectedPhaseId)) {
+      _selectedPhaseId = phases.first['id']?.toString();
+    }
+  }
 }
 
 class _WorkoutRow extends StatelessWidget {
@@ -394,10 +340,11 @@ class _WorkoutRow extends StatelessWidget {
       );
 }
 
-List<Map<String, dynamic>> _mapList(dynamic value) => (value as List<dynamic>? ?? const [])
-    .whereType<Map>()
-    .map((item) => Map<String, dynamic>.from(item))
-    .toList(growable: false);
+List<Map<String, dynamic>> _mapList(dynamic value) =>
+    (value as List<dynamic>? ?? const [])
+        .whereType<Map>()
+        .map((item) => Map<String, dynamic>.from(item))
+        .toList(growable: false);
 
 int? _weekValue(dynamic value) => switch (value) {
       int weeks when weeks > 0 => weeks,
@@ -405,30 +352,50 @@ int? _weekValue(dynamic value) => switch (value) {
       _ => int.tryParse(value?.toString() ?? ''),
     };
 
-List<Map<String, dynamic>> _uniqueSessionSpecs(dynamic value) {
+List<Map<String, dynamic>> _sessionSpecsForPhase(dynamic value, String? phaseId) {
   final seen = <String>{};
   return _mapList(value)
+      .where((spec) => spec['phase_id']?.toString() == phaseId)
       .where((spec) => seen.add(spec['session_type']?.toString() ?? ''))
       .toList(growable: false);
 }
 
-String _levelLabel(String? level) => switch (level) {
-      'beginner' => 'Beginner',
-      'lower_intermediate' => 'Intermediate',
-      'upper_intermediate' => 'Advanced',
-      _ => level ?? 'Training plan',
+String _planName(String? goal) => switch (goal) {
+      'sub_50' => '5K Sub 50',
+      '10k_sub_1.40' => '10K Sub 1.40',
+      '21k_sub_3.30' => 'Half Marathon Sub 3.30',
+      _ => (goal ?? 'Training plan').replaceAll('_', ' ').toUpperCase(),
     };
-
-String _goalLabel(String? goal) => (goal ?? 'Training plan').replaceAll('_', ' ').toUpperCase();
 
 String _templateGoalLabel(String? goal) => switch (goal) {
       'sub_50' => '5K',
       '10k_sub_1.40' => '10K',
       '21k_sub_3.30' => 'Half Marathon',
-      _ => _goalLabel(goal),
+      _ => _planName(goal),
     };
 
+String _durationLabel(int? minWeeks, int? maxWeeks) {
+  if (minWeeks == null) return 'ไม่ระบุระยะเวลา';
+  if (maxWeeks == null || maxWeeks == minWeeks) return '$minWeeks สัปดาห์';
+  return '$minWeeks-$maxWeeks สัปดาห์';
+}
+
 String _phaseLabel(String? phase) => (phase ?? '').replaceAll('_', ' ').toUpperCase();
+
+bool _canSelectTemplate(Map<String, dynamic>? template, String? userLevel) {
+  if (template == null) return false;
+  const ranks = {
+    'beginner': 0,
+    'intermediate': 1,
+    'lower_intermediate': 1,
+    'advanced': 2,
+    'upper_intermediate': 2,
+    'elite': 3,
+  };
+  final requiredRank = ranks[template['require_exp_level']?.toString()] ?? 0;
+  final userRank = ranks[userLevel] ?? 0;
+  return userRank >= requiredRank;
+}
 
 String _sessionLabel(String? type) => switch (type) {
       'easy' => 'Easy Run',
