@@ -6,6 +6,7 @@ import '../../models/training_models.dart';
 import '../../providers/program_provider.dart';
 import '../../providers/training_plan_provider.dart';
 import '../../widgets/common.dart';
+import '../home/main_shell.dart';
 
 /// A week-by-week builder where the user chooses the training day for each
 /// workout in the registered plan.
@@ -337,7 +338,10 @@ class _ScheduleBuilder extends ConsumerWidget {
                       );
                       if (!context.mounted) return;
                       Navigator.of(context, rootNavigator: true)
-                          .popUntil((route) => route.isFirst);
+                          .pushAndRemoveUntil(
+                        MaterialPageRoute(builder: (_) => const MainShell()),
+                        (route) => false,
+                      );
                     } else {
                       showAppToast(
                         context,
