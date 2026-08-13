@@ -1,7 +1,14 @@
+import 'dart:io' show Platform;
+
 class ApiConfig {
-  // จาก Postman collection: baseUrl = http://localhost:4000
-  // หมายเหตุ:
-  // - รันบน Android Emulator ต้องใช้ 10.0.2.2 แทน localhost
-  // - รันบนเครื่องจริง/iOS Simulator ต้องใช้ IP เครื่อง dev (เช่น 192.168.x.x)
-  static const String baseUrl = 'http://localhost:4000';
+  /// Override for a physical device, for example:
+  /// flutter run --dart-define=API_BASE_URL=http://192.168.1.20:4000
+  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+
+  static String get baseUrl {
+    if (_configuredBaseUrl.isNotEmpty) return _configuredBaseUrl;
+    // Android emulator reaches the host computer through this special address.
+    if (Platform.isAndroid) return 'http://10.0.2.2:4000';
+    return 'http://localhost:4000';
+  }
 }
