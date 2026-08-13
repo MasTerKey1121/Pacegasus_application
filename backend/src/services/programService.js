@@ -383,7 +383,7 @@ function translateDbError(err) {
  */
 async function assertManualModeActiveProgram(userId) {
   const { rows } = await db.query(
-    `SELECT id, schedule_mode, status FROM user_programs
+    `SELECT id, program_template_id, schedule_mode, status FROM user_programs
      WHERE user_id = $1 AND status = 'active'`,
     [userId]
   );
@@ -405,6 +405,9 @@ async function addManualQuest(userId, scheduledDate, sessionType) {
   const program = await assertManualModeActiveProgram(userId);
 
   try {
+    // Some programs may have been created before baselines were introduced.
+    // Backfill safely before the trigger calculates planned_value.
+    await createBaselines(db, program.id, program.program_template_id);
     const { rows } = await db.query(
       `INSERT INTO main_quest_instances (user_program_id, scheduled_date, session_type)
        VALUES ($1, $2, $3)
@@ -431,6 +434,8 @@ async function addManualQuestsBatch(userId, quests) {
 
   try {
     await client.query('BEGIN');
+    // Ensure legacy programs have every baseline needed by the insert trigger.
+    await createBaselines(client, program.id, program.program_template_id);
     const createdQuests = [];
 
     for (const quest of orderedQuests) {

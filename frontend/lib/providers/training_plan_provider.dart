@@ -17,6 +17,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
   late List<List<SessionType?>> weekSchedules;
   List<int> availablePlanLengths = const [8, 9, 10];
   final Set<int> _savedWeekIndexes = <int>{};
+  bool _hasPhases = true;
 
   TrainingPlanNotifier() {
     rebuildWeeks();
@@ -24,13 +25,20 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
   /// Align the local schedule builder with the duration range of the plan
   /// selected during registration.
-  void configurePlanDuration({required int minWeeks, required int maxWeeks}) {
+  void configurePlanDuration({
+    required int minWeeks,
+    required int maxWeeks,
+    required bool hasPhases,
+  }) {
     final options = List<int>.generate(
       maxWeeks - minWeeks + 1,
       (index) => minWeeks + index,
     );
-    if (_sameList(availablePlanLengths, options)) return;
+    if (_sameList(availablePlanLengths, options) && _hasPhases == hasPhases) {
+      return;
+    }
     availablePlanLengths = options;
+    _hasPhases = hasPhases;
     planWeeks = options.last;
     rebuildWeeks();
   }
@@ -65,6 +73,9 @@ class TrainingPlanNotifier extends ChangeNotifier {
   }
 
   WeekCaps getCaps(int weekIndex) {
+    // The 5K beginner template is a single-phase plan. Its database specs
+    // contain Easy Run and Long Run only; never offer VO2Max/Tempo here.
+    if (!_hasPhases) return const WeekCaps(easy: 3, long: 1);
     final phase = getPhase(weekIndex);
     if (phase == PlanPhase.race) return const WeekCaps(easy: 4);
     if (phase == PlanPhase.taper) return const WeekCaps(easy: 2, long: 1, tempo: 1);
@@ -79,7 +90,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
   List<SessionType?> _initWeek(int weekIndex) {
     final arr = List<SessionType?>.filled(7, null);
-    if (getPhase(weekIndex) == PlanPhase.race) {
+    if (_hasPhases && getPhase(weekIndex) == PlanPhase.race) {
       arr[5] = SessionType.restForced;
       arr[6] = SessionType.race;
     }

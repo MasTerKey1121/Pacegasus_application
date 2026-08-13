@@ -106,6 +106,7 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
         ref.read(trainingPlanProvider).configurePlanDuration(
               minWeeks: min,
               maxWeeks: max,
+              hasPhases: _mapList(template['programPhases']).isNotEmpty,
             );
       }
     });
