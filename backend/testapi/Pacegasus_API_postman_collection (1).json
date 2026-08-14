@@ -2280,6 +2280,106 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "8. RPE Tracking",
+      "item": [
+        {
+          "name": "8.1 Log RPE",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+            "pm.test('Response contains calculated session RPE', function () {",
+            "  const json = pm.response.json();",
+            "  pm.expect(json.success).to.eql(true);",
+            "  pm.expect(json.data.session_rpe).to.eql(315);",
+            "  pm.expect(json.data.mood).to.eql('good');",
+            "  pm.collectionVariables.set('rpeLogId', json.data.id);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Authorization", "value": "Bearer {{accessToken}}" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"runningSessionId\": \"{{sessionId}}\",\n  \"durationMinutes\": 45,\n  \"rpeScore\": 7,\n  \"stressLevel\": 4,\n  \"mood\": \"good\",\n  \"hasPain\": true,\n  \"painNote\": \"ตึงน่องเล็กน้อย\"\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/rpe", "host": ["{{baseUrl}}"], "path": ["api", "rpe"] },
+            "description": "POST /api/rpe บันทึก RPE หลังวิ่ง โดย sessionRpe จะถูกคำนวณจาก durationMinutes × rpeScore"
+          },
+          "response": []
+        },
+        {
+          "name": "8.2 Get RPE History",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Response contains RPE history', function () {",
+            "  const json = pm.response.json();",
+            "  pm.expect(json.success).to.eql(true);",
+            "  pm.expect(json.data.logs).to.be.an('array');",
+            "  pm.expect(json.data).to.have.property('limit');",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/rpe/history?limit=30", "host": ["{{baseUrl}}"], "path": ["api", "rpe", "history"], "query": [{ "key": "limit", "value": "30" }] },
+            "description": "GET /api/rpe/history ดึง RPE พร้อมข้อมูล running session, distance และ pace"
+          },
+          "response": []
+        },
+        {
+          "name": "8.3 Get RPE Detail",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Response contains requested RPE log', function () {",
+            "  const data = pm.response.json().data;",
+            "  pm.expect(data.id).to.eql(pm.collectionVariables.get('rpeLogId'));",
+            "  pm.expect(data).to.have.property('session_rpe');",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/rpe/{{rpeLogId}}", "host": ["{{baseUrl}}"], "path": ["api", "rpe", "{{rpeLogId}}"] },
+            "description": "GET /api/rpe/:id เปิดรายละเอียด RPE ที่เลือกจาก running history หรือ RPE history"
+          },
+          "response": []
+        },
+        {
+          "name": "8.4 Get ACWR Risk Index",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+            "pm.test('Response contains ACWR risk index', function () {",
+            "  const data = pm.response.json().data;",
+            "  pm.expect(data).to.have.property('acuteLoad');",
+            "  pm.expect(data).to.have.property('chronicLoad');",
+            "  pm.expect(['green', 'yellow', 'red']).to.include(data.riskLevel);",
+            "});"
+          ] } }],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }],
+            "url": { "raw": "{{baseUrl}}/api/rpe/risk-index", "host": ["{{baseUrl}}"], "path": ["api", "rpe", "risk-index"] },
+            "description": "GET /api/rpe/risk-index คำนวณ Acute:Chronic Workload Ratio จาก RPE 7 และ 28 วัน"
+          },
+          "response": []
+        },
+        {
+          "name": "8.5 Validation - Pain Note Required",
+          "event": [{ "listen": "test", "script": { "type": "text/javascript", "exec": [
+            "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+            "pm.test('Validation rejects missing pain note', function () { pm.expect(pm.response.json().success).to.eql(false); });"
+          ] } }],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Authorization", "value": "Bearer {{accessToken}}" }, { "key": "Content-Type", "value": "application/json" }],
+            "body": { "mode": "raw", "raw": "{\n  \"durationMinutes\": 30,\n  \"rpeScore\": 11,\n  \"stressLevel\": 5,\n  \"mood\": \"neutral\",\n  \"hasPain\": true\n}", "options": { "raw": { "language": "json" } } },
+            "url": { "raw": "{{baseUrl}}/api/rpe", "host": ["{{baseUrl}}"], "path": ["api", "rpe"] },
+            "description": "ตรวจ validation: rpeScore เกิน 10 และ hasPain=true แต่ไม่มี painNote ต้องได้ 400"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
