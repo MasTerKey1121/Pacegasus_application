@@ -224,6 +224,50 @@ class TrainingPlanNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Rebuilds local placements/saved-week state from what the backend
+  /// actually has on record for this program, and resumes at the first week
+  /// that isn't fully saved yet. Without this, re-opening the builder (after
+  /// leaving the screen, or an app restart) forgets which weeks were already
+  /// saved and can reuse the same real-world dates for what the user thinks
+  /// is a new week — which the backend then correctly rejects as exceeding
+  /// that week's cap.
+  void syncFromServer({
+    required DateTime startDate,
+    required List<Map<String, dynamic>> quests,
+  }) {
+    final start = DateTime(startDate.year, startDate.month, startDate.day);
+    for (final quest in quests) {
+      final date = DateTime.tryParse(quest['scheduled_date']?.toString() ?? '');
+      final type = _sessionTypeFromApiValue(quest['session_type']?.toString());
+      if (date == null || type == null) continue;
+
+      final offsetDays = DateTime(date.year, date.month, date.day).difference(start).inDays;
+      if (offsetDays < 0) continue;
+      final weekIndex = offsetDays ~/ 7;
+      final dayIndex = offsetDays % 7;
+      if (weekIndex >= weekSchedules.length) continue;
+
+      weekSchedules[weekIndex][dayIndex] = type;
+      _savedWeekIndexes.add(weekIndex);
+    }
+
+    var resumeWeek = 0;
+    while (resumeWeek < planWeeks - 1 && _savedWeekIndexes.contains(resumeWeek)) {
+      resumeWeek++;
+    }
+    currentWeek = resumeWeek;
+    selectedType = null;
+    notifyListeners();
+  }
+
+  SessionType? _sessionTypeFromApiValue(String? value) => switch (value) {
+        'easy' => SessionType.easy,
+        'long_run' => SessionType.long,
+        'tempo' => SessionType.tempo,
+        'vo2max' => SessionType.vo2max,
+        _ => null,
+      };
+
   int get overallDoneCount =>
       List.generate(planWeeks, (i) => i).where((i) => isWeekComplete(i)).length;
 

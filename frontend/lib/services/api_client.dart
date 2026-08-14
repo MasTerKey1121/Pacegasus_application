@@ -22,7 +22,7 @@ class ApiClient {
   /// เรียกตอนเจอ 401 — คืน true ถ้า refresh สำเร็จ (ให้ retry request เดิม)
   Future<bool> Function()? onUnauthorized;
 
-  ApiClient({this.baseUrl = ApiConfig.baseUrl});
+  ApiClient({String? baseUrl}) : baseUrl = baseUrl ?? ApiConfig.baseUrl;
 
   Future<Map<String, dynamic>> get(String path, {bool auth = false}) =>
       _request('GET', path, auth: auth);

@@ -34,6 +34,10 @@ class ProgramNotifier extends ChangeNotifier {
   bool get isRegistered => _isRegistered;
   bool get isScheduleSaved => _isScheduleSaved;
 
+  /// The day the active program began. Used by the schedule builder to work
+  /// out which real calendar week a given "week index" in the UI maps to.
+  DateTime? get programStartDate => _programStartDate;
+
   /// Running experience calculated during onboarding.
   String? get onboardingLevel => _onboardingLevel;
 
@@ -241,6 +245,29 @@ class ProgramNotifier extends ChangeNotifier {
       isSavingSchedule = false;
       notifyListeners();
       return false;
+    }
+  }
+
+  /// Fetches every quest already saved between [from] and [to] so the
+  /// schedule builder can figure out which weeks it has already saved,
+  /// instead of relying on its own in-memory (and easily stale) state.
+  Future<List<Map<String, dynamic>>> loadQuestsRange({
+    required DateTime from,
+    required DateTime to,
+  }) async {
+    try {
+      final response = await _api.getQuestsInRange(
+        from: _dateOnly(from),
+        to: _dateOnly(to),
+      );
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
+      final rawQuests = data['quests'] as List<dynamic>? ?? const [];
+      return rawQuests
+          .whereType<Map>()
+          .map((quest) => Map<String, dynamic>.from(quest))
+          .toList(growable: false);
+    } catch (_) {
+      return const [];
     }
   }
 

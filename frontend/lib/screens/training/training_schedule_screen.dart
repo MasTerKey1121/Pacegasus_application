@@ -102,16 +102,45 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
     final max = _weekValue(template['duration_weeks_max']);
     if (min == null || max == null || max < min) return;
     _configuredTemplateLevel = level;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) {
-        ref.read(trainingPlanProvider).configurePlanDuration(
-              minWeeks: min,
-              maxWeeks: max,
-              hasPhases: _mapList(template['programPhases']).isNotEmpty,
-            );
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) async {
+      if (!mounted) return;
+      final plan = ref.read(trainingPlanProvider);
+      plan.configurePlanDuration(
+        minWeeks: min,
+        maxWeeks: max,
+        hasPhases: _mapList(template['programPhases']).isNotEmpty,
+      );
+      await _syncSavedSchedule(plan);
     });
   }
+
+  /// Pulls every quest already saved for this program and rebuilds the local
+  /// week grid + saved-week markers from it, so the builder resumes on the
+  /// correct next week instead of guessing from in-memory state alone.
+  Future<void> _syncSavedSchedule(TrainingPlanNotifier plan) async {
+    final startDate = ref.read(programProvider).programStartDate;
+    if (startDate == null) return;
+    final quests = await ref.read(programProvider).loadQuestsRange(
+          from: startDate,
+          to: startDate.add(Duration(days: plan.planWeeks * 7 - 1)),
+        );
+    if (!mounted) return;
+    plan.syncFromServer(startDate: startDate, quests: quests);
+  }
+}
+
+/// Changing the plan length rebuilds the local week grid from scratch, so it
+/// must be re-synced against the backend or already-saved weeks would look
+/// unsaved (and re-saving them would collide with the weekly cap).
+Future<void> _changePlanWeeks(WidgetRef ref, int weeks) async {
+  ref.read(trainingPlanProvider).setPlanWeeks(weeks);
+  final startDate = ref.read(programProvider).programStartDate;
+  if (startDate == null) return;
+  final quests = await ref.read(programProvider).loadQuestsRange(
+        from: startDate,
+        to: startDate.add(Duration(days: weeks * 7 - 1)),
+      );
+  ref.read(trainingPlanProvider).syncFromServer(startDate: startDate, quests: quests);
 }
 
 class _ScheduleBuilder extends ConsumerWidget {
@@ -182,7 +211,7 @@ class _ScheduleBuilder extends ConsumerWidget {
                 .map((weeks) => SelectChip(
                       label: '$weeks สัปดาห์',
                       active: plan.planWeeks == weeks,
-                      onTap: () => ref.read(trainingPlanProvider).setPlanWeeks(weeks),
+                      onTap: () => _changePlanWeeks(ref, weeks),
                     ))
                 .toList(),
           ),

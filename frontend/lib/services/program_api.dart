@@ -26,4 +26,16 @@ class ProgramApi {
         body: {'quests': quests},
         auth: true,
       );
+
+  /// Retrieve every main quest already saved between [from] and [to]
+  /// (yyyy-MM-dd), used to resync the local schedule builder with what the
+  /// backend actually has on record.
+  Future<Map<String, dynamic>> getQuestsInRange({
+    required String from,
+    required String to,
+  }) =>
+      client.get(
+        '/api/programs/quests?from=${Uri.encodeQueryComponent(from)}&to=${Uri.encodeQueryComponent(to)}',
+        auth: true,
+      );
 }

@@ -114,75 +114,84 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
               ]),
               const SizedBox(height: 20),
 
-              Wrap(
-                spacing: 10,
-                runSpacing: 10,
-                children: _environments.map((e) {
-                  final active = setup.environment == e['key'];
-                  return GestureDetector(
-                    onTap: () => ref
-                        .read(runSetupProvider)
-                        .selectEnvironment(
-                          env: e['key']!,
-                          mainQuestSessionType: sessionType,
-                        ),
-                    child: Container(
-                      width: 96,
-                      padding: const EdgeInsets.symmetric(vertical: 14),
-                      decoration: BoxDecoration(
-                        color: active ? AppColors.purple2.withOpacity(.18) : AppColors.card,
-                        border: Border.all(color: active ? AppColors.purple2 : AppColors.border),
-                        borderRadius: BorderRadius.circular(16),
+              Expanded(
+                child: SingleChildScrollView(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Wrap(
+                        spacing: 10,
+                        runSpacing: 10,
+                        children: _environments.map((e) {
+                          final active = setup.environment == e['key'];
+                          return GestureDetector(
+                            onTap: () => ref
+                                .read(runSetupProvider)
+                                .selectEnvironment(
+                                  env: e['key']!,
+                                  mainQuestSessionType: sessionType,
+                                ),
+                            child: Container(
+                              width: 96,
+                              padding: const EdgeInsets.symmetric(vertical: 14),
+                              decoration: BoxDecoration(
+                                color: active ? AppColors.purple2.withOpacity(.18) : AppColors.card,
+                                border: Border.all(color: active ? AppColors.purple2 : AppColors.border),
+                                borderRadius: BorderRadius.circular(16),
+                              ),
+                              child: Column(children: [
+                                Text(e['icon']!, style: const TextStyle(fontSize: 22)),
+                                const SizedBox(height: 6),
+                                Text(e['label']!, style: AppText.body(size: 12)),
+                              ]),
+                            ),
+                          );
+                        }).toList(),
                       ),
-                      child: Column(children: [
-                        Text(e['icon']!, style: const TextStyle(fontSize: 22)),
-                        const SizedBox(height: 6),
-                        Text(e['label']!, style: AppText.body(size: 12)),
-                      ]),
-                    ),
-                  );
-                }).toList(),
+
+                      const SizedBox(height: 20),
+                      if (setup.isLoadingQuests) const Center(child: CircularProgressIndicator())
+                      else if (setup.environment != null) ...[
+                        const SectionLabel(title: 'Side Quest'),
+                        if (setup.sideQuests.isEmpty)
+                          Text('ไม่มี side quest สำหรับตัวเลือกนี้',
+                              style: AppText.body(size: 12, color: AppColors.textSecondary))
+                        else
+                          ...setup.sideQuests.map((q) {
+                            return AppCard(
+                              child: Row(children: [
+                                Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    children: [
+                                      Text(q.title, style: AppText.heading(size: 13.5)),
+                                      Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
+                                    ],
+                                  ),
+                                ),
+                              ]),
+                            );
+                          }),
+                      ],
+
+                      const SectionLabel(title: 'Main Quest วันนี้'),
+                      AppCard(
+                        child: todayQuest == null
+                            ? Text('วันนี้ไม่มีเควสในตารางฝึก',
+                                style: AppText.body(size: 12, color: AppColors.textSecondary))
+                            : Text(
+                                '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
+                                style: AppText.heading(size: 13.5),
+                              ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
 
-              const SizedBox(height: 20),
-              if (setup.isLoadingQuests) const Center(child: CircularProgressIndicator())
-              else if (setup.environment != null) ...[
-                const SectionLabel(title: 'Side Quest'),
-                if (setup.sideQuests.isEmpty)
-                  Text('ไม่มี side quest สำหรับตัวเลือกนี้',
-                      style: AppText.body(size: 12, color: AppColors.textSecondary))
-                else
-                  ...setup.sideQuests.map((q) {
-                    return AppCard(
-                      child: Row(children: [
-                        Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
-                        const SizedBox(width: 10),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(q.title, style: AppText.heading(size: 13.5)),
-                              Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
-                            ],
-                          ),
-                        ),
-                      ]),
-                    );
-                  }),
-              ],
-
-              const SectionLabel(title: 'Main Quest วันนี้'),
-              AppCard(
-                child: todayQuest == null
-                    ? Text('วันนี้ไม่มีเควสในตารางฝึก',
-                        style: AppText.body(size: 12, color: AppColors.textSecondary))
-                    : Text(
-                        '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
-                        style: AppText.heading(size: 13.5),
-                      ),
-              ),
-
-              const Spacer(),
+              const SizedBox(height: 16),
               GradientButton(
                 label: setup.isStarting ? 'กำลังเริ่ม...' : 'เริ่มต้นการวิ่ง',
                 loading: setup.isStarting,
