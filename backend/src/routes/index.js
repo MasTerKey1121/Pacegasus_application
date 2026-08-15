@@ -6,6 +6,7 @@ const wellnessCheckinRoutes = require('./wellnessCheckinRoutes');
 const programRoutes = require('./programRoutes');
 const sideQuestRoutes = require('./sideQuestRoutes');
 const runningRoutes = require('./runningRoutes');
+const rpeRoutes = require('./rpeRoutes');
 
 const router = express.Router();
 
@@ -17,6 +18,7 @@ router.use('/users', userRoutes);
 router.use('/wellness-checkin', wellnessCheckinRoutes);
 router.use('/programs', programRoutes);
 router.use('/running-sessions', runningRoutes);
+router.use('/rpe', rpeRoutes);
 router.use('/', sideQuestRoutes);
 router.use('/quests', sideQuestRoutes);
 

@@ -170,13 +170,29 @@ async function getSessionHistory(userId, sortBy, order) {
   const direction = order === 'asc' ? 'ASC' : 'DESC';
 
   const { rows } = await db.query(
-    `SELECT id, environment, session_type, status, started_at, ended_at,
-            distance_km, duration_seconds, avg_heart_rate_bpm,
-            max_heart_rate_bpm, created_at,
-            ${sessionDateExpression} AS session_date
-     FROM running_sessions
-     WHERE user_id = $1 AND status = 'completed'
-     ORDER BY ${sortExpression} ${direction}, ${sessionDateExpression} ${direction}`,
+    `SELECT rs.id, rs.environment, rs.session_type, rs.status, rs.started_at, rs.ended_at,
+            rs.distance_km, rs.duration_seconds, rs.avg_heart_rate_bpm,
+            rs.max_heart_rate_bpm, rs.created_at,
+            ${sessionDateExpression.replaceAll('ended_at', 'rs.ended_at').replaceAll('started_at', 'rs.started_at')} AS session_date,
+            COALESCE(rpe.rpe_logs, '[]'::json) AS rpe_logs
+     FROM running_sessions rs
+     LEFT JOIN LATERAL (
+       SELECT json_agg(
+         json_build_object(
+           'id', r.id,
+           'rpeScore', r.rpe_score,
+           'stressLevel', r.stress_level,
+           'mood', r.mood,
+           'hasPain', r.has_pain,
+           'sessionRpe', r.session_rpe,
+           'loggedAt', r.logged_at
+         ) ORDER BY r.logged_at DESC
+       ) AS rpe_logs
+       FROM rpe_logs r
+       WHERE r.running_session_id = rs.id AND r.user_id = rs.user_id
+     ) rpe ON TRUE
+     WHERE rs.user_id = $1 AND rs.status = 'completed'
+     ORDER BY ${sortExpression.replaceAll('ended_at', 'rs.ended_at').replaceAll('started_at', 'rs.started_at')} ${direction}, rs.ended_at ${direction}`,
     [userId]
   );
 
