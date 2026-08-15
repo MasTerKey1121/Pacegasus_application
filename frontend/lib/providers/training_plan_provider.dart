@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/training_models.dart';
+import 'auth_provider.dart';
 
 class _Boundaries {
   final int base, build, peak, block;
@@ -103,6 +104,16 @@ class TrainingPlanNotifier extends ChangeNotifier {
     currentWeek = 0;
     selectedType = null;
     notifyListeners();
+  }
+
+  /// The schedule grid is purely in-memory. Clear it when the signed-in
+  /// account changes so a newly-created account can never see the previous
+  /// user's unfinished placements.
+  void reset() {
+    planWeeks = 10;
+    availablePlanLengths = const [8, 9, 10];
+    _hasPhases = true;
+    rebuildWeeks();
   }
 
   void setPlanWeeks(int w) {
@@ -282,4 +293,10 @@ class TrainingPlanNotifier extends ChangeNotifier {
   }
 }
 
-final trainingPlanProvider = ChangeNotifierProvider<TrainingPlanNotifier>((ref) => TrainingPlanNotifier());
+final trainingPlanProvider = ChangeNotifierProvider<TrainingPlanNotifier>((ref) {
+  final notifier = TrainingPlanNotifier();
+  ref.listen<AuthState>(authProvider, (previous, next) {
+    if (previous?.user?['id'] != next.user?['id']) notifier.reset();
+  });
+  return notifier;
+});

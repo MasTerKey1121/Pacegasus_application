@@ -7,6 +7,7 @@ import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
 import 'reward_screen.dart';
 import '../../providers/run_setup_provider.dart';
+import '../../providers/rpe_provider.dart';
 
 const _moods = ['😩', '🙁', '🙂', '😃', '🤩'];
 
@@ -20,6 +21,15 @@ class RunSummaryScreen extends ConsumerStatefulWidget {
 
 class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   late RunResult result = widget.result;
+  bool _isSubmitting = false;
+
+  static const _apiMoods = [
+    'exhausted',
+    'bad',
+    'neutral',
+    'good',
+    'great',
+  ];
 
   @override
   void initState() {
@@ -236,18 +246,59 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                 ),
                 GradientButton(
                   label: 'ส่งข้อมูล',
-                  onTap: () {
-                    ref
-                        .read(userProvider)
-                        .addRunStats(km: result.distanceKm, sessions: 1);
-                    ref.read(missionProvider).setDone('run', true);
-                    ref.read(runSetupProvider).reset(); // เพิ่มบรรทัดนี้
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(
-                          builder: (_) =>
-                              const RewardScreen(coin: 20, exp: 50)),
-                    );
-                  },
+                  loading: _isSubmitting,
+                  onTap: _isSubmitting
+                      ? null
+                      : () async {
+                          final sessionId =
+                              ref.read(runSetupProvider).sessionId;
+                          if (sessionId == null) {
+                            showAppToast(
+                              context,
+                              'ไม่พบข้อมูลการวิ่ง กรุณาลองเริ่มการวิ่งใหม่',
+                            );
+                            return;
+                          }
+
+                          setState(() => _isSubmitting = true);
+                          try {
+                            await ref.read(rpeApiProvider).logRunFeedback(
+                                  runningSessionId: sessionId,
+                                  durationMinutes: result.duration.inMinutes
+                                      .clamp(1, 1440)
+                                      .toInt(),
+                                  rpeScore: result.rpe,
+                                  stressLevel: result.stressLevel
+                                      .clamp(1, 10)
+                                      .toInt(),
+                                  mood: _apiMoods[
+                                    result.moodIndex.clamp(0, 4).toInt()
+                                  ],
+                                  hasPain: result.hasInjury,
+                                );
+                            if (!mounted) return;
+                            ref
+                                .read(userProvider)
+                                .addRunStats(km: result.distanceKm, sessions: 1);
+                            ref.read(missionProvider).setDone('run', true);
+                            ref.read(runSetupProvider).reset();
+                            Navigator.of(context).pushReplacement(
+                              MaterialPageRoute(
+                                builder: (_) =>
+                                    const RewardScreen(coin: 20, exp: 50),
+                              ),
+                            );
+                          } catch (_) {
+                            if (mounted) {
+                              showAppToast(
+                                context,
+                                'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ กรุณาลองอีกครั้ง',
+                              );
+                            }
+                          } finally {
+                            if (mounted) setState(() => _isSubmitting = false);
+                          }
+                        },
                 ),
               ],
             ),

@@ -7,9 +7,7 @@ import '../services/quest_api.dart';
 import '../services/running_session_api.dart';
 import 'run_setup_provider.dart';
 
-/// Drives the "กำลังวิ่ง" screen. Since there's no GPS/backend yet, distance
-/// is simulated at a plausible easy-run pace so the UI has real numbers to
-/// animate with.
+/// Drives the running screen using elapsed time plus GPS distance updates.
 class RunSessionNotifier extends ChangeNotifier {
   RunSessionNotifier(this._questApi, this._sessionApi);
   final QuestApi _questApi;
@@ -21,6 +19,7 @@ class RunSessionNotifier extends ChangeNotifier {
   bool isStopping = false;
   int elapsedSeconds = 0;
   double distanceKm = 0;
+  double speedKmh = 0;
 
   final double goalDistanceKm = 5.0;
   final String goalPace = '7 min/km';
@@ -39,9 +38,6 @@ class RunSessionNotifier extends ChangeNotifier {
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (isPaused) return;
       elapsedSeconds += 1;
-      // ~8.5 km/h mock easy pace.
-      distanceKm += 8.5 / 3600;
-      if (distanceKm >= goalDistanceKm) distanceKm = goalDistanceKm;
       notifyListeners();
     });
     notifyListeners();
@@ -49,6 +45,13 @@ class RunSessionNotifier extends ChangeNotifier {
 
   void togglePause() {
     isPaused = !isPaused;
+    notifyListeners();
+  }
+
+  void recordGpsDistance({required double meters, required double seconds}) {
+    if (!isRunning || isPaused || meters <= 0 || seconds <= 0) return;
+    distanceKm += meters / 1000;
+    speedKmh = (meters / seconds) * 3.6;
     notifyListeners();
   }
 

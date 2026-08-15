@@ -6,7 +6,6 @@ import '../../models/training_models.dart';
 import '../../providers/program_provider.dart';
 import '../../providers/training_plan_provider.dart';
 import '../../widgets/common.dart';
-import '../home/main_shell.dart';
 
 /// A week-by-week builder where the user chooses the training day for each
 /// workout in the registered plan.
@@ -366,11 +365,12 @@ class _ScheduleBuilder extends ConsumerWidget {
                         const Duration(milliseconds: 800),
                       );
                       if (!context.mounted) return;
+                      // The schedule screen is opened from MainShell.  Return
+                      // to that existing shell instead of adding another
+                      // shell to the navigation stack, so the user always
+                      // lands back on the Home tab after a successful save.
                       Navigator.of(context, rootNavigator: true)
-                          .pushAndRemoveUntil(
-                        MaterialPageRoute(builder: (_) => const MainShell()),
-                        (route) => false,
-                      );
+                          .popUntil((route) => route.isFirst);
                     } else {
                       showAppToast(
                         context,

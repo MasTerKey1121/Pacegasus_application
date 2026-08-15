@@ -25,7 +25,6 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      ref.read(runProvider).start();
       _startLocationTracking();
     });
   }
@@ -44,7 +43,12 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   _MapPoint _currentPosition = const _MapPoint(13.7563, 100.5018);
   final List<_MapPoint> _routePoints = [];
   bool _hasLocationPermission = false;
+  bool _hasInitialPosition = false;
   bool _mapReady = false;
+  bool _countdownStarted = false;
+  int _countdown = 3;
+  Timer? _countdownTimer;
+  Position? _lastMeasuredPosition;
   String? _locationMessage;
 
   String get _gistdaApiKey => dotenv.env['GISTDA_MAP_API_KEY'] ?? '';
@@ -68,6 +72,30 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     }
   }
 
+  bool get _mapCanLoad => !Platform.isWindows && _gistdaApiKey.isNotEmpty;
+
+  void _maybeStartCountdown() {
+    if (_countdownStarted || !_hasLocationPermission || !_hasInitialPosition) {
+      return;
+    }
+    if (_mapCanLoad && !_mapReady) return;
+    _countdownStarted = true;
+    _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
+      if (!mounted) return timer.cancel();
+      if (_countdown <= 1) {
+        timer.cancel();
+        setState(() => _countdown = 0);
+        _routePoints
+          ..clear()
+          ..add(_currentPosition);
+        _lastMeasuredPosition = null;
+        ref.read(runProvider).start();
+      } else {
+        setState(() => _countdown--);
+      }
+    });
+  }
+
   Future<void> _startLocationTracking() async {
     var permission = await Geolocator.checkPermission();
     if (permission == LocationPermission.denied) {
@@ -88,7 +116,11 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       return;
     }
 
-    if (mounted) setState(() => _hasLocationPermission = true);
+    if (mounted) {
+      setState(() => _hasLocationPermission = true);
+      if (!_mapCanLoad) _mapReady = true;
+    }
+    _maybeStartCountdown();
 
     _positionSub = Geolocator.getPositionStream(
       locationSettings: const LocationSettings(
@@ -98,7 +130,25 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     ).listen((pos) {
       final latLng = _MapPoint(pos.latitude, pos.longitude);
       if (!mounted) return;
+      final run = ref.read(runProvider);
+      if (run.isRunning && !run.isPaused && _lastMeasuredPosition != null) {
+        final meters = Geolocator.distanceBetween(
+          _lastMeasuredPosition!.latitude,
+          _lastMeasuredPosition!.longitude,
+          pos.latitude,
+          pos.longitude,
+        );
+        final seconds = pos.timestamp
+            .difference(_lastMeasuredPosition!.timestamp)
+            .inMilliseconds / 1000;
+        // Ignore GPS jumps and stationary noise.
+        if (meters >= 2 && meters < 150 && seconds > 0) {
+          run.recordGpsDistance(meters: meters, seconds: seconds);
+        }
+      }
+      _lastMeasuredPosition = pos;
       setState(() {
+        _hasInitialPosition = true;
         _currentPosition = latLng;
         if (_routePoints.isEmpty ||
             Geolocator.distanceBetween(
@@ -113,12 +163,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         _locationMessage = null;
       });
       _syncMap();
+      _maybeStartCountdown();
     });
   }
 
   @override
   void dispose() {
     _positionSub?.cancel();
+    _countdownTimer?.cancel();
     _mapKey.currentState?.remove();
     super.dispose();
   }
@@ -145,10 +197,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                       _Stat(value: run.distanceKm.toStringAsFixed(2), label: 'กม.'),
                       _Stat(value: run.elapsedLabel, label: 'เวลา'),
                       _Stat(
-                          value: run.distanceKm > 0
-                              ? '${(run.elapsedSeconds / 60 / run.distanceKm).toStringAsFixed(1)}'
-                              : '--:--',
-                          label: 'pace'),
+                          value: run.speedKmh > 0
+                              ? run.speedKmh.toStringAsFixed(1)
+                              : '0.0',
+                          label: 'กม./ชม.'),
                     ],
                   ),
                   const SizedBox(height: 22),
@@ -173,8 +225,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                 IJavascriptChannel(
                                   name: 'Ready',
                                   onMessageReceived: (_) {
-                                    _mapReady = true;
+                                    if (mounted) setState(() => _mapReady = true);
                                     _syncMap();
+                                    _maybeStartCountdown();
                                   },
                                 ),
                               ],
@@ -201,6 +254,35 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                   _locationMessage!,
                                   textAlign: TextAlign.center,
                                   style: AppText.body(size: 12),
+                                ),
+                              ),
+                            ),
+                          if (!run.isRunning)
+                            Positioned.fill(
+                              child: Container(
+                                color: Colors.black.withOpacity(.38),
+                                alignment: Alignment.center,
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    if (!_hasLocationPermission ||
+                                        (_mapCanLoad && !_mapReady))
+                                      const CircularProgressIndicator()
+                                    else
+                                      Text(
+                                        _countdown > 0 ? '$_countdown' : 'เริ่ม!',
+                                        style: AppText.heading(size: 64),
+                                      ),
+                                    const SizedBox(height: 12),
+                                    Text(
+                                      !_hasLocationPermission
+                                          ? 'กำลังเชื่อมต่อ GPS'
+                                          : (_mapCanLoad && !_mapReady)
+                                          ? 'กำลังโหลดแผนที่'
+                                          : 'เตรียมพร้อมออกวิ่ง',
+                                      style: AppText.heading(size: 15),
+                                    ),
+                                  ],
                                 ),
                               ),
                             ),
@@ -269,7 +351,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                   Row(
                     children: [
                       GestureDetector(
-                        onTap: run.isStopping
+                        onTap: !run.isRunning || run.isStopping
                             ? null
                             : () => ref.read(runProvider).togglePause(),
                         child: Container(
@@ -294,7 +376,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                           loading: run.isStopping,
                           gradient: LinearGradient(
                               colors: [AppColors.red1, AppColors.red2]),
-                          onTap: run.isStopping
+                          onTap: !run.isRunning || run.isStopping
                               ? null
                               : () async {
                                   final confirmed = await showDialog<bool>(
