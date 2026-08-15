@@ -641,8 +641,8 @@ String _durationLabel(int? minWeeks, int? maxWeeks) {
 }
 
 String _planName(String? goal) => switch (goal) {
-      'sub_50' => '5K Sub 50',
-      '10k_sub_1.40' => '10K Sub 1.40',
-      '21k_sub_3.30' => 'Half Marathon Sub 3.30',
+      'sub_50' => 'Sub 50 5K ',
+      '10k_sub_1.40' => 'Sub 1.40 10K',
+      '21k_sub_3.30' => 'Sub 3.30 Half Marathon',
       _ => 'แผนการฝึกของคุณ',
     };
