@@ -43,27 +43,38 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
 
       // โหลดข้อมูลจริงจาก Backend
       if (sessionId != null) {
-        final detail = await ref
-            .read(runningSessionApiProvider)
-            .getDetail(sessionId: sessionId);
-
-        final data = detail['data'];
-
-        if (mounted && data != null) {
-          setState(() {
-            result = RunResult(
-              distanceKm: (data['distanceKm'] ?? 0).toDouble(),
-              duration: Duration(
-                seconds: data['durationSeconds'] ?? 0,
-              ),
-              avgPace: data['avgPace'] ?? '-',
-              calories: data['calories'] ?? 0,
-              rpe: data['rpe'] ?? result.rpe,
-              stressLevel: data['stressLevel'] ?? result.stressLevel,
-              moodIndex: data['moodIndex'] ?? result.moodIndex,
-              hasInjury: data['hasInjury'] ?? result.hasInjury,
+        try {
+          final detail = await ref
+              .read(runningSessionApiProvider)
+              .getDetail(sessionId: sessionId);
+          final data = detail['data'];
+          if (mounted && data is Map) {
+            // PostgreSQL returns snake_case while older API responses used
+            // camelCase. Accept both so this screen always shows the session
+            // the runner has just completed.
+            final distance = _asDouble(
+              data['distanceKm'] ?? data['distance_km'],
+              result.distanceKm,
             );
-          });
+            final durationSeconds = _asInt(
+              data['durationSeconds'] ?? data['duration_seconds'],
+              result.duration.inSeconds,
+            );
+            setState(() {
+              result = RunResult(
+                distanceKm: distance,
+                duration: Duration(seconds: durationSeconds),
+                avgPace: _paceLabel(distance, durationSeconds),
+                calories: (distance * 62).round(),
+                rpe: result.rpe,
+                stressLevel: result.stressLevel,
+                moodIndex: result.moodIndex,
+                hasInjury: result.hasInjury,
+              );
+            });
+          }
+        } catch (error) {
+          debugPrint('Could not load completed running session: $error');
         }
       }
 
@@ -81,6 +92,22 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   void dispose() {
     _painNoteController.dispose();
     super.dispose();
+  }
+
+  double _asDouble(Object? value, double fallback) => value is num
+      ? value.toDouble()
+      : double.tryParse(value?.toString() ?? '') ?? fallback;
+
+  int _asInt(Object? value, int fallback) => value is num
+      ? value.toInt()
+      : int.tryParse(value?.toString() ?? '') ?? fallback;
+
+  String _paceLabel(double distanceKm, int durationSeconds) {
+    if (distanceKm <= 0 || durationSeconds <= 0) return '--:--';
+    final totalSeconds = (durationSeconds / distanceKm).round();
+    final minutes = totalSeconds ~/ 60;
+    final seconds = (totalSeconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$seconds';
   }
 
   @override
@@ -129,50 +156,27 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                   label: 'แคลอรี่')),
                         ]),
                         const SizedBox(height: 24),
-                        Align(
-                          alignment: Alignment.centerLeft,
-                          child: Text('ความหนัก RPE',
-                              style: AppText.body(
-                                  size: 13, weight: FontWeight.w600)),
-                        ),
-                        const SizedBox(height: 10),
-                        Wrap(
-                          spacing: 8,
-                          runSpacing: 8,
-                          children: List.generate(10, (i) {
-                            final v = i + 1;
-                            final active = result.rpe == v;
-                            return GestureDetector(
-                              onTap: () => setState(() => result.rpe = v),
-                              child: Container(
-                                width: 36,
-                                height: 36,
-                                alignment: Alignment.center,
-                                decoration: BoxDecoration(
-                                  gradient:
-                                      active ? AppColors.purpleGradient : null,
-                                  color: active
-                                      ? null
-                                      : Colors.white.withOpacity(.05),
-                                  borderRadius: BorderRadius.circular(10),
-                                ),
-                                child: Text('$v',
-                                    style: AppText.heading(
-                                        size: 13,
-                                        color: active
-                                            ? Colors.white
-                                            : AppColors.textSecondary)),
-                              ),
-                            );
-                          }),
+                        LabeledSlider(
+                          label: 'ความหนัก RPE',
+                          value: result.rpe.toDouble(),
+                          min: 1,
+                          max: 10,
+                          divisions: 9,
+                          minCaption: 'เบาสบาย',
+                          maxCaption: 'หนักสุด',
+                          onChanged: (value) =>
+                              setState(() => result.rpe = value.round()),
                         ),
                         const SizedBox(height: 6),
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                              'ระดับ ${result.rpe} — ${result.rpe >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
-                              style: AppText.body(
-                                  size: 11.5, color: AppColors.textTertiary)),
+                            'ระดับ ${result.rpe} — ${result.rpe >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
+                            style: AppText.body(
+                              size: 11.5,
+                              color: AppColors.textTertiary,
+                            ),
+                          ),
                         ),
                         const SizedBox(height: 20),
                         LabeledSlider(
