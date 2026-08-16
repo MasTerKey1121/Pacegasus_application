@@ -8,6 +8,7 @@ import '../../widgets/common.dart';
 import 'reward_screen.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../providers/rpe_provider.dart';
+import '../../services/api_client.dart';
 
 const _moods = ['😩', '🙁', '🙂', '😃', '🤩'];
 
@@ -22,6 +23,7 @@ class RunSummaryScreen extends ConsumerStatefulWidget {
 class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   late RunResult result = widget.result;
   bool _isSubmitting = false;
+  final _painNoteController = TextEditingController();
 
   static const _apiMoods = [
     'exhausted',
@@ -73,6 +75,12 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
             );
       }
     });
+  }
+
+  @override
+  void dispose() {
+    _painNoteController.dispose();
+    super.dispose();
   }
 
   @override
@@ -240,6 +248,28 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                     setState(() => result.hasInjury = true)),
                           ),
                         ]),
+                        if (result.hasInjury) ...[
+                          const SizedBox(height: 12),
+                          TextField(
+                            controller: _painNoteController,
+                            maxLength: 1000,
+                            maxLines: 3,
+                            style: AppText.body(size: 13),
+                            decoration: InputDecoration(
+                              hintText: 'ระบุอาการหรือบริเวณที่เจ็บ',
+                              hintStyle: AppText.body(
+                                size: 12.5,
+                                color: AppColors.textTertiary,
+                              ),
+                              filled: true,
+                              fillColor: Colors.white.withOpacity(.05),
+                              border: OutlineInputBorder(
+                                borderRadius: BorderRadius.circular(12),
+                                borderSide: BorderSide(color: AppColors.border),
+                              ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -259,6 +289,14 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                             );
                             return;
                           }
+                          final painNote = _painNoteController.text.trim();
+                          if (result.hasInjury && painNote.isEmpty) {
+                            showAppToast(
+                              context,
+                              'กรุณาระบุอาการหรือบริเวณที่เจ็บ',
+                            );
+                            return;
+                          }
 
                           setState(() => _isSubmitting = true);
                           try {
@@ -275,6 +313,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                     result.moodIndex.clamp(0, 4).toInt()
                                   ],
                                   hasPain: result.hasInjury,
+                                  painNote: painNote,
                                 );
                             if (!mounted) return;
                             ref
@@ -288,6 +327,13 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                     const RewardScreen(coin: 20, exp: 50),
                               ),
                             );
+                          } on ApiException catch (error) {
+                            if (mounted) {
+                              showAppToast(
+                                context,
+                                'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ: ${error.message}',
+                              );
+                            }
                           } catch (_) {
                             if (mounted) {
                               showAppToast(

@@ -13,6 +13,7 @@ class RpeApi {
     required int stressLevel,
     required String mood,
     required bool hasPain,
+    String? painNote,
   }) =>
       client.post(
         '/api/rpe',
@@ -23,7 +24,7 @@ class RpeApi {
           'stressLevel': stressLevel,
           'mood': mood,
           'hasPain': hasPain,
-          'painNote': null,
+          'painNote': hasPain ? painNote : null,
         },
         auth: true,
       );

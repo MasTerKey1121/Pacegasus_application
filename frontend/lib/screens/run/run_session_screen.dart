@@ -24,6 +24,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   @override
   void initState() {
     super.initState();
+    // Do not block GPS recording forever if the map provider cannot finish
+    // loading (for example, an unavailable network or invalid map key).
+    _mapLoadTimer = Timer(const Duration(seconds: 15), _askToStartWithoutMap);
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startLocationTracking();
     });
@@ -45,9 +48,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   bool _hasLocationPermission = false;
   bool _hasInitialPosition = false;
   bool _mapReady = false;
+  bool _mapLoadTimedOut = false;
+  bool _mapLoadDialogShown = false;
+  bool _startWithoutMapApproved = false;
   bool _countdownStarted = false;
   int _countdown = 3;
   Timer? _countdownTimer;
+  Timer? _mapLoadTimer;
   Position? _lastMeasuredPosition;
   String? _locationMessage;
 
@@ -78,7 +85,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     if (_countdownStarted || !_hasLocationPermission || !_hasInitialPosition) {
       return;
     }
-    if (_mapCanLoad && !_mapReady) return;
+    if (_mapCanLoad && !_mapReady) {
+      if (!_mapLoadTimedOut || !_startWithoutMapApproved) return;
+    }
     _countdownStarted = true;
     _countdownTimer = Timer.periodic(const Duration(seconds: 1), (timer) {
       if (!mounted) return timer.cancel();
@@ -94,6 +103,46 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         setState(() => _countdown--);
       }
     });
+  }
+
+  Future<void> _askToStartWithoutMap() async {
+    if (!mounted || _mapReady || !_mapCanLoad || _mapLoadDialogShown) return;
+
+    setState(() {
+      _mapLoadTimedOut = true;
+      _mapLoadDialogShown = true;
+    });
+
+    final shouldStart = await showDialog<bool>(
+      context: context,
+      barrierDismissible: false,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bg2,
+        title: Text('โหลดแผนที่ไม่สำเร็จ', style: AppText.heading(size: 17)),
+        content: Text(
+          'ต้องการเริ่ม Session ต่อโดยไม่แสดงแผนที่ไหม? ระบบยังบันทึกเวลา ระยะทาง และ GPS ได้ตามปกติ',
+          style: AppText.body(size: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('ยกเลิก', style: AppText.body(color: AppColors.red1)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('เริ่ม Session', style: AppText.body(color: AppColors.purple2)),
+          ),
+        ],
+      ),
+    );
+    if (!mounted) return;
+
+    if (shouldStart == true) {
+      setState(() => _startWithoutMapApproved = true);
+      _maybeStartCountdown();
+    } else {
+      Navigator.of(context).pop();
+    }
   }
 
   Future<void> _startLocationTracking() async {
@@ -171,6 +220,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   void dispose() {
     _positionSub?.cancel();
     _countdownTimer?.cancel();
+    _mapLoadTimer?.cancel();
     _mapKey.currentState?.remove();
     super.dispose();
   }
@@ -225,9 +275,22 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                 IJavascriptChannel(
                                   name: 'Ready',
                                   onMessageReceived: (_) {
-                                    if (mounted) setState(() => _mapReady = true);
+                                    _mapLoadTimer?.cancel();
+                                    if (mounted) {
+                                      setState(() {
+                                        _mapReady = true;
+                                        _mapLoadTimedOut = false;
+                                      });
+                                    }
                                     _syncMap();
                                     _maybeStartCountdown();
+                                  },
+                                ),
+                                IJavascriptChannel(
+                                  name: 'error',
+                                  onMessageReceived: (message) {
+                                    debugPrint('Sphere map error: ${message.message}');
+                                    _askToStartWithoutMap();
                                   },
                                 ),
                               ],
@@ -266,7 +329,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
                                     if (!_hasLocationPermission ||
-                                        (_mapCanLoad && !_mapReady))
+                                        (_mapCanLoad &&
+                                            !_mapReady &&
+                                            !_mapLoadTimedOut))
                                       const CircularProgressIndicator()
                                     else
                                       Text(
@@ -277,9 +342,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                     Text(
                                       !_hasLocationPermission
                                           ? 'กำลังเชื่อมต่อ GPS'
-                                          : (_mapCanLoad && !_mapReady)
+                                          : (_mapCanLoad &&
+                                                  !_mapReady &&
+                                                  !_mapLoadTimedOut)
                                           ? 'กำลังโหลดแผนที่'
-                                          : 'เตรียมพร้อมออกวิ่ง',
+                                          : _mapLoadTimedOut
+                                              ? 'แผนที่โหลดไม่สำเร็จ แต่บันทึกการวิ่งได้'
+                                              : 'เตรียมพร้อมออกวิ่ง',
                                       style: AppText.heading(size: 15),
                                     ),
                                   ],
