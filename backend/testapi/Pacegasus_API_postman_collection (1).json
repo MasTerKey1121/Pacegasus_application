@@ -904,7 +904,40 @@
           "response": []
         },
         {
-          "name": "3.2 Delete Profile",
+          "name": "3.2 Get Coin, EXP and Level",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Game progress has all fields', function () {",
+                  "    const progress = pm.response.json().data;",
+                  "    pm.expect(progress).to.include.keys('coinBalance', 'level', 'exp', 'expToNext');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/progress",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "users", "me", "progress"]
+            },
+            "description": "**GET /api/users/me/progress**\n\nดูยอด Coin, Level, EXP ปัจจุบัน และ EXP ที่ต้องใช้เพื่อเลเวลถัดไป"
+          },
+          "response": []
+        },
+        {
+          "name": "3.3 Delete Profile",
           "event": [
             {
               "listen": "test",
@@ -1665,6 +1698,40 @@
               ]
             },
             "description": "**GET /api/v1/programs/quests** (ไม่ส่ง query เลย)\n\nไม่ส่ง `from`/`to` มา — ระบบจะ fallback เป็นสัปดาห์ปัจจุบันให้อัตโนมัติ (ปลอดภัยตาม schema เพราะไม่ส่งทั้งคู่)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`"
+          },
+          "response": []
+        },
+        {
+          "name": "5.6 Complete Daily Quest (Earn Reward)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Response includes reward and game progress', function () {",
+                  "    const reward = pm.response.json().data.reward;",
+                  "    pm.expect(reward).to.have.property('awarded');",
+                  "    pm.expect(reward).to.have.property('progress');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [{ "key": "token", "value": "{{accessToken}}", "type": "string" }]
+            },
+            "method": "PATCH",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/programs/quests/{{mainQuestId}}/complete",
+              "host": ["{{baseUrl}}"],
+              "path": ["api", "programs", "quests", "{{mainQuestId}}", "complete"]
+            },
+            "description": "**PATCH /api/programs/quests/:questId/complete**\n\nทำ Daily Quest สำเร็จและรับ Coin/EXP ตามความยาก: easy 8, tempo 12, vo2max 16, long_run 18 Coin. ตั้งค่า collection variable `mainQuestId` จากรายการ Quest ก่อนทดสอบ"
           },
           "response": []
         }

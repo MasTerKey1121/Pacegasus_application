@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const gameProgressService = require('./gameProgressService');
 
 const NUM_QUESTS_TO_RETURN = 3;
 const MAX_ACTIVE_QUESTS_PER_SESSION = 3;
@@ -249,62 +250,75 @@ async function startSingleSideQuest(client, userId, runningSessionId, item) {
 // ... updateProgress, finishSideQuest, getQuestAlbum เหมือนเดิม ...
 
 async function updateProgress(userId, questId, payload) {
-  const { rows: currentRows } = await db.query(
-    `SELECT id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at
-     FROM user_side_quest_instances
-     WHERE id = $1 AND user_id = $2`,
-    [questId, userId]
-  );
-
-  if (currentRows.length === 0) {
-    throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const current = await getQuestForUpdate(client, userId, questId);
+    const nextFoundCount = payload.foundCount != null ? payload.foundCount : current.found_count + (payload.increment || 0);
+    const foundCount = Math.max(0, Math.min(nextFoundCount, current.target_count));
+    const completed = foundCount >= current.target_count;
+    const instance = await saveCompletion(client, current, foundCount, completed);
+    if (payload.photoUrl) {
+      await client.query(
+        `INSERT INTO quest_album_photos (user_side_quest_instance_id, photo_url, gps_lat, gps_lng) VALUES ($1, $2, $3, $4)`,
+        [questId, payload.photoUrl, payload.gpsLat ?? null, payload.gpsLng ?? null]
+      );
+    }
+    await client.query('COMMIT');
+    return buildInstancePayload(instance);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
+}
 
-  const current = currentRows[0];
-  const nextFoundCount = payload.foundCount != null
-    ? payload.foundCount
-    : (current.found_count + (payload.increment || 0));
+async function getQuestForUpdate(client, userId, questId) {
+  const { rows } = await client.query(
+    `SELECT q.*, t.coin_reward_base FROM user_side_quest_instances q
+     JOIN side_quest_templates t ON t.id = q.side_quest_template_id
+     WHERE q.id = $1 AND q.user_id = $2 FOR UPDATE`, [questId, userId]
+  );
+  if (!rows[0]) throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+  return rows[0];
+}
 
-  const boundedFoundCount = Math.max(0, Math.min(nextFoundCount, current.target_count));
-  const nextStatus = boundedFoundCount >= current.target_count ? 'completed' : current.status;
-
-  const { rows: updatedRows } = await db.query(
+async function saveCompletion(client, current, foundCount, completed) {
+  let reward = null;
+  if (completed) {
+    const coins = current.coin_reward_base;
+    reward = await gameProgressService.award(client, current.user_id, {
+      sourceType: 'side_quest', sourceId: current.id, coins, exp: coins * 2,
+    });
+  }
+  const { rows } = await client.query(
     `UPDATE user_side_quest_instances
-     SET found_count = $3,
-         status = $4,
-         completed_at = CASE WHEN $4 = 'completed' AND status <> 'completed' THEN now() ELSE completed_at END
-     WHERE id = $1 AND user_id = $2
+     SET found_count = $2,
+         status = CASE WHEN $3 THEN 'completed'::side_quest_status_enum ELSE status END,
+         completed_at = CASE WHEN $3 THEN COALESCE(completed_at, now()) ELSE completed_at END,
+         coin_awarded = CASE WHEN $3 THEN GREATEST(coin_awarded, $4) ELSE coin_awarded END
+     WHERE id = $1
      RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
-    [questId, userId, boundedFoundCount, nextStatus]
+    [current.id, foundCount, completed, reward?.awarded ? reward.coins : current.coin_awarded]
   );
-
-  if (payload.photoUrl) {
-    await db.query(
-      `INSERT INTO quest_album_photos (user_side_quest_instance_id, photo_url, gps_lat, gps_lng)
-       VALUES ($1, $2, $3, $4)`,
-      [questId, payload.photoUrl, payload.gpsLat ?? null, payload.gpsLng ?? null]
-    );
-  }
-
-  return buildInstancePayload(updatedRows[0]);
+  return rows[0];
 }
 
 async function finishSideQuest(userId, questId) {
-  const { rows } = await db.query(
-    `UPDATE user_side_quest_instances
-     SET status = 'completed',
-         found_count = GREATEST(found_count, target_count),
-         completed_at = COALESCE(completed_at, now())
-     WHERE id = $1 AND user_id = $2
-     RETURNING id, running_session_id, user_id, side_quest_template_id, target_count, found_count, status, coin_awarded, started_at, completed_at`,
-    [questId, userId]
-  );
-
-  if (rows.length === 0) {
-    throw new ApiError(404, 'ไม่พบ side quest instance ที่ต้องการ');
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const current = await getQuestForUpdate(client, userId, questId);
+    const instance = await saveCompletion(client, current, current.target_count, true);
+    await client.query('COMMIT');
+    return buildInstancePayload(instance);
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
   }
-
-  return buildInstancePayload(rows[0]);
 }
 
 async function getQuestAlbum(userId, questId) {
@@ -323,9 +337,12 @@ async function getQuestAlbum(userId, questId) {
 module.exports = {
   getTodaySideQuests,
   startSideQuests,
+  // Backward-compatible single-item helper for callers from the first API version.
+  startSideQuest: async (userId, runningSessionId, instance) => {
+    const instances = await startSideQuests(userId, runningSessionId, [instance]);
+    return instances[0];
+  },
   updateProgress,
   finishSideQuest,
   getQuestAlbum,
 };
-
-

@@ -116,6 +116,13 @@ const getQuestsInRange = asyncHandler(async (req, res) => {
   });
 });
 
+const completeMainQuest = asyncHandler(async (req, res) => {
+  const { value, error } = questIdParamSchema.validate({ questId: req.params.questId });
+  if (error) throw new ApiError(400, error.message);
+  const result = await programService.completeMainQuest(req.user.id, value.questId);
+  res.status(200).json({ success: true, data: result });
+});
+
 module.exports = {
   getProgramTemplates,
   startProgram,
@@ -124,4 +131,5 @@ module.exports = {
   addManualQuestsBatch,
   deleteManualQuest,
   getQuestsInRange,
+  completeMainQuest,
 };

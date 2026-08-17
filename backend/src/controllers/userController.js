@@ -1,12 +1,13 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const gameProgressService = require('../services/gameProgressService');
 
 // GET /api/users/me/full -> profile + all onboarding data, handy for the app's home screen
 const getFullProfile = asyncHandler(async (req, res) => {
   const userId = req.user.id;
 
-  const [{ rows: userRows }, { rows: basicRows }, { rows: injuryRows }, { rows: goalRows }, { rows: historyRows }] =
+  const [{ rows: userRows }, { rows: basicRows }, { rows: injuryRows }, { rows: goalRows }, { rows: historyRows }, { rows: gameRows }] =
     await Promise.all([
       db.query(`SELECT * FROM users WHERE id = $1`, [userId]),
       db.query(`SELECT * FROM user_basic_info WHERE user_id = $1`, [userId]),
@@ -21,6 +22,7 @@ const getFullProfile = asyncHandler(async (req, res) => {
       ),
       db.query(`SELECT * FROM user_goals WHERE user_id = $1 ORDER BY is_primary DESC, created_at`, [userId]),
       db.query(`SELECT * FROM user_running_history WHERE user_id = $1`, [userId]),
+      db.query(`SELECT coin_balance, level, exp, exp_to_next FROM user_game_progress WHERE user_id = $1`, [userId]),
     ]);
 
   if (userRows.length === 0) throw new ApiError(404, 'ไม่พบผู้ใช้งาน');
@@ -43,8 +45,16 @@ const getFullProfile = asyncHandler(async (req, res) => {
       injury: injuryRows[0] || { has_injury_history: false, injuries: [] },
       goals: goalRows,
       runningHistory: historyRows[0] || null,
+      gameProgress: gameRows[0]
+        ? { coinBalance: gameRows[0].coin_balance, level: gameRows[0].level, exp: gameRows[0].exp, expToNext: gameRows[0].exp_to_next }
+        : { coinBalance: 0, level: 1, exp: 0, expToNext: 200 },
     },
   });
+});
+
+const getGameProgress = asyncHandler(async (req, res) => {
+  const progress = await gameProgressService.getProgress(req.user.id);
+  res.status(200).json({ success: true, data: progress });
 });
 
 
@@ -87,5 +97,4 @@ const deleteUser = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getFullProfile, deleteUser };
-
+module.exports = { getFullProfile, getGameProgress, deleteUser };

@@ -10,6 +10,7 @@ router.post('/start', programController.startProgram);
 router.get('/current/week', programController.getCurrentWeek);
 router.post('/quests', programController.addManualQuest);
 router.post('/quests/batch', programController.addManualQuestsBatch);
+router.patch('/quests/:questId/complete', programController.completeMainQuest);
 router.delete('/quests/:questId', programController.deleteManualQuest);
 router.get('/quests', programController.getQuestsInRange);
 

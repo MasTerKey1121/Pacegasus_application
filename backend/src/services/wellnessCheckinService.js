@@ -5,6 +5,7 @@
 // ============================================================
 
 const { pool } = require('../config/db'); // ตาม convention เดียวกับ migrate.js
+const gameProgressService = require('./gameProgressService');
 
 /**
  * ตรวจสอบสถานะ check-in ของ "วันนี้" ว่าทำแล้วหรือยัง
@@ -34,23 +35,32 @@ async function getTodayStatus(userId) {
  */
 async function createCheckin(userId, data) {
     const { sleepQuality, energyLevel, muscleSoreness, stressLevel, motivation, note } = data;
+    const client = await pool.connect();
 
     try {
-        const { rows } = await pool.query(
+        await client.query('BEGIN');
+        const { rows } = await client.query(
             `INSERT INTO daily_wellness_checkins
                 (user_id, sleep_quality, energy_level, muscle_soreness, stress_level, motivation, note)
              VALUES ($1, $2, $3, $4, $5, $6, $7)
              RETURNING *`,
             [userId, sleepQuality, energyLevel, muscleSoreness, stressLevel, motivation, note || null]
         );
-        return rows[0];
+        const reward = await gameProgressService.award(client, userId, {
+            sourceType: 'daily_wellness', sourceId: rows[0].checkin_id, coins: 5, exp: 10,
+        });
+        await client.query('COMMIT');
+        return { ...rows[0], reward };
     } catch (err) {
+        await client.query('ROLLBACK');
         if (err.code === '23505') { // unique_violation: uq_wellness_checkin_user_date
             const dupError = new Error('ผู้ใช้ทำ Wellness Check-in ของวันนี้ไปแล้ว ใช้ updateCheckin แทน');
             dupError.code = 'ALREADY_CHECKED_IN';
             throw dupError;
         }
         throw err;
+    } finally {
+        client.release();
     }
 }
 
