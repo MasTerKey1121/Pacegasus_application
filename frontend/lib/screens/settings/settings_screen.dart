@@ -91,14 +91,19 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           _MenuTile(icon: Icons.person_outline, label: 'แก้ไขโปรไฟล์', onTap: () {}),
           const SizedBox(height: 10),
           if (program.isRegistered)
-            _TrainingProgramTile(
-              title: template?['goal_label']?.toString() ?? 'โปรแกรมวิ่งของฉัน',
-              description: template?['description']?.toString() ??
-                  'ตารางซ้อมที่คุณลงทะเบียนไว้ สามารถดูและจัดสัปดาห์ปัจจุบันหรืออนาคตได้',
-              onEdit: () => Navigator.of(context).push(
-                MaterialPageRoute(builder: (_) => const TrainingScheduleScreen()),
+            _MenuTile(
+              icon: Icons.directions_run_rounded,
+              label: 'แก้ไขโปรแกรมวิ่ง',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (_) => _TrainingProgramDetailsScreen(
+                    title: template?['goal_label']?.toString() ?? 'โปรแกรมวิ่งของฉัน',
+                    description: template?['description']?.toString() ??
+                        'ตารางซ้อมที่คุณลงทะเบียนไว้ สามารถดูและจัดสัปดาห์ปัจจุบันหรืออนาคตได้',
+                    onDelete: _confirmDeleteProgram,
+                  ),
+                ),
               ),
-              onDelete: _confirmDeleteProgram,
             ),
           if (program.isRegistered) const SizedBox(height: 10),
           _MenuTile(icon: Icons.menu_book_outlined, label: 'ประวัติการวิ่ง', onTap: () {}),
@@ -152,6 +157,55 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 }
 
+class _TrainingProgramDetailsScreen extends StatelessWidget {
+  const _TrainingProgramDetailsScreen({
+    required this.title,
+    required this.description,
+    required this.onDelete,
+  });
+
+  final String title;
+  final String description;
+  final VoidCallback onDelete;
+
+  @override
+  Widget build(BuildContext context) => Scaffold(
+        body: AppBackground(
+          child: SafeArea(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    children: [
+                      RoundIconButton(
+                        icon: Icons.arrow_back,
+                        onTap: () => Navigator.of(context).pop(),
+                      ),
+                      const SizedBox(width: 14),
+                      Text('แก้ไขโปรแกรมวิ่ง', style: AppText.heading(size: 19)),
+                    ],
+                  ),
+                  const SizedBox(height: 24),
+                  _TrainingProgramTile(
+                    title: title,
+                    description: description,
+                    onEdit: () => Navigator.of(context).push(
+                      MaterialPageRoute(
+                        builder: (_) => const TrainingScheduleScreen(),
+                      ),
+                    ),
+                    onDelete: onDelete,
+                  ),
+                ],
+              ),
+            ),
+          ),
+        ),
+      );
+}
+
 class _TrainingProgramTile extends StatefulWidget {
   const _TrainingProgramTile({
     required this.title,
@@ -192,7 +246,7 @@ class _TrainingProgramTileState extends State<_TrainingProgramTile> {
                   ),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: Text('แก้ไขโปรแกรมวิ่ง',
+                    child: Text(widget.title,
                         style: AppText.body(size: 14, weight: FontWeight.w600)),
                   ),
                   AnimatedRotation(

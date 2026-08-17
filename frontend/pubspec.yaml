@@ -14,8 +14,8 @@ dependencies:
   http: ^1.2.2
   flutter_secure_storage: ^9.2.2
   geolocator: ^13.0.0
-  sphere_maps_flutter: ^1.4.1
   flutter_dotenv: ^5.1.0
+  google_maps_flutter: ^2.18.0
 
 dev_dependencies:
   flutter_test:
