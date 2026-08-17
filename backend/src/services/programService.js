@@ -526,6 +526,51 @@ async function getQuestsInRange(userId, from, to) {
   };
 }
 
+const MAIN_QUEST_REWARDS = {
+  easy: { coins: 8, exp: 20 },
+  tempo: { coins: 12, exp: 30 },
+  vo2max: { coins: 16, exp: 40 },
+  threshold: { coins: 16, exp: 40 },
+  long_run: { coins: 18, exp: 45 },
+};
+
+async function completeMainQuest(userId, questId) {
+  const gameProgressService = require('./gameProgressService');
+  const client = await db.getClient();
+  try {
+    await client.query('BEGIN');
+    const { rows } = await client.query(
+      `SELECT mq.id, mq.status, mq.session_type
+       FROM main_quest_instances mq
+       JOIN user_programs up ON up.id = mq.user_program_id
+       WHERE mq.id = $1 AND up.user_id = $2 FOR UPDATE`,
+      [questId, userId]
+    );
+    if (!rows[0]) throw new ApiError(404, 'ไม่พบ Daily Quest ที่ต้องการ');
+    const quest = rows[0];
+    const rewardRule = MAIN_QUEST_REWARDS[quest.session_type];
+    if (!rewardRule) throw new ApiError(400, 'ประเภท Daily Quest นี้ยังไม่มีการตั้งค่ารางวัล');
+
+    const { rows: completedRows } = await client.query(
+      `UPDATE main_quest_instances SET status = 'completed', completed_at = COALESCE(completed_at, now())
+       WHERE id = $1
+       RETURNING id, scheduled_date, session_type, planned_value, unit, status, actual_value,
+                 rpe_reported, is_bonus, running_session_id, completed_at`,
+      [questId]
+    );
+    const reward = await gameProgressService.award(client, userId, {
+      sourceType: 'daily_quest', sourceId: questId, ...rewardRule,
+    });
+    await client.query('COMMIT');
+    return { quest: completedRows[0], reward };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+
 module.exports = {
   getProgramTemplates,
   startProgram,
@@ -534,4 +579,5 @@ module.exports = {
   addManualQuestsBatch,
   deleteManualQuest,
   getQuestsInRange,
+  completeMainQuest,
 };

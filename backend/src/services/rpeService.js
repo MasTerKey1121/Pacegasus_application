@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const gameProgressService = require('./gameProgressService');
 
 async function logRpe(userId, data) {
   const validScore = (score) => Number.isInteger(score) && score >= 1 && score <= 10;
@@ -19,7 +20,10 @@ async function logRpe(userId, data) {
     if (!rows[0]) throw new ApiError(404, 'ไม่พบ running session ของผู้ใช้นี้');
   }
 
-  const { rows } = await db.query(
+  const client = await db.getClient();
+  try {
+  await client.query('BEGIN');
+  const { rows } = await client.query(
     `INSERT INTO rpe_logs (
        user_id, running_session_id, duration_minutes, rpe_score, stress_level,
        mood, has_pain, pain_note, session_rpe, logged_at
@@ -29,7 +33,17 @@ async function logRpe(userId, data) {
       data.stressLevel, data.mood, data.hasPain, data.hasPain ? data.painNote.trim() : null,
       sessionRpe, data.loggedAt || null]
   );
-  return rows[0];
+  const reward = await gameProgressService.award(client, userId, {
+    sourceType: 'rpe_log', sourceId: rows[0].id, coins: 5, exp: 5,
+  });
+  await client.query('COMMIT');
+  return { ...rows[0], reward };
+  } catch (err) {
+    await client.query('ROLLBACK');
+    throw err;
+  } finally {
+    client.release();
+  }
 }
 
 async function getRpeHistory(userId, filters) {
