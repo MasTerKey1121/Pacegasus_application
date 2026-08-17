@@ -6,6 +6,7 @@ import '../../models/training_models.dart';
 import '../../providers/program_provider.dart';
 import '../../providers/training_plan_provider.dart';
 import '../../widgets/common.dart';
+import '../home/main_shell.dart';
 
 /// A week-by-week builder where the user chooses the training day for each
 /// workout in the registered plan.
@@ -77,7 +78,11 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
                   )
                 else
                   Expanded(
-                    child: _ScheduleBuilder(template: template, plan: plan),
+                    child: _ScheduleBuilder(
+                      template: template,
+                      plan: plan,
+                      startDate: program.programStartDate,
+                    ),
                   ),
               ],
             ),
@@ -143,10 +148,15 @@ Future<void> _changePlanWeeks(WidgetRef ref, int weeks) async {
 }
 
 class _ScheduleBuilder extends ConsumerWidget {
-  const _ScheduleBuilder({required this.template, required this.plan});
+  const _ScheduleBuilder({
+    required this.template,
+    required this.plan,
+    required this.startDate,
+  });
 
   final Map<String, dynamic>? template;
   final TrainingPlanNotifier plan;
+  final DateTime? startDate;
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -158,6 +168,8 @@ class _ScheduleBuilder extends ConsumerWidget {
         .toList();
     final isCurrentWeekComplete = plan.isWeekComplete(plan.currentWeek);
     final isCurrentWeekSaved = plan.isWeekSaved(plan.currentWeek);
+    final isCurrentWeekEditable =
+        startDate != null && plan.isWeekEditable(plan.currentWeek, startDate!);
     final hasPhases = _mapList(template?['programPhases']).isNotEmpty;
     final progress = plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
     final duration = _durationLabel(
@@ -202,18 +214,20 @@ class _ScheduleBuilder extends ConsumerWidget {
               ],
             ),
           ),
-          const SectionLabel(title: 'เลือกระยะเวลาฝึกของคุณ'),
-          Wrap(
-            spacing: 8,
-            runSpacing: 8,
-            children: plan.availablePlanLengths
-                .map((weeks) => SelectChip(
-                      label: '$weeks สัปดาห์',
-                      active: plan.planWeeks == weeks,
-                      onTap: () => _changePlanWeeks(ref, weeks),
-                    ))
-                .toList(),
-          ),
+          if (!plan.hasSavedWeeks) ...[
+            const SectionLabel(title: 'เลือกระยะเวลาฝึกของคุณ'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: plan.availablePlanLengths
+                  .map((weeks) => SelectChip(
+                        label: '$weeks สัปดาห์',
+                        active: plan.planWeeks == weeks,
+                        onTap: () => _changePlanWeeks(ref, weeks),
+                      ))
+                  .toList(),
+            ),
+          ],
           if (hasPhases) ...[
             const SectionLabel(title: 'แผนการฝึกของคุณ'),
             Text(
@@ -258,7 +272,7 @@ class _ScheduleBuilder extends ConsumerWidget {
             style: AppText.heading(size: 14),
           ),
           const SizedBox(height: 12),
-          if (workouts.isNotEmpty)
+          if (isCurrentWeekEditable && workouts.isNotEmpty)
             Wrap(
               spacing: 8,
               runSpacing: 8,
@@ -273,9 +287,15 @@ class _ScheduleBuilder extends ConsumerWidget {
             ),
           const SizedBox(height: 16),
           Text(
-            plan.selectedType == null
-                ? 'เลือกการซ้อม แล้วแตะวันที่ต้องการลงตาราง'
-                : 'กำลังเลือก ${sessionMeta[plan.selectedType]!.label} แล้วแตะวันที่ว่าง',
+            plan.allWeeksSaved
+                ? 'คุณลงตารางครบทุกสัปดาห์แล้ว'
+                : !isCurrentWeekEditable
+                    ? isCurrentWeekSaved
+                        ? 'สัปดาห์นี้บันทึกแล้ว จึงแก้ไขไม่ได้'
+                        : 'สัปดาห์ที่ผ่านมาแก้ไขไม่ได้'
+                    : plan.selectedType == null
+                        ? 'เลือกการซ้อม แล้วแตะวันที่ต้องการลงตาราง'
+                        : 'กำลังเลือก ${sessionMeta[plan.selectedType]!.label} แล้วแตะวันที่ว่าง',
             style: AppText.body(size: 12, color: AppColors.textSecondary),
           ),
           const SizedBox(height: 10),
@@ -285,6 +305,7 @@ class _ScheduleBuilder extends ConsumerWidget {
               7,
               plan.isBlockedForSelectedType,
             ),
+            enabled: isCurrentWeekEditable,
             onTap: (day) {
               final error = ref.read(trainingPlanProvider).handleDayTap(day);
               if (error != null) showAppToast(context, error);
@@ -339,11 +360,18 @@ class _ScheduleBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           GradientButton(
-            label: isCurrentWeekSaved
-                ? 'บันทึกสัปดาห์นี้แล้ว'
-                : 'บันทึกตารางสัปดาห์นี้',
+            label: plan.allWeeksSaved
+                ? 'คุณลงตารางครบแล้ว'
+                : isCurrentWeekSaved
+                    ? 'บันทึกสัปดาห์นี้แล้ว'
+                    : !isCurrentWeekEditable
+                        ? 'สัปดาห์นี้แก้ไขไม่ได้'
+                        : 'บันทึกตารางสัปดาห์นี้',
             loading: ref.watch(programProvider).isSavingSchedule,
-            onTap: isCurrentWeekComplete && !isCurrentWeekSaved
+            onTap: isCurrentWeekEditable &&
+                    !plan.allWeeksSaved &&
+                    isCurrentWeekComplete &&
+                    !isCurrentWeekSaved
                 ? () async {
                     final ok = await ref
                         .read(programProvider)
@@ -356,21 +384,13 @@ class _ScheduleBuilder extends ConsumerWidget {
                       ref
                           .read(trainingPlanProvider)
                           .markWeekSaved(plan.currentWeek);
-                      showAppToast(
-                        context,
-                        'บันทึกตารางฝึกเสร็จสิ้นแล้ว',
-                        isError: false,
-                      );
-                      await Future<void>.delayed(
-                        const Duration(milliseconds: 800),
-                      );
                       if (!context.mounted) return;
-                      // The schedule screen is opened from MainShell.  Return
-                      // to that existing shell instead of adding another
-                      // shell to the navigation stack, so the user always
-                      // lands back on the Home tab after a successful save.
-                      Navigator.of(context, rootNavigator: true)
-                          .popUntil((route) => route.isFirst);
+
+                      Navigator.of(context).pushReplacement(
+                        MaterialPageRoute<void>(
+                          builder: (_) => const MainShell(),
+                        ),
+                      );
                     } else {
                       showAppToast(
                         context,
@@ -543,11 +563,13 @@ class _WeekGrid extends StatelessWidget {
   const _WeekGrid({
     required this.schedule,
     required this.blockedDays,
+    required this.enabled,
     required this.onTap,
   });
 
   final List<SessionType?> schedule;
   final List<bool> blockedDays;
+  final bool enabled;
   final ValueChanged<int> onTap;
   static const _days = ['จ', 'อ', 'พ', 'พฤ', 'ศ', 'ส', 'อา'];
 
@@ -556,6 +578,7 @@ class _WeekGrid extends StatelessWidget {
         children: List.generate(7, (index) {
           final type = schedule[index];
           final meta = type == null ? null : sessionMeta[type];
+          final disabled = !enabled;
           final blocked = type == null && blockedDays[index];
           return Expanded(
             child: Padding(
@@ -565,19 +588,19 @@ class _WeekGrid extends StatelessWidget {
                   Text(_days[index], style: AppText.body(size: 10, color: AppColors.textTertiary)),
                   const SizedBox(height: 5),
                   GestureDetector(
-                    onTap: blocked ? null : () => onTap(index),
+                    onTap: disabled || blocked ? null : () => onTap(index),
                     child: Container(
                       height: 54,
                       alignment: Alignment.center,
                       decoration: BoxDecoration(
-                        color: blocked
+                        color: disabled || blocked
                             ? Colors.white.withOpacity(.08)
                             : type == null
                                 ? Colors.white.withOpacity(.025)
                                 : AppColors.purple1.withOpacity(.18),
                         borderRadius: BorderRadius.circular(10),
                         border: Border.all(
-                          color: blocked
+                          color: disabled || blocked
                               ? Colors.white.withOpacity(.05)
                               : type == null
                                   ? AppColors.border

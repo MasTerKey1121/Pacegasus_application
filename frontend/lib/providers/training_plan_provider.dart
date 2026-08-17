@@ -230,6 +230,25 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
   bool isWeekSaved(int weekIndex) => _savedWeekIndexes.contains(weekIndex);
 
+  bool get hasSavedWeeks => _savedWeekIndexes.isNotEmpty;
+
+  bool get allWeeksSaved =>
+      planWeeks > 0 && _savedWeekIndexes.length >= planWeeks;
+
+  /// A completed week is immutable. An unsaved week can be edited only while
+  /// it is the current calendar week or a future week.
+  bool isWeekEditable(int weekIndex, DateTime startDate) {
+    if (isWeekSaved(weekIndex)) return false;
+    final weekEnd = DateTime(
+      startDate.year,
+      startDate.month,
+      startDate.day,
+    ).add(Duration(days: weekIndex * 7 + 6));
+    final today = DateTime.now();
+    final todayDate = DateTime(today.year, today.month, today.day);
+    return !weekEnd.isBefore(todayDate);
+  }
+
   void markWeekSaved(int weekIndex) {
     _savedWeekIndexes.add(weekIndex);
     notifyListeners();

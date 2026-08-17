@@ -4,7 +4,9 @@ import '../../app_theme.dart';
 import '../../widgets/common.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
+import '../../providers/program_provider.dart';
 import '../auth/login_screen.dart';
+import '../training/training_schedule_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
   const SettingsScreen({super.key});
@@ -15,6 +17,12 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _deleting = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() => ref.read(programProvider).loadTemplates());
+  }
 
   Future<void> _logout() async {
     // เคลียร์ session ผ่าน authProvider (ยิง /api/auth/logout + ลบ refresh token
@@ -69,6 +77,10 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final program = ref.watch(programProvider);
+    final matchingTemplates = program.templates
+        .where((item) => item['level'] == program.selectedTemplateLevel);
+    final template = matchingTemplates.isEmpty ? null : matchingTemplates.first;
     return SingleChildScrollView(
       padding: const EdgeInsets.fromLTRB(20, 18, 20, 30),
       child: Column(
@@ -78,6 +90,17 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           const SectionLabel(title: 'บัญชีและโปรไฟล์'),
           _MenuTile(icon: Icons.person_outline, label: 'แก้ไขโปรไฟล์', onTap: () {}),
           const SizedBox(height: 10),
+          if (program.isRegistered)
+            _TrainingProgramTile(
+              title: template?['goal_label']?.toString() ?? 'โปรแกรมวิ่งของฉัน',
+              description: template?['description']?.toString() ??
+                  'ตารางซ้อมที่คุณลงทะเบียนไว้ สามารถดูและจัดสัปดาห์ปัจจุบันหรืออนาคตได้',
+              onEdit: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const TrainingScheduleScreen()),
+              ),
+              onDelete: _confirmDeleteProgram,
+            ),
+          if (program.isRegistered) const SizedBox(height: 10),
           _MenuTile(icon: Icons.menu_book_outlined, label: 'ประวัติการวิ่ง', onTap: () {}),
           const SizedBox(height: 10),
           _MenuTile(icon: Icons.flag_outlined, label: 'เป้าหมายการวิ่ง', onTap: () {}),
@@ -101,6 +124,112 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
   }
+
+  Future<void> _confirmDeleteProgram() async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) => AlertDialog(
+        backgroundColor: AppColors.bg2,
+        title: Text('ยกเลิกลงทะเบียนโปรแกรม?', style: AppText.heading(size: 17)),
+        content: Text(
+          'เมื่อยกเลิกลงทะเบียน โปรแกรมและตารางซ้อมที่ลงไว้จะหายไปด้วย ยืนยันหรือไม่?',
+          style: AppText.body(size: 13, color: AppColors.textSecondary),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(false),
+            child: Text('ยกเลิก', style: AppText.body(color: AppColors.textSecondary)),
+          ),
+          TextButton(
+            onPressed: () => Navigator.of(dialogContext).pop(true),
+            child: Text('ยกเลิกลงทะเบียน', style: AppText.body(color: AppColors.red1)),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    showAppToast(context, 'ยังยกเลิกลงทะเบียนไม่ได้ เนื่องจาก backend ยังไม่มี API สำหรับยกเลิกโปรแกรม');
+  }
+}
+
+class _TrainingProgramTile extends StatefulWidget {
+  const _TrainingProgramTile({
+    required this.title,
+    required this.description,
+    required this.onEdit,
+    required this.onDelete,
+  });
+
+  final String title;
+  final String description;
+  final VoidCallback onEdit;
+  final VoidCallback onDelete;
+
+  @override
+  State<_TrainingProgramTile> createState() => _TrainingProgramTileState();
+}
+
+class _TrainingProgramTileState extends State<_TrainingProgramTile> {
+  bool _expanded = false;
+
+  @override
+  Widget build(BuildContext context) => AppCard(
+        child: Column(
+          children: [
+            GestureDetector(
+              onTap: () => setState(() => _expanded = !_expanded),
+              child: Row(
+                children: [
+                  Container(
+                    width: 36,
+                    height: 36,
+                    alignment: Alignment.center,
+                    decoration: BoxDecoration(
+                      color: AppColors.purple1.withOpacity(.16),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: const Icon(Icons.directions_run_rounded, size: 18),
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text('แก้ไขโปรแกรมวิ่ง',
+                        style: AppText.body(size: 14, weight: FontWeight.w600)),
+                  ),
+                  AnimatedRotation(
+                    turns: _expanded ? .25 : 0,
+                    duration: const Duration(milliseconds: 180),
+                    child: Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                  ),
+                ],
+              ),
+            ),
+            if (_expanded) ...[
+              const SizedBox(height: 16),
+              Container(height: 1, color: AppColors.border),
+              const SizedBox(height: 14),
+              Align(
+                alignment: Alignment.centerLeft,
+                child: Text(widget.title, style: AppText.heading(size: 16)),
+              ),
+              const SizedBox(height: 4),
+              Text(widget.description,
+                  style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+              const SizedBox(height: 14),
+              Row(
+                children: [
+                  Expanded(
+                    child: OutlineButton(label: 'แก้ไข', onTap: widget.onEdit),
+                  ),
+                  const SizedBox(width: 10),
+                  Expanded(
+                    child: OutlineButton(label: 'ยกเลิกลงทะเบียน', onTap: widget.onDelete),
+                  ),
+                ],
+              ),
+            ],
+          ],
+        ),
+      );
 }
 
 class _MenuTile extends StatelessWidget {
