@@ -35,6 +35,9 @@ android {
         versionName = flutter.versionName
         manifestPlaceholders["GOOGLE_MAPS_API_KEY"] =
             localProperties.getProperty("GOOGLE_MAPS_API_KEY", "")
+        if (localProperties.getProperty("GOOGLE_MAPS_API_KEY").isNullOrBlank()) {
+            logger.warn("[GoogleMap] GOOGLE_MAPS_API_KEY is not configured in android/local.properties; the map will not load.")
+        }
     }
 
     buildTypes {

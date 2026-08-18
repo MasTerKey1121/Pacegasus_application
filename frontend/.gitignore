@@ -1,4 +1,6 @@
 .env
+android/local.properties
+ios/Flutter/GoogleMaps.xcconfig
 
 .dart_tool/
 .packages

@@ -287,12 +287,12 @@ class _ScheduleBuilder extends ConsumerWidget {
             ),
           const SizedBox(height: 16),
           Text(
-            plan.allWeeksSaved
-                ? 'คุณลงตารางครบทุกสัปดาห์แล้ว'
-                : !isCurrentWeekEditable
-                    ? isCurrentWeekSaved
-                        ? 'สัปดาห์นี้บันทึกแล้ว จึงแก้ไขไม่ได้'
-                        : 'สัปดาห์ที่ผ่านมาแก้ไขไม่ได้'
+            !isCurrentWeekEditable
+                ? isCurrentWeekSaved
+                    ? 'มีรายการที่เริ่มหรือทำเสร็จแล้ว จึงแก้ไขสัปดาห์นี้ไม่ได้'
+                    : 'สัปดาห์ที่ผ่านมาแก้ไขไม่ได้'
+                : isCurrentWeekSaved
+                    ? 'แก้ไขได้เฉพาะรายการที่ยังไม่เริ่มทำ แล้วกดบันทึกการแก้ไข'
                     : plan.selectedType == null
                         ? 'เลือกการซ้อม แล้วแตะวันที่ต้องการลงตาราง'
                         : 'กำลังเลือก ${sessionMeta[plan.selectedType]!.label} แล้วแตะวันที่ว่าง',
@@ -360,25 +360,24 @@ class _ScheduleBuilder extends ConsumerWidget {
           ),
           const SizedBox(height: 20),
           GradientButton(
-            label: plan.allWeeksSaved
-                ? 'คุณลงตารางครบแล้ว'
+            label: !isCurrentWeekEditable
+                ? 'สัปดาห์นี้แก้ไขไม่ได้'
                 : isCurrentWeekSaved
-                    ? 'บันทึกสัปดาห์นี้แล้ว'
-                    : !isCurrentWeekEditable
-                        ? 'สัปดาห์นี้แก้ไขไม่ได้'
-                        : 'บันทึกตารางสัปดาห์นี้',
+                    ? 'บันทึกการแก้ไขสัปดาห์นี้'
+                    : 'บันทึกตารางสัปดาห์นี้',
             loading: ref.watch(programProvider).isSavingSchedule,
-            onTap: isCurrentWeekEditable &&
-                    !plan.allWeeksSaved &&
-                    isCurrentWeekComplete &&
-                    !isCurrentWeekSaved
+            onTap: isCurrentWeekEditable && isCurrentWeekComplete
                 ? () async {
-                    final ok = await ref
-                        .read(programProvider)
-                        .saveManualScheduleWeek(
-                          weekIndex: plan.currentWeek,
-                          week: plan.currentWeekData,
-                        );
+                    final program = ref.read(programProvider);
+                    final ok = isCurrentWeekSaved
+                        ? await program.replaceManualScheduleWeek(
+                            weekIndex: plan.currentWeek,
+                            week: plan.currentWeekData,
+                          )
+                        : await program.saveManualScheduleWeek(
+                            weekIndex: plan.currentWeek,
+                            week: plan.currentWeekData,
+                          );
                     if (!context.mounted) return;
                     if (ok) {
                       ref
@@ -386,10 +385,9 @@ class _ScheduleBuilder extends ConsumerWidget {
                           .markWeekSaved(plan.currentWeek);
                       if (!context.mounted) return;
 
-                      Navigator.of(context).pushReplacement(
-                        MaterialPageRoute<void>(
-                          builder: (_) => const MainShell(),
-                        ),
+                      Navigator.of(context).pushAndRemoveUntil(
+                        MaterialPageRoute<void>(builder: (_) => const MainShell()),
+                        (route) => false,
                       );
                     } else {
                       showAppToast(

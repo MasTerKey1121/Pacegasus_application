@@ -25,7 +25,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     super.initState();
     // Do not block GPS recording forever if the map provider cannot finish
     // loading (for example, an unavailable network or invalid map key).
-    _mapLoadTimer = Timer(const Duration(seconds: 15), _askToStartWithoutMap);
+    _mapLoadTimer = Timer(const Duration(seconds: 15), () {
+      debugPrint(
+        '[GoogleMap] timeout after 15s: mapCreated=${_googleMapController != null}, '
+        'cameraIdle=$_mapReady, gpsPermission=$_hasLocationPermission, '
+        'initialGps=$_hasInitialPosition',
+      );
+      _askToStartWithoutMap();
+    });
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startLocationTracking();
     });
@@ -62,6 +69,38 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _googleMapController!.animateCamera(
       CameraUpdate.newLatLng(_currentPosition.toGoogleLatLng()),
     );
+  }
+
+  Future<void> _confirmMapControllerReady(GoogleMapController controller) async {
+    debugPrint('[GoogleMap] native map view created; checking visible region...');
+    try {
+      final bounds = await controller
+          .getVisibleRegion()
+          .timeout(const Duration(seconds: 5));
+      debugPrint(
+        '[GoogleMap] visible region received: '
+        'SW(${bounds.southwest.latitude.toStringAsFixed(5)}, '
+        '${bounds.southwest.longitude.toStringAsFixed(5)}) '
+        'NE(${bounds.northeast.latitude.toStringAsFixed(5)}, '
+        '${bounds.northeast.longitude.toStringAsFixed(5)})',
+      );
+      _markMapReady('visible region received');
+    } catch (error, stackTrace) {
+      debugPrint('[GoogleMap] cannot read visible region: $error');
+      debugPrintStack(stackTrace: stackTrace);
+    }
+  }
+
+  void _markMapReady(String source) {
+    if (!mounted || _mapReady) return;
+    debugPrint('[GoogleMap] ready via $source; starting countdown when GPS is ready');
+    _mapLoadTimer?.cancel();
+    setState(() {
+      _mapReady = true;
+      _mapLoadTimedOut = false;
+    });
+    _syncMap();
+    _maybeStartCountdown();
   }
 
   bool get _mapCanLoad => !Platform.isWindows;
@@ -132,8 +171,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   Future<void> _startLocationTracking() async {
     var permission = await Geolocator.checkPermission();
+    debugPrint('[GPS] initial permission: $permission');
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
+      debugPrint('[GPS] permission after request: $permission');
     }
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
@@ -141,12 +182,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         setState(
             () => _locationMessage = 'อนุญาตตำแหน่งเพื่อบันทึกเส้นทางการวิ่ง');
       }
+      debugPrint('[GPS] location permission was denied');
       return;
     }
     if (!await Geolocator.isLocationServiceEnabled()) {
       if (mounted) {
         setState(() => _locationMessage = 'กรุณาเปิดบริการตำแหน่ง');
       }
+      debugPrint('[GPS] location service is disabled');
       return;
     }
 
@@ -154,6 +197,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       setState(() => _hasLocationPermission = true);
       if (!_mapCanLoad) _mapReady = true;
     }
+    debugPrint('[GPS] location service is enabled; listening for positions');
     _maybeStartCountdown();
 
     _positionSub = Geolocator.getPositionStream(
@@ -278,6 +322,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                               },
                               onMapCreated: (controller) {
                                 _googleMapController = controller;
+                                debugPrint('[GoogleMap] onMapCreated received');
+                                unawaited(_confirmMapControllerReady(controller));
+                              },
+                              // Google Maps has finished its initial camera setup.
+                              // Do not start the countdown merely because the
+                              // platform view was allocated.
+                              onCameraIdle: () {
+                                _markMapReady('camera idle');
                               },
                             ),
                           if (_locationMessage != null)

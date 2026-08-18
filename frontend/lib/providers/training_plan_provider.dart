@@ -18,6 +18,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
   late List<List<SessionType?>> weekSchedules;
   List<int> availablePlanLengths = const [8, 9, 10];
   final Set<int> _savedWeekIndexes = <int>{};
+  final Set<int> _lockedWeekIndexes = <int>{};
   bool _hasPhases = true;
 
   TrainingPlanNotifier() {
@@ -101,6 +102,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
   void rebuildWeeks() {
     weekSchedules = List.generate(planWeeks, (i) => _initWeek(i));
     _savedWeekIndexes.clear();
+    _lockedWeekIndexes.clear();
     currentWeek = 0;
     selectedType = null;
     notifyListeners();
@@ -235,10 +237,10 @@ class TrainingPlanNotifier extends ChangeNotifier {
   bool get allWeeksSaved =>
       planWeeks > 0 && _savedWeekIndexes.length >= planWeeks;
 
-  /// A completed week is immutable. An unsaved week can be edited only while
-  /// it is the current calendar week or a future week.
+  /// Saved weeks remain editable when every quest is still pending. Past weeks
+  /// and any week containing an in-progress/completed quest stay locked.
   bool isWeekEditable(int weekIndex, DateTime startDate) {
-    if (isWeekSaved(weekIndex)) return false;
+    if (_lockedWeekIndexes.contains(weekIndex)) return false;
     final weekEnd = DateTime(
       startDate.year,
       startDate.month,
@@ -266,6 +268,9 @@ class TrainingPlanNotifier extends ChangeNotifier {
     required List<Map<String, dynamic>> quests,
   }) {
     final start = DateTime(startDate.year, startDate.month, startDate.day);
+    weekSchedules = List.generate(planWeeks, _initWeek);
+    _savedWeekIndexes.clear();
+    _lockedWeekIndexes.clear();
     for (final quest in quests) {
       final date = DateTime.tryParse(quest['scheduled_date']?.toString() ?? '');
       final type = _sessionTypeFromApiValue(quest['session_type']?.toString());
@@ -279,6 +284,9 @@ class TrainingPlanNotifier extends ChangeNotifier {
 
       weekSchedules[weekIndex][dayIndex] = type;
       _savedWeekIndexes.add(weekIndex);
+      if (quest['status']?.toString() != 'pending') {
+        _lockedWeekIndexes.add(weekIndex);
+      }
     }
 
     var resumeWeek = 0;

@@ -27,6 +27,16 @@ class ProgramApi {
         auth: true,
       );
 
+  /// Atomically replace the pending quests in one current/future week.
+  Future<Map<String, dynamic>> replaceScheduleWeek({
+    required String weekStart,
+    required List<Map<String, String>> quests,
+  }) => client.put(
+        '/api/programs/quests/week',
+        body: {'weekStart': weekStart, 'quests': quests},
+        auth: true,
+      );
+
   /// Retrieve every main quest already saved between [from] and [to]
   /// (yyyy-MM-dd), used to resync the local schedule builder with what the
   /// backend actually has on record.

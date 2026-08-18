@@ -219,18 +219,7 @@ class ProgramNotifier extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      final quests = <Map<String, String>>[];
-      for (var dayIndex = 0; dayIndex < week.length; dayIndex++) {
-        final type = week[dayIndex];
-        if (type == null || type == SessionType.race || type == SessionType.restForced) {
-          continue;
-        }
-        final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
-        quests.add({
-          'scheduledDate': _dateOnly(date),
-          'sessionType': _sessionTypeValue(type),
-        });
-      }
+      final quests = _questsForWeek(weekIndex: weekIndex, week: week);
       if (quests.isEmpty) throw StateError('ไม่พบรายการซ้อมสำหรับบันทึก');
       // The backend inserts this single batch in one transaction. A failed
       // rule check therefore cannot leave a partially saved plan behind.
@@ -246,6 +235,63 @@ class ProgramNotifier extends ChangeNotifier {
       notifyListeners();
       return false;
     }
+  }
+
+  Future<bool> replaceManualScheduleWeek({
+    required int weekIndex,
+    required List<SessionType?> week,
+  }) async {
+    if (isSavingSchedule) return false;
+    if (_programStartDate == null) {
+      errorMessage = 'ไม่พบวันเริ่มต้นของแผน กรุณาลองเปิดหน้าตารางใหม่';
+      notifyListeners();
+      return false;
+    }
+    final quests = _questsForWeek(weekIndex: weekIndex, week: week);
+    if (quests.isEmpty) {
+      errorMessage = 'ไม่พบรายการซ้อมสำหรับบันทึก';
+      notifyListeners();
+      return false;
+    }
+    isSavingSchedule = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      final weekStart = _programStartDate!.add(Duration(days: weekIndex * 7));
+      await _api.replaceScheduleWeek(
+        weekStart: _dateOnly(weekStart),
+        quests: quests,
+      );
+      _isScheduleSaved = true;
+      isSavingSchedule = false;
+      await loadCurrentWeek();
+      notifyListeners();
+      return true;
+    } catch (error) {
+      errorMessage = error.toString();
+      isSavingSchedule = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
+  List<Map<String, String>> _questsForWeek({
+    required int weekIndex,
+    required List<SessionType?> week,
+  }) {
+    final quests = <Map<String, String>>[];
+    for (var dayIndex = 0; dayIndex < week.length; dayIndex++) {
+      final type = week[dayIndex];
+      if (type == null || type == SessionType.race || type == SessionType.restForced) {
+        continue;
+      }
+      final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
+      quests.add({
+        'scheduledDate': _dateOnly(date),
+        'sessionType': _sessionTypeValue(type),
+      });
+    }
+    return quests;
   }
 
   /// Fetches every quest already saved between [from] and [to] so the
