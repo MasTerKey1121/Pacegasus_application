@@ -214,6 +214,25 @@ class RunSetupNotifier extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
   }
+
+  void restoreDraft(Map<String, dynamic> draft) {
+    environment = draft['environment']?.toString();
+    sessionId = draft['sessionId']?.toString();
+    final rawQuests = draft['sideQuests'] as List<dynamic>? ?? const [];
+    activeSideQuests = rawQuests.whereType<Map>().map((raw) {
+      final item = Map<String, dynamic>.from(raw);
+      return ActiveSideQuest(
+        sideQuestId: item['id']?.toString() ?? '',
+        title: item['title']?.toString() ?? 'ภารกิจ',
+        description: item['description']?.toString() ?? '',
+        icon: item['icon']?.toString(),
+        coinReward: (item['coinReward'] as num?)?.toInt() ?? 0,
+        done: item['done'] == true,
+      );
+    }).toList(growable: false);
+    sideQuestIds = activeSideQuests.map((q) => q.sideQuestId).toList(growable: false);
+    notifyListeners();
+  }
 }
 
 final runSetupProvider =

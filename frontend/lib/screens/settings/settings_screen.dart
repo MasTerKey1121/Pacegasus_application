@@ -135,25 +135,25 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       context: context,
       builder: (dialogContext) => AlertDialog(
         backgroundColor: AppColors.bg2,
-        title: Text('ยกเลิกลงทะเบียนโปรแกรม?', style: AppText.heading(size: 17)),
+        title: Text('จบโปรแกรมก่อนกำหนด?', style: AppText.heading(size: 17)),
         content: Text(
-          'เมื่อยกเลิกลงทะเบียน โปรแกรมและตารางซ้อมที่ลงไว้จะหายไปด้วย ยืนยันหรือไม่?',
+          'รายการซ้อมที่ยังไม่ได้เริ่มทั้งหมดจะถูกลบ และคุณจะไม่สามารถกลับมาทำโปรแกรมนี้ต่อได้ หากต้องการฝึกโปรแกรมอีกครั้ง ต้องลงทะเบียนและเริ่มตารางใหม่ ประวัติการซ้อมที่เริ่มหรือเสร็จแล้วจะยังคงอยู่',
           style: AppText.body(size: 13, color: AppColors.textSecondary),
         ),
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text('ยกเลิก', style: AppText.body(color: AppColors.textSecondary)),
+            child: Text('กลับไปก่อน', style: AppText.body(color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('ยกเลิกลงทะเบียน', style: AppText.body(color: AppColors.red1)),
+            child: Text('จบโปรแกรม', style: AppText.body(color: AppColors.red1)),
           ),
         ],
       ),
     );
     if (confirmed != true || !mounted) return;
-    showAppToast(context, 'ยังยกเลิกลงทะเบียนไม่ได้ เนื่องจาก backend ยังไม่มี API สำหรับยกเลิกโปรแกรม');
+    showAppToast(context, 'ยังจบโปรแกรมไม่ได้ เนื่องจากระบบยังไม่มี API รองรับการยกเลิกโปรแกรม');
   }
 }
 
@@ -276,7 +276,7 @@ class _TrainingProgramTileState extends State<_TrainingProgramTile> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlineButton(label: 'ยกเลิกลงทะเบียน', onTap: widget.onDelete),
+                    child: OutlineButton(label: 'จบโปรแกรม', onTap: widget.onDelete),
                   ),
                 ],
               ),

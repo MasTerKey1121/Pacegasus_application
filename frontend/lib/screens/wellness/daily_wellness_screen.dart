@@ -52,7 +52,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                         LabeledSlider(
                           label: 'คุณภาพการนอน',
                           value: entry.sleepQuality.toDouble(),
-                          min: 0,
+                          min: 1,
                           max: 5,
                           divisions: 5,
                           minCaption: 'แย่มาก',
@@ -63,9 +63,9 @@ class DailyWellnessScreen extends ConsumerWidget {
                         LabeledSlider(
                           label: 'จำนวนชั่วโมงนอน',
                           value: entry.sleepHours,
-                          min: 0,
+                          min: 1,
                           max: 12,
-                          minCaption: '0',
+                          minCaption: '1',
                           maxCaption: '12 ชม.',
                           valueFormatter: (v) => '${v.round()}h',
                           onChanged: (v) => notifier.update((e) => e.sleepHours = v),
@@ -74,7 +74,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                         LabeledSlider(
                           label: 'ความเมื่อยล้ากล้ามเนื้อ',
                           value: entry.muscleSoreness.toDouble(),
-                          min: 0,
+                          min: 1,
                           max: 5,
                           divisions: 5,
                           minCaption: 'ไม่มี',
@@ -85,7 +85,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                         LabeledSlider(
                           label: 'ระดับพลังกล้ามเนื้อ',
                           value: entry.energyLevel.toDouble(),
-                          min: 0,
+                          min: 1,
                           max: 5,
                           divisions: 5,
                           minCaption: 'อ่อนแรง',
@@ -96,7 +96,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                         LabeledSlider(
                           label: 'ระดับความเครียด',
                           value: entry.stressLevel.toDouble(),
-                          min: 0,
+                          min: 1,
                           max: 5 ,
                           divisions: 5,
                           minCaption: 'ผ่อนคลาย',

@@ -105,10 +105,13 @@ class HomeScreen extends ConsumerWidget {
             ),
 
           const SizedBox(height: 16),
-         GradientButton(
-            label: '▶ เริ่ม Session การวิ่ง',
-            onTap: () => Navigator.of(context).push(MaterialPageRoute(builder: (_) => const RunTypeSelectScreen())),
-          ),
+          if (wellness.completedToday && program.isRegistered && program.isScheduleSaved)
+            GradientButton(
+              label: '▶ เริ่ม Session การวิ่ง',
+              onTap: () => Navigator.of(context).push(
+                MaterialPageRoute(builder: (_) => const RunTypeSelectScreen()),
+              ),
+            ),
 
 
           /* เผื่อเสริมหน้า test

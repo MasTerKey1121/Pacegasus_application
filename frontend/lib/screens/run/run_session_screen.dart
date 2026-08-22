@@ -11,6 +11,7 @@ import '../../providers/run_provider.dart';
 import '../../widgets/common.dart';
 import 'run_summary_screen.dart';
 import '../../providers/run_setup_provider.dart';
+import '../../services/run_draft_store.dart';
 
 class RunSessionScreen extends ConsumerStatefulWidget {
   const RunSessionScreen({super.key});
@@ -20,9 +21,20 @@ class RunSessionScreen extends ConsumerStatefulWidget {
 }
 
 class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
+  bool get _isTreadmill => ref.read(runSetupProvider).environment == 'treadmill';
+  final _treadmillDistanceController = TextEditingController();
+  int _backStep = 0;
+  Timer? _backResetTimer;
+  Timer? _draftTimer;
+
   @override
   void initState() {
     super.initState();
+    _draftTimer = Timer.periodic(const Duration(seconds: 2), (_) => _saveDraft());
+    if (_isTreadmill) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _startTreadmill());
+      return;
+    }
     // Do not block GPS recording forever if the map provider cannot finish
     // loading (for example, an unavailable network or invalid map key).
     _mapLoadTimer = Timer(const Duration(seconds: 15), () {
@@ -105,8 +117,20 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   bool get _mapCanLoad => !Platform.isWindows;
 
+  void _startTreadmill() {
+    if (!mounted) return;
+    setState(() {
+      _hasLocationPermission = true;
+      _hasInitialPosition = true;
+      _mapReady = true;
+      _locationMessage = null;
+    });
+    _maybeStartCountdown();
+  }
+
   void _maybeStartCountdown() {
-    if (_countdownStarted || !_hasLocationPermission || !_hasInitialPosition) {
+    if (ref.read(runProvider).isRunning) return;
+    if (_countdownStarted || (!_isTreadmill && (!_hasLocationPermission || !_hasInitialPosition))) {
       return;
     }
     if (_mapCanLoad && !_mapReady) {
@@ -240,6 +264,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         }
         _locationMessage = null;
       });
+      _saveDraft();
       _syncMap();
       _maybeStartCountdown();
     });
@@ -250,7 +275,109 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _positionSub?.cancel();
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
+    _backResetTimer?.cancel();
+    _draftTimer?.cancel();
+    _treadmillDistanceController.dispose();
     super.dispose();
+  }
+
+  Future<void> _handleBack() async {
+    final run = ref.read(runProvider);
+    if (!run.isRunning || run.isStopping) return;
+    _backResetTimer?.cancel();
+    if (_backStep == 0) {
+      _backStep = 1;
+      showAppToast(context, 'Session กำลังดำเนินอยู่ กดย้อนกลับอีกครั้งเพื่อยืนยันการจบ');
+    } else if (_backStep == 1) {
+      _backStep = 2;
+      await showDialog<void>(
+        context: context,
+        barrierDismissible: false,
+        builder: (ctx) => AlertDialog(
+          title: const Text('ต้องการจบ Session การวิ่งหรือไม่?'),
+          content: const Text('กดย้อนกลับอีกครั้งภายใน 5 วินาทีเพื่อจบ Session หรือเลือกวิ่งต่อ'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(ctx),
+              child: const Text('วิ่งต่อ'),
+            ),
+          ],
+        ),
+      );
+      if (mounted) showAppToast(context, 'หากต้องการจบ Session ให้กดย้อนกลับอีกครั้ง');
+    } else {
+      await _finishRun();
+      return;
+    }
+    _backResetTimer = Timer(const Duration(seconds: 5), () => _backStep = 0);
+  }
+
+  Future<void> _finishTreadmill() async {
+    final controller = _treadmillDistanceController;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: const Text('จบการวิ่งบนลู่'),
+        content: TextField(
+          controller: controller,
+          keyboardType: const TextInputType.numberWithOptions(decimal: true),
+          decoration: const InputDecoration(labelText: 'ระยะทางจากลู่วิ่ง (กม.)'),
+        ),
+        actions: [
+          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
+          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('จบการวิ่ง')),
+        ],
+      ),
+    );
+    if (confirmed != true) return;
+    final distance = double.tryParse(controller.text.trim());
+    if (distance == null || distance < 0) {
+      if (mounted) showAppToast(context, 'กรุณากรอกระยะทางที่ถูกต้อง');
+      return;
+    }
+    ref.read(runProvider).setDistance(distance);
+    await _finishRun();
+  }
+
+  Future<void> _finishRun() async {
+    final result = await ref.read(runProvider).stop(
+      sessionId: ref.read(runSetupProvider).sessionId!,
+      sideQuests: ref.read(runSetupProvider).activeSideQuests,
+      endLat: _currentPosition.latitude,
+      endLng: _currentPosition.longitude,
+      routePoints: _routePoints.map((point) => {'lat': point.latitude, 'lng': point.longitude}).toList(),
+    );
+    if (!mounted || result == null) return;
+    await runDraftStore.clear();
+    Navigator.of(context).pushReplacement(
+      MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
+    );
+  }
+
+  Future<void> _saveDraft() async {
+    final run = ref.read(runProvider);
+    final setup = ref.read(runSetupProvider);
+    if (setup.sessionId == null) return;
+    await runDraftStore.save({
+      'sessionId': setup.sessionId,
+      'environment': setup.environment,
+      'elapsedSeconds': run.elapsedSeconds,
+      'distanceKm': run.distanceKm,
+      'isPaused': run.isPaused,
+      'routePoints': _routePoints
+          .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+          .toList(),
+      'sideQuests': setup.activeSideQuests
+          .map((quest) => {
+                'id': quest.sideQuestId,
+                'title': quest.title,
+                'description': quest.description,
+                'icon': quest.icon,
+                'coinReward': quest.coinReward,
+                'done': quest.done,
+              })
+          .toList(),
+    });
   }
 
   @override
@@ -260,7 +387,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final quests = setup.activeSideQuests;
     final doneCount = quests.where((q) => q.done).length;
 
-    return Scaffold(
+    return WillPopScope(
+      onWillPop: () async {
+        if (!ref.read(runProvider).isRunning) return true;
+        await _handleBack();
+        return false;
+      },
+      child: Scaffold(
       backgroundColor: AppColors.bg1,
       body: SafeArea(
         child: Stack(
@@ -287,7 +420,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                       borderRadius: BorderRadius.circular(24),
                       child: Stack(
                         children: [
-                          if (Platform.isWindows)
+                          if (_isTreadmill)
+                            const _TreadmillPanel()
+                          else if (Platform.isWindows)
                             _WindowsLocationPanel(
                               position: _currentPosition,
                               hasLocation: _hasLocationPermission,
@@ -358,10 +493,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                 child: Column(
                                   mainAxisSize: MainAxisSize.min,
                                   children: [
-                                    if (!_hasLocationPermission ||
+                                    if (!_isTreadmill && (!_hasLocationPermission ||
                                         (_mapCanLoad &&
                                             !_mapReady &&
-                                            !_mapLoadTimedOut))
+                                            !_mapLoadTimedOut)))
                                       const CircularProgressIndicator()
                                     else
                                       Text(
@@ -370,7 +505,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                       ),
                                     const SizedBox(height: 12),
                                     Text(
-                                      !_hasLocationPermission
+                                      _isTreadmill
+                                          ? 'เตรียมเริ่มวิ่งบนลู่'
+                                          : !_hasLocationPermission
                                           ? 'กำลังเชื่อมต่อ GPS'
                                           : (_mapCanLoad &&
                                                   !_mapReady &&
@@ -404,48 +541,21 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                               style: AppText.heading(size: 13.5)),
                         ],
                       ),
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.end,
-                        children: [
-                          Text('เป้าหมาย',
-                              style: AppText.body(
-                                  size: 11.5, color: AppColors.textTertiary)),
-                          Text(run.goalPace, style: AppText.heading(size: 13.5)),
-                        ],
+                      GestureDetector(
+                        onTap: _openMissionsSheet,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.end,
+                          children: [
+                            Text('ภารกิจ', style: AppText.body(size: 11.5, color: AppColors.textTertiary)),
+                            Text(
+                              quests.isEmpty ? 'ไม่มีภารกิจ' : '$doneCount/${quests.length}',
+                              style: AppText.heading(size: 13.5),
+                            ),
+                          ],
+                        ),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 18),
-                  if (quests.isNotEmpty)
-                    Center(
-                      child: GestureDetector(
-                        onTap: _openMissionsSheet,
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                              horizontal: 18, vertical: 10),
-                          decoration: BoxDecoration(
-                            color: const Color(0xFF211B3D),
-                            borderRadius: BorderRadius.circular(999),
-                            border: Border.all(color: AppColors.border),
-                            boxShadow: [
-                              BoxShadow(
-                                  color: Colors.black.withOpacity(.25),
-                                  blurRadius: 10,
-                                  offset: const Offset(0, 4)),
-                            ],
-                          ),
-                          child: Row(
-                            mainAxisSize: MainAxisSize.min,
-                            children: [
-                              const Text('🎯', style: TextStyle(fontSize: 14)),
-                              const SizedBox(width: 8),
-                              Text('ภารกิจ $doneCount/${quests.length}',
-                                  style: AppText.heading(size: 13)),
-                            ],
-                          ),
-                        ),
-                      ),
-                    ),
                   const SizedBox(height: 18),
                   Row(
                     children: [
@@ -477,60 +587,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                               colors: [AppColors.red1, AppColors.red2]),
                           onTap: !run.isRunning || run.isStopping
                               ? null
-                              : () async {
-                                  final confirmed = await showDialog<bool>(
-                                    context: context,
-                                    builder: (ctx) => AlertDialog(
-                                      title: Text('จบการวิ่ง?'),
-                                      content: Text('ต้องการจบการวิ่งจริงหรือไม่'),
-                                      actions: [
-                                        TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, false),
-                                            child: Text('ยกเลิก')),
-                                        TextButton(
-                                            onPressed: () =>
-                                                Navigator.pop(ctx, true),
-                                            child: Text('จบการวิ่ง')),
-                                      ],
-                                    ),
-                                  );
-                                  if (confirmed != true) return;
-                                  final result =
-                                          await ref.read(runProvider).stop(
-                                            sessionId: ref
-                                                .read(runSetupProvider)
-                                                .sessionId!,
-                                            sideQuests: ref
-                                                .read(runSetupProvider)
-                                                .activeSideQuests,
-                                            endLat: _currentPosition.latitude,
-                                            endLng: _currentPosition.longitude,
-                                            routePoints: _routePoints
-                                                .map((point) => {
-                                                      'lat': point.latitude,
-                                                      'lng': point.longitude,
-                                                    })
-                                                .toList(),
-                                          );
-                                  if (!context.mounted) return;
-                                  final failed =
-                                      ref.read(runProvider).failedQuestTitles;
-                                  if (failed.isNotEmpty) {
-                                    showAppToast(
-                                      context,
-                                      'จบการวิ่งสำเร็จ แต่ยืนยันภารกิจไม่สำเร็จ: '
-                                      '${failed.join(', ')}',
-                                    );
-                                  }
-                                  if (result != null && context.mounted) {
-                                    Navigator.of(context).pushReplacement(
-                                      MaterialPageRoute(
-                                          builder: (_) =>
-                                              RunSummaryScreen(result: result)),
-                                    );
-                                  }
-                                },
+                              : () => _isTreadmill ? _finishTreadmill() : _finishRun(),
                         ),
                       ),
                     ],
@@ -548,7 +605,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
           ],
         ),
       ),
-    );
+    ));
   }
 }
 
@@ -610,6 +667,30 @@ class _WindowsLocationPanel extends StatelessWidget {
       ),
     );
   }
+}
+
+class _TreadmillPanel extends StatelessWidget {
+  const _TreadmillPanel();
+
+  @override
+  Widget build(BuildContext context) => Container(
+        color: const Color(0xFF211B3D),
+        alignment: Alignment.center,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const Icon(Icons.directions_run_rounded, color: AppColors.purple2, size: 54),
+            const SizedBox(height: 12),
+            Text('กำลังวิ่งบนลู่', style: AppText.heading(size: 17)),
+            const SizedBox(height: 6),
+            Text(
+              'ระบบจะให้กรอกระยะจากลู่วิ่งเมื่อจบ Session',
+              textAlign: TextAlign.center,
+              style: AppText.body(size: 12, color: AppColors.textSecondary),
+            ),
+          ],
+        ),
+      );
 }
 
 class _MissionsMiniWindow extends ConsumerWidget {

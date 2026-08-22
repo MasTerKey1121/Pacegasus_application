@@ -55,6 +55,31 @@ class RunSessionNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// Treadmill sessions use the distance shown by the treadmill instead of GPS.
+  void setDistance(double kilometers) {
+    distanceKm = kilometers < 0 ? 0 : kilometers;
+    speedKmh = elapsedSeconds > 0 ? (distanceKm / elapsedSeconds) * 3600 : 0;
+    notifyListeners();
+  }
+
+  void restore({
+    required int elapsed,
+    required double distance,
+    required bool paused,
+  }) {
+    _timer?.cancel();
+    elapsedSeconds = elapsed;
+    distanceKm = distance;
+    isRunning = true;
+    isPaused = paused;
+    speedKmh = 0;
+    _timer = Timer.periodic(const Duration(seconds: 1), (_) {
+      if (!isPaused) elapsedSeconds += 1;
+      notifyListeners();
+    });
+    notifyListeners();
+  }
+
   Future<RunResult?> stop({
     required String sessionId,
     required List<ActiveSideQuest> sideQuests,

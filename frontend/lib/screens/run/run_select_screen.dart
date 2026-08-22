@@ -192,6 +192,14 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
               ),
 
               const SizedBox(height: 16),
+              if (setup.errorMessage != null) ...[
+                Text(
+                  setup.errorMessage!,
+                  textAlign: TextAlign.center,
+                  style: AppText.body(size: 12, color: AppColors.red1),
+                ),
+                const SizedBox(height: 10),
+              ],
               GradientButton(
                 label: setup.isStarting ? 'กำลังเริ่ม...' : 'เริ่มต้นการวิ่ง',
                 loading: setup.isStarting,
@@ -205,6 +213,9 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                           Navigator.of(context).pushReplacement(
                             MaterialPageRoute(builder: (_) => const RunSessionScreen()),
                           );
+                        } else if (context.mounted &&
+                            ref.read(runSetupProvider).errorMessage == null) {
+                          showAppToast(context, 'เริ่ม Session ไม่สำเร็จ กรุณาลองใหม่');
                         }
                       },
               ),

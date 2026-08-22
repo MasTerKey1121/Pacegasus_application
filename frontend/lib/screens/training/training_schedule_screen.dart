@@ -364,7 +364,7 @@ class _ScheduleBuilder extends ConsumerWidget {
                 ? 'สัปดาห์นี้แก้ไขไม่ได้'
                 : isCurrentWeekSaved
                     ? 'บันทึกการแก้ไขสัปดาห์นี้'
-                    : 'บันทึกตารางสัปดาห์นี้',
+                    : 'บันทึกตารางสัปดาห์',
             loading: ref.watch(programProvider).isSavingSchedule,
             onTap: isCurrentWeekEditable && isCurrentWeekComplete
                 ? () async {
@@ -383,6 +383,7 @@ class _ScheduleBuilder extends ConsumerWidget {
                       ref
                           .read(trainingPlanProvider)
                           .markWeekSaved(plan.currentWeek);
+                      await _syncAfterSave(context, ref, plan);
                       if (!context.mounted) return;
 
                       Navigator.of(context).pushAndRemoveUntil(
@@ -402,6 +403,24 @@ class _ScheduleBuilder extends ConsumerWidget {
         ],
       ),
     );
+  }
+}
+
+/// Refresh the local grid from the server before leaving the screen.  This
+/// prevents a just-saved week from looking editable if the user returns here.
+Future<void> _syncAfterSave(
+  BuildContext context,
+  WidgetRef ref,
+  TrainingPlanNotifier plan,
+) async {
+  final startDate = ref.read(programProvider).programStartDate;
+  if (startDate == null) return;
+  final quests = await ref.read(programProvider).loadQuestsRange(
+        from: startDate,
+        to: startDate.add(Duration(days: plan.planWeeks * 7 - 1)),
+      );
+  if (context.mounted) {
+    plan.syncFromServer(startDate: startDate, quests: quests);
   }
 }
 
