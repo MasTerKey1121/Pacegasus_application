@@ -7,6 +7,7 @@ router.use(requireAuth);
 
 router.get('/templates', programController.getProgramTemplates);
 router.post('/start', programController.startProgram);
+router.delete('/current', programController.cancelCurrentProgram);
 router.get('/current/week', programController.getCurrentWeek);
 router.post('/quests', programController.addManualQuest);
 router.post('/quests/batch', programController.addManualQuestsBatch);

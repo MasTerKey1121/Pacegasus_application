@@ -285,6 +285,35 @@ async function startProgram(userId, level, scheduleMode) {
 }
 
 /**
+ * DELETE /api/programs/current
+ * ยกเลิกเฉพาะโปรแกรม active ของผู้ใช้ปัจจุบัน โดยเก็บข้อมูลเดิมไว้ด้วย
+ * deleted_at เพื่อรองรับ audit/ประวัติและไม่ลบ quest หรือ completion ที่เกี่ยวข้อง
+ */
+async function cancelCurrentProgram(userId) {
+  const { rows } = await db.query(
+    `UPDATE user_programs
+     SET status = 'cancelled', deleted_at = now(), updated_at = now()
+     WHERE user_id = $1 AND status = 'active' AND deleted_at IS NULL
+     RETURNING id, program_template_id, start_date, schedule_mode, status, deleted_at`,
+    [userId]
+  );
+
+  if (rows.length === 0) {
+    throw new ApiError(404, 'ไม่พบโปรแกรมที่กำลังดำเนินการอยู่ให้ยกเลิก');
+  }
+
+  const program = rows[0];
+  return {
+    userProgramId: program.id,
+    programTemplateId: program.program_template_id,
+    startDate: program.start_date,
+    scheduleMode: program.schedule_mode,
+    status: program.status,
+    deletedAt: program.deleted_at,
+  };
+}
+
+/**
  * GET /api/v1/programs/current/week
  * ดึง main_quest_instances ของ "สัปดาห์นี้" (เทียบจาก start_date ของโปรแกรม active)
  */
@@ -539,6 +568,7 @@ async function completeMainQuest(userId, questId) {
 module.exports = {
   getProgramTemplates,
   startProgram,
+  cancelCurrentProgram,
   getCurrentWeek,
   addManualQuest,
   addManualQuestsBatch,

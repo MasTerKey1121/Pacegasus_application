@@ -40,6 +40,17 @@ const startProgram = asyncHandler(async (req, res) => {
   });
 });
 
+// DELETE /api/programs/current — ยกเลิกโปรแกรมที่กำลังดำเนินการแบบ soft delete
+const cancelCurrentProgram = asyncHandler(async (req, res) => {
+  const result = await programService.cancelCurrentProgram(req.user.id);
+
+  res.status(200).json({
+    success: true,
+    message: 'ยกเลิกโปรแกรมสำเร็จ',
+    data: result,
+  });
+});
+
 // GET /api/v1/programs/current/week
 const getCurrentWeek = asyncHandler(async (req, res) => {
   const result = await programService.getCurrentWeek(req.user.id);
@@ -126,6 +137,7 @@ const completeMainQuest = asyncHandler(async (req, res) => {
 module.exports = {
   getProgramTemplates,
   startProgram,
+  cancelCurrentProgram,
   getCurrentWeek,
   addManualQuest,
   addManualQuestsBatch,

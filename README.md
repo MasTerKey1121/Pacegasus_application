@@ -45,6 +45,7 @@ node src/db/migrate.js src/db/006_add_usage_log.sql
 node src/db/migrate.js src/db/007_add_program_template_descriptions.sql
 node src/db/migrate.js src/db/008_create_rpe_logs.sql
 node src/db/migrate.js src/db/009_add_game_progress.sql
+node src/db/migrate.js src/db/010_add_user_program_soft_delete.sql
 ```
 
 The migration runner accepts an explicit path relative to `backend/`; therefore the `src/db/` prefix is required for additive migrations.
@@ -87,7 +88,7 @@ All endpoints below are prefixed with `/api`. Except for health and authenticati
 | Onboarding | `GET /onboarding/status`, `PUT /onboarding/step1` through `PUT /onboarding/step4` |
 | Profile | `GET /users/me/full`, `GET /users/me/progress`, `DELETE /users/me` |
 | Wellness | `GET /wellness-checkin/today`, `POST /wellness-checkin`, `PUT /wellness-checkin`, `GET /wellness-checkin/history?days=30` |
-| Programs | `GET /programs/templates`, `POST /programs/start`, `GET /programs/current/week`, `GET/POST /programs/quests`, `POST /programs/quests/batch`, `PATCH /programs/quests/:questId/complete`, `DELETE /programs/quests/:questId` |
+| Programs | `GET /programs/templates`, `POST /programs/start`, `DELETE /programs/current`, `GET /programs/current/week`, `GET/POST /programs/quests`, `POST /programs/quests/batch`, `PATCH /programs/quests/:questId/complete`, `DELETE /programs/quests/:questId` |
 | Running | `POST /running-sessions`, `GET /running-sessions/history`, `GET /running-sessions/:id`, `PATCH /running-sessions/:id/complete`, `PATCH /running-sessions/:id/abandon` |
 | RPE | `POST /rpe`, `GET /rpe/history`, `GET /rpe/risk-index` |
 | Side quests | `GET /quests/side`, `POST /quests/running-sessions/:id/side-quests`, `PATCH /quests/side-quests/:id/progress`, `PATCH /quests/side-quests/:id/finish`, `GET /quests/side-quests/:id/album` |
@@ -95,6 +96,31 @@ All endpoints below are prefixed with `/api`. Except for health and authenticati
 For registration OTP requests, provide `purpose: "register"`, `policyAccepted: true`, and a `policyVersion`. OTP endpoints are rate-limited. The canonical Side Quest endpoints are under `/api/quests`; the server currently also exposes compatibility aliases.
 
 Detailed request examples are available in the tracked Postman collection: [`test/Pacegasus_API_postman_collection (1).json`](test/Pacegasus_API_postman_collection%20(1).json).
+
+## Cancel a training program
+
+Use `DELETE /api/programs/current` with the authenticated user's bearer token to cancel that user's active training program. The endpoint has no request body.
+
+It is a soft delete: the `user_programs` row is retained, `status` changes to `cancelled`, and `deleted_at` is set. Related quests, baselines, and progress records are retained for history. A cancelled program is no longer active, so the user may start another program. If the user has no active program, the endpoint returns `404`.
+
+Example successful response:
+
+```json
+{
+  "success": true,
+  "message": "ยกเลิกโปรแกรมสำเร็จ",
+  "data": {
+    "userProgramId": "uuid",
+    "programTemplateId": "uuid",
+    "startDate": "2026-08-23",
+    "scheduleMode": "auto",
+    "status": "cancelled",
+    "deletedAt": "2026-08-23T10:30:00.000Z"
+  }
+}
+```
+
+Import the main [Postman collection](test/Pacegasus_API_postman_collection%20(1).json), set `accessToken`, create a program first with `POST /api/programs/start`, then run **5.6 Cancel Current Program (Soft Delete)**.
 
 ## Tests
 
