@@ -8,8 +8,38 @@ const programService = require('../src/services/programService');
 test('program template API handlers are exposed', () => {
   assert.equal(typeof programController.getProgramTemplates, 'function');
   assert.equal(typeof programService.getProgramTemplates, 'function');
+  assert.equal(typeof programController.cancelCurrentProgram, 'function');
+  assert.equal(typeof programService.cancelCurrentProgram, 'function');
   assert.equal(typeof programController.addManualQuestsBatch, 'function');
   assert.equal(typeof programService.addManualQuestsBatch, 'function');
+});
+
+test('cancelling a current program soft-deletes it', async (t) => {
+  const originalQuery = db.query;
+  t.after(() => { db.query = originalQuery; });
+
+  db.query = async (sql, params) => {
+    assert.match(sql, /UPDATE user_programs/);
+    assert.match(sql, /status = 'cancelled'/);
+    assert.match(sql, /deleted_at = now\(\)/);
+    assert.deepEqual(params, ['user-1']);
+    return {
+      rows: [{
+        id: 'program-1',
+        program_template_id: 'template-1',
+        start_date: '2026-08-01',
+        schedule_mode: 'manual',
+        status: 'cancelled',
+        deleted_at: '2026-08-23T00:00:00.000Z',
+      }],
+    };
+  };
+
+  const result = await programService.cancelCurrentProgram('user-1');
+
+  assert.equal(result.userProgramId, 'program-1');
+  assert.equal(result.status, 'cancelled');
+  assert.equal(result.deletedAt, '2026-08-23T00:00:00.000Z');
 });
 
 test('program templates include related phase, session spec, and sequencing data', async (t) => {

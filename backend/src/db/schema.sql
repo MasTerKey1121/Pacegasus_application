@@ -69,7 +69,7 @@ CREATE TYPE badge_code_enum AS ENUM (
 );
 
 CREATE TYPE program_status_enum AS ENUM (
-  'active', 'completed', 'paused'
+  'active', 'completed', 'paused', 'cancelled'
 );
 
 
@@ -171,6 +171,7 @@ CREATE TABLE user_programs (
   current_phase_id      UUID REFERENCES program_phases(id),
   current_week          SMALLINT NOT NULL DEFAULT 1,
   status                program_status_enum NOT NULL DEFAULT 'active',
+  deleted_at            TIMESTAMPTZ,
   created_at            TIMESTAMPTZ NOT NULL DEFAULT now(),
   updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
