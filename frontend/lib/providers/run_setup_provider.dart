@@ -89,8 +89,8 @@ class RunSetupNotifier extends ChangeNotifier {
               Map<String, dynamic>.from(q)))
           .toList(growable: false);
 
-      // เลือก side quest ทั้งหมดให้อัตโนมัติ ไม่ต้องให้ user เลือกเอง
-      selectedInstanceIds = sideQuests.map((q) => q.instanceId).toSet();
+      // User explicitly chooses which optional side quests to start.
+      selectedInstanceIds = {};
     } catch (e) {
       errorMessage = e.toString();
       sideQuests = [];
@@ -212,6 +212,15 @@ class RunSetupNotifier extends ChangeNotifier {
     _completingIds.clear();
     sessionId = null;
     errorMessage = null;
+    notifyListeners();
+  }
+
+  void toggleSideQuest(String instanceId) {
+    if (selectedInstanceIds.contains(instanceId)) {
+      selectedInstanceIds.remove(instanceId);
+    } else {
+      selectedInstanceIds.add(instanceId);
+    }
     notifyListeners();
   }
 

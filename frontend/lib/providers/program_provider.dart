@@ -172,6 +172,30 @@ class ProgramNotifier extends ChangeNotifier {
     }
   }
 
+  Future<bool> cancelCurrentProgram() async {
+    if (!_isRegistered || isLoading) return false;
+
+    isLoading = true;
+    errorMessage = null;
+    notifyListeners();
+    try {
+      await _api.cancelCurrentProgram();
+      quests = const [];
+      selectedTemplateLevel = null;
+      _isRegistered = false;
+      _isScheduleSaved = false;
+      _programStartDate = null;
+      isLoading = false;
+      notifyListeners();
+      return true;
+    } catch (error) {
+      errorMessage = error is ApiException ? error.message : error.toString();
+      isLoading = false;
+      notifyListeners();
+      return false;
+    }
+  }
+
   Map<String, dynamic>? get todayQuest {
     final today = DateTime.now();
     final todayKey =

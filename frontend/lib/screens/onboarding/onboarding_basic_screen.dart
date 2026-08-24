@@ -17,38 +17,53 @@ bool isValidDateInput({required int? day, required int? month, required int? yea
   return day <= lastDayOfMonth.day && day >= firstDayOfMonth.day;
 }
 
+int? normalizeBirthYear(String value) {
+  final year = int.tryParse(value);
+  if (year == null) return null;
+  // Accept Buddhist Era years entered by Thai users, but keep the API value CE.
+  return year >= 2400 ? year - 543 : year;
+}
+
 class OnboardingBasicScreen extends ConsumerWidget {
   const OnboardingBasicScreen({super.key});
 
-  bool _canProceed(OnboardingData d) {
+  Map<String, String> _validationErrors(OnboardingData d) {
     final day = int.tryParse(d.day);
     final month = int.tryParse(d.month);
-    final year = int.tryParse(d.year);
+    final year = normalizeBirthYear(d.year);
     final weight = double.tryParse(d.weightKg);
     final height = double.tryParse(d.heightCm);
     final days = int.tryParse(d.runningDaysPerWeek);
 
-    final currentYear = DateTime.now().year;
-
-    return day != null &&
-        month != null &&
-        year != null &&
-        isValidDateInput(day: day, month: month, year: year) &&
-        year >= currentYear - 120 &&
-        year <= currentYear &&
-        weight != null &&
-        weight > 0 &&
-        height != null &&
-        height > 0 &&
-        days != null &&
-        days >= 1 &&
-        days <= 7;
+    final errors = <String, String>{};
+    if (!isValidDateInput(day: day, month: month, year: year)) {
+      errors['birthDate'] = 'กรุณากรอกวัน เดือน และปีเกิดให้เป็นวันที่ที่มีอยู่จริง';
+    } else {
+      final dob = DateTime(year!, month!, day!);
+      final today = DateTime.now();
+      var age = today.year - dob.year;
+      if (DateTime(today.year, dob.month, dob.day).isAfter(today)) age--;
+      if (age < 10 || age > 100) {
+        errors['birthDate'] = 'อายุต้องอยู่ระหว่าง 10–100 ปี';
+      }
+    }
+    if (d.gender == null) errors['gender'] = 'กรุณาเลือกเพศกำเนิด';
+    if (weight == null || weight < 20 || weight > 200) {
+      errors['weight'] = 'น้ำหนักต้องอยู่ระหว่าง 20–200 กก.';
+    }
+    if (height == null || height < 100 || height > 250) {
+      errors['height'] = 'ส่วนสูงต้องอยู่ระหว่าง 100–250 ซม.';
+    }
+    if (days == null || days < 1 || days > 7) {
+      errors['runningDays'] = 'จำนวนวันที่วิ่งต้องอยู่ระหว่าง 1–7 วัน';
+    }
+    return errors;
   }
 
   Map<String, dynamic> _buildBody(OnboardingData d) {
     return {
       'dateOfBirth':
-          '${d.year}-${d.month.padLeft(2, '0')}-${d.day.padLeft(2, '0')}',
+          '${normalizeBirthYear(d.year)}-${d.month.padLeft(2, '0')}-${d.day.padLeft(2, '0')}',
       'gender': d.gender == 'ชาย' ? 'male' : 'female',
       'heightCm': double.parse(d.heightCm),
       'weightKg': double.parse(d.weightKg),
@@ -61,7 +76,11 @@ class OnboardingBasicScreen extends ConsumerWidget {
     final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
     final data = ob.data;
-    final canProceed = _canProceed(data) && !ob.isSubmitting;
+    final errors = _validationErrors(data);
+    final canProceed = errors.isEmpty && !ob.isSubmitting;
+    final hasStarted = [data.day, data.month, data.year, data.weightKg, data.heightCm, data.runningDaysPerWeek]
+            .any((value) => value.isNotEmpty) ||
+        data.gender != null;
 
     return Scaffold(
       body: AppBackground(
@@ -124,9 +143,12 @@ class OnboardingBasicScreen extends ConsumerWidget {
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(4),
                                     ],
-                                    onChanged: (v) =>
-                                        notifier.update((d) => d.year = v))),
+                                    onChanged: (v) => notifier.update(
+                                          (d) => d.year = normalizeBirthYear(v)?.toString() ?? v,
+                                        ))),
                           ]),
+                          if (hasStarted && errors['birthDate'] != null)
+                            _ValidationText(errors['birthDate']!),
                           const SizedBox(height: 22),
                           Text('เพศกำเนิด',
                               style: AppText.body(
@@ -151,6 +173,8 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
+                          if (hasStarted && errors['gender'] != null)
+                            _ValidationText(errors['gender']!),
                           const SizedBox(height: 22),
                           Row(children: [
                             Expanded(
@@ -182,6 +206,8 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
+                          if (hasStarted && (errors['weight'] != null || errors['height'] != null))
+                            _ValidationText([errors['weight'], errors['height']].whereType<String>().join('  ')),
                           const SizedBox(height: 22),
                           Row(children: [
                             Expanded(
@@ -198,6 +224,8 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
+                          if (hasStarted && errors['runningDays'] != null)
+                            _ValidationText(errors['runningDays']!),
                           if (ob.errorMessage != null) ...[
                             const SizedBox(height: 14),
                             Text(ob.errorMessage!,
@@ -211,6 +239,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
                 ),
                 GradientButton(
                   label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ต่อไป',
+                  invalid: hasStarted && !canProceed,
                   onTap: canProceed
                       ? () async {
                           final ok = await notifier.submitStep(
@@ -233,6 +262,17 @@ class OnboardingBasicScreen extends ConsumerWidget {
       ),
     );
   }
+}
+
+class _ValidationText extends StatelessWidget {
+  final String text;
+  const _ValidationText(this.text);
+
+  @override
+  Widget build(BuildContext context) => Padding(
+        padding: const EdgeInsets.only(top: 8),
+        child: Text(text, style: AppText.body(size: 12, color: AppColors.red1)),
+      );
 }
 
 class _DateBox extends StatelessWidget {

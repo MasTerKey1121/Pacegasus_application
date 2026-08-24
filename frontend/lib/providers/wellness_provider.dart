@@ -33,6 +33,11 @@ class WellnessNotifier extends ChangeNotifier {
 
   Future<bool> submit() async {
     if (isSaving) return false;
+    if (!entry.isComplete) {
+      errorMessage = 'กรุณาเลือกข้อมูล Daily Wellness ให้ครบทุกข้อ';
+      notifyListeners();
+      return false;
+    }
 
     isSaving = true;
     errorMessage = null;

@@ -158,20 +158,29 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                               style: AppText.body(size: 12, color: AppColors.textSecondary))
                         else
                           ...setup.sideQuests.map((q) {
-                            return AppCard(
-                              child: Row(children: [
-                                Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                    children: [
-                                      Text(q.title, style: AppText.heading(size: 13.5)),
-                                      Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
-                                    ],
+                            final selected = setup.selectedInstanceIds.contains(q.instanceId);
+                            return GestureDetector(
+                              onTap: () => ref.read(runSetupProvider).toggleSideQuest(q.instanceId),
+                              child: AppCard(
+                                borderColor: selected ? AppColors.purple2 : null,
+                                child: Row(children: [
+                                  Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment: CrossAxisAlignment.start,
+                                      children: [
+                                        Text(q.title, style: AppText.heading(size: 13.5)),
+                                        Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ]),
+                                  Icon(
+                                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
+                                    color: selected ? AppColors.purple2 : AppColors.textSecondary,
+                                  ),
+                                ]),
+                              ),
                             );
                           }),
                       ],

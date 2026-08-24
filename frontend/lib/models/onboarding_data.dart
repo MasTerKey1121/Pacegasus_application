@@ -4,7 +4,7 @@ class OnboardingData {
   String day = '';
   String month = '';
   String year = '';
-  String gender = 'หญิง'; // 'ชาย' | 'หญิง'
+  String? gender; // 'ชาย' | 'หญิง' (ผู้ใช้ต้องเลือกเอง)
   String weightKg = '';
   String heightCm = '';
 
@@ -14,6 +14,9 @@ class OnboardingData {
   final Set<String> conditions = {}; // โรคประจำตัว
   final Set<String> pastInjuries = {}; // อาการบาดเจ็บที่เคยเป็น
   final Set<String> currentInjuries = {}; // อาการบาดเจ็บในปัจจุบัน
+  bool? hasChronicCondition;
+  bool? hasPastInjuries;
+  bool? hasCurrentInjuries;
 
   String? healthGoal; // เป้าหมายด้านสุขภาพ (เลือกได้ 1)
   String? distanceGoal; // เป้าหมายด้านระยะทาง (เลือกได้ 1)
@@ -26,7 +29,7 @@ class OnboardingData {
   String? trainingDuration; // ซ้อมต่อเนื่องมานานเท่าไหร่แล้ว (ถ้ายังซ้อมอยู่)
   String? notTrainingDuration; // ไม่ได้ซ้อมมานานเท่าไหร่แล้ว (ถ้าไม่ได้ซ้อมแล้ว)
 
-  String longestDistance = '5-10 km';
+  String? longestDistance;
 
   OnboardingData copy() {
     final o = OnboardingData()
@@ -49,7 +52,10 @@ class OnboardingData {
       ..isCurrentlyTraining = isCurrentlyTraining
       ..trainingDuration = trainingDuration
       ..notTrainingDuration = notTrainingDuration
-      ..longestDistance = longestDistance;
+      ..longestDistance = longestDistance
+      ..hasChronicCondition = hasChronicCondition
+      ..hasPastInjuries = hasPastInjuries
+      ..hasCurrentInjuries = hasCurrentInjuries;
 
     o.conditions.addAll(conditions);
     o.pastInjuries.addAll(pastInjuries);

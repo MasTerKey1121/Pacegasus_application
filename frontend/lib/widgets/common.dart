@@ -9,6 +9,7 @@ class GradientButton extends StatelessWidget {
   final Gradient? gradient;
   final double height;
   final bool loading;
+  final bool invalid;
 
   const GradientButton({
     super.key,
@@ -17,12 +18,16 @@ class GradientButton extends StatelessWidget {
     this.gradient,
     this.height = 54,
     this.loading = false,
+    this.invalid = false,
   });
 
   @override
   Widget build(BuildContext context) {
     final disabled = onTap == null && !loading;
-    final effectiveGradient = gradient ?? AppColors.purpleGradient;
+    final showDisabledStyle = disabled && !invalid;
+    final effectiveGradient = invalid
+        ? const LinearGradient(colors: [Color(0xFFE5484D), Color(0xFFC62A2F)])
+        : gradient ?? AppColors.purpleGradient;
     return SizedBox(
       width: double.infinity,
       height: height,
@@ -35,9 +40,9 @@ class GradientButton extends StatelessWidget {
             alignment: Alignment.center,
             decoration: BoxDecoration(
               borderRadius: BorderRadius.circular(999),
-              gradient: disabled ? null : effectiveGradient,
-              color: disabled ? Colors.white.withOpacity(.07) : null,
-              boxShadow: disabled
+              gradient: showDisabledStyle ? null : effectiveGradient,
+              color: showDisabledStyle ? Colors.white.withOpacity(.07) : null,
+              boxShadow: showDisabledStyle
                   ? null
                   : [
                       BoxShadow(
@@ -60,7 +65,7 @@ class GradientButton extends StatelessWidget {
                     label,
                     style: AppText.heading(
                       size: 15,
-                      color: disabled ? AppColors.textTertiary : Colors.white,
+                      color: showDisabledStyle ? AppColors.textTertiary : Colors.white,
                     ),
                   ),
           ),
@@ -413,6 +418,7 @@ class LabeledSlider extends StatelessWidget {
   final String maxCaption;
   final ValueChanged<double> onChanged;
   final String Function(double)? valueFormatter;
+  final String? displayText;
 
   const LabeledSlider({
     super.key,
@@ -425,13 +431,14 @@ class LabeledSlider extends StatelessWidget {
     required this.onChanged,
     this.divisions,
     this.valueFormatter,
+    this.displayText,
   });
 
   @override
   Widget build(BuildContext context) {
-    final display = valueFormatter != null
+    final display = displayText ?? (valueFormatter != null
         ? valueFormatter!(value)
-        : value.round().toString();
+        : value.round().toString());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -560,4 +567,3 @@ void showAppToast(BuildContext context, String message, {bool isError = true}) {
   overlay.insert(entry);
   Future.delayed(const Duration(milliseconds: 2200), () => entry.remove());
 }
-

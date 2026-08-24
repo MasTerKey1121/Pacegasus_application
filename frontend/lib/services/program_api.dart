@@ -19,6 +19,10 @@ class ProgramApi {
   Future<Map<String, dynamic>> getCurrentWeek() =>
       client.get('/api/programs/current/week', auth: true);
 
+  /// API 5.6: soft-delete the user's active program while retaining history.
+  Future<Map<String, dynamic>> cancelCurrentProgram() =>
+      client.delete('/api/programs/current', auth: true);
+
   Future<Map<String, dynamic>> addQuestsBatch(
     List<Map<String, String>> quests,
   ) => client.post(

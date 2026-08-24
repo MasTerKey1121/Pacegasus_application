@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../providers/program_provider.dart';
 import '../auth/login_screen.dart';
+import '../home/main_shell.dart';
 import '../training/training_schedule_screen.dart';
 
 class SettingsScreen extends ConsumerStatefulWidget {
@@ -17,6 +18,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _deleting = false;
+  bool _cancellingProgram = false;
 
   @override
   void initState() {
@@ -100,7 +102,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
                     title: template?['goal_label']?.toString() ?? 'โปรแกรมวิ่งของฉัน',
                     description: template?['description']?.toString() ??
                         'ตารางซ้อมที่คุณลงทะเบียนไว้ สามารถดูและจัดสัปดาห์ปัจจุบันหรืออนาคตได้',
-                    onDelete: _confirmDeleteProgram,
+                    onDelete: _cancellingProgram ? () {} : _confirmDeleteProgram,
                   ),
                 ),
               ),
@@ -137,7 +139,7 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         backgroundColor: AppColors.bg2,
         title: Text('จบโปรแกรมก่อนกำหนด?', style: AppText.heading(size: 17)),
         content: Text(
-          'รายการซ้อมที่ยังไม่ได้เริ่มทั้งหมดจะถูกลบ และคุณจะไม่สามารถกลับมาทำโปรแกรมนี้ต่อได้ หากต้องการฝึกโปรแกรมอีกครั้ง ต้องลงทะเบียนและเริ่มตารางใหม่ ประวัติการซ้อมที่เริ่มหรือเสร็จแล้วจะยังคงอยู่',
+          'คุณจะไม่สามารถกลับมาดำเนินโปรแกรมนี้ต่อได้ หากต้องการเริ่มอีกครั้ง ต้องลงทะเบียนโปรแกรมและจัดตารางใหม่ ประวัติการฝึกเดิมจะยังคงอยู่',
           style: AppText.body(size: 13, color: AppColors.textSecondary),
         ),
         actions: [
@@ -153,7 +155,21 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       ),
     );
     if (confirmed != true || !mounted) return;
-    showAppToast(context, 'ยังจบโปรแกรมไม่ได้ เนื่องจากระบบยังไม่มี API รองรับการยกเลิกโปรแกรม');
+    setState(() => _cancellingProgram = true);
+    final ok = await ref.read(programProvider).cancelCurrentProgram();
+    if (!mounted) return;
+    setState(() => _cancellingProgram = false);
+    if (ok) {
+      Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const MainShell()),
+        (route) => false,
+      );
+    } else {
+      showAppToast(
+        context,
+        ref.read(programProvider).errorMessage ?? 'จบโปรแกรมไม่สำเร็จ กรุณาลองใหม่',
+      );
+    }
   }
 }
 

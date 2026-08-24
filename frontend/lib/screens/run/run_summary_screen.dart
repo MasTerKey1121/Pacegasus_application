@@ -158,12 +158,13 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         const SizedBox(height: 24),
                         LabeledSlider(
                           label: 'ความหนัก RPE',
-                          value: result.rpe.toDouble(),
+                          value: (result.rpe ?? 1).toDouble(),
                           min: 1,
                           max: 10,
                           divisions: 9,
                           minCaption: 'เบาสบาย',
                           maxCaption: 'หนักสุด',
+                          displayText: result.rpe == null ? '—' : null,
                           onChanged: (value) =>
                               setState(() => result.rpe = value.round()),
                         ),
@@ -171,7 +172,9 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         Align(
                           alignment: Alignment.centerLeft,
                           child: Text(
-                            'ระดับ ${result.rpe} — ${result.rpe >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
+                            result.rpe == null
+                                ? 'กรุณาเลือกระดับความหนัก'
+                                : 'ระดับ ${result.rpe} — ${result.rpe! >= 9 ? "หนักสุด · หมดแรงจนไม่มีอะไรจะออกแรงแล้ว" : result.rpe! >= 6 ? "หนักพอสมควร" : "เบาสบาย"}',
                             style: AppText.body(
                               size: 11.5,
                               color: AppColors.textTertiary,
@@ -181,12 +184,13 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         const SizedBox(height: 20),
                         LabeledSlider(
                           label: 'ความเครียด',
-                          value: result.stressLevel.toDouble(),
-                          min: 0,
+                          value: (result.stressLevel ?? 1).toDouble(),
+                          min: 1,
                           max: 10,
                           divisions: 10,
                           minCaption: 'ผ่อนคลาย',
                           maxCaption: 'เครียดมาก',
+                          displayText: result.stressLevel == null ? '—' : null,
                           onChanged: (v) =>
                               setState(() => result.stressLevel = v.round()),
                         ),
@@ -236,7 +240,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           Expanded(
                             child: GradientButton(
                               label: 'ไม่มี',
-                              gradient: !result.hasInjury
+                              gradient: result.hasInjury == false
                                   ? AppColors.greenGradient
                                   : null,
                               height: 46,
@@ -252,7 +256,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                     setState(() => result.hasInjury = true)),
                           ),
                         ]),
-                        if (result.hasInjury) ...[
+                        if (result.hasInjury == true) ...[
                           const SizedBox(height: 12),
                           TextField(
                             controller: _painNoteController,
@@ -281,7 +285,11 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                 GradientButton(
                   label: 'ส่งข้อมูล',
                   loading: _isSubmitting,
-                  onTap: _isSubmitting
+                  onTap: _isSubmitting ||
+                          result.rpe == null ||
+                          result.stressLevel == null ||
+                          result.moodIndex == null ||
+                          result.hasInjury == null
                       ? null
                       : () async {
                           final sessionId =
@@ -294,7 +302,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                             return;
                           }
                           final painNote = _painNoteController.text.trim();
-                          if (result.hasInjury && painNote.isEmpty) {
+                          if (result.hasInjury == true && painNote.isEmpty) {
                             showAppToast(
                               context,
                               'กรุณาระบุอาการหรือบริเวณที่เจ็บ',
@@ -309,14 +317,14 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                   durationMinutes: result.duration.inMinutes
                                       .clamp(1, 1440)
                                       .toInt(),
-                                  rpeScore: result.rpe,
-                                  stressLevel: result.stressLevel
+                                  rpeScore: result.rpe!,
+                                  stressLevel: result.stressLevel!
                                       .clamp(1, 10)
                                       .toInt(),
                                   mood: _apiMoods[
-                                    result.moodIndex.clamp(0, 4).toInt()
+                                    result.moodIndex!.clamp(0, 4).toInt()
                                   ],
-                                  hasPain: result.hasInjury,
+                                  hasPain: result.hasInjury!,
                                   painNote: painNote,
                                 );
                             if (!mounted) return;

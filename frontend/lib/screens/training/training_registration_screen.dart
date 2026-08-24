@@ -33,8 +33,7 @@ class _TrainingRegistrationScreenState
         break;
       }
     }
-    template ??= program.registrationTemplate;
-    final selectedLevel = template?['level']?.toString();
+    final selectedLevel = program.selectedTemplateLevel;
     final isEligible = _canSelectTemplate(template, program.onboardingLevel);
     final isLoading = program.isLoadingTemplates ||
         (program.isLoading && !program.isRegistered);
@@ -82,7 +81,9 @@ class _TrainingRegistrationScreenState
                 GradientButton(
                   label: program.isRegistering
                       ? 'กำลังลงทะเบียน...'
-                      : !isEligible
+                      : selectedLevel == null
+                          ? 'กรุณาเลือกตารางซ้อม'
+                          : !isEligible
                           ? 'ระดับการวิ่งของคุณยังไม่ถึงสำหรับแผนนี้'
                           : 'บันทึกและลงทะเบียนตารางซ้อม',
                   gradient: isEligible ? AppColors.greenGradient : AppColors.goldGradient,
@@ -148,28 +149,47 @@ class _TemplateContentState extends State<_TemplateContent> {
   void didUpdateWidget(covariant _TemplateContent oldWidget) {
     super.didUpdateWidget(oldWidget);
     final levels = widget.templates.map((item) => item['level']?.toString()).toSet();
-    if (_selectedTemplate == null || !levels.contains(_selectedTemplate!['level'])) {
-      _selectedTemplate = widget.recommendedTemplate ??
-          (widget.templates.isEmpty ? null : widget.templates.first);
+    if (_selectedTemplate != null &&
+        !levels.contains(_selectedTemplate!['level'])) {
+      _selectedTemplate = null;
+      _selectedPhaseId = null;
     }
     _ensureSelectedPhase();
   }
 
   @override
   Widget build(BuildContext context) {
-    _selectedTemplate ??= widget.recommendedTemplate ??
-        (widget.templates.isEmpty ? null : widget.templates.first);
-    _ensureSelectedPhase();
     final template = _selectedTemplate;
     if (widget.loading && widget.templates.isEmpty) {
       return const Center(child: CircularProgressIndicator());
     }
     if (template == null) {
-      return Center(
-        child: TextButton.icon(
-          onPressed: widget.onRetry,
-          icon: const Icon(Icons.refresh),
-          label: const Text('โหลดแผนฝึกอีกครั้ง'),
+      return SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            const SectionLabel(title: 'เลือกตารางซ้อม'),
+            Wrap(
+              spacing: 8,
+              runSpacing: 8,
+              children: widget.templates
+                  .map((candidate) => SelectChip(
+                        label: _templateGoalLabel(candidate['goal_label']?.toString()),
+                        active: false,
+                        onTap: () => setState(() {
+                          _selectedTemplate = candidate;
+                          _selectedPhaseId = null;
+                          widget.onTemplateSelected(candidate);
+                        }),
+                      ))
+                  .toList(),
+            ),
+            const SizedBox(height: 16),
+            Text(
+              'กรุณาเลือกตารางซ้อมที่ต้องการ',
+              style: AppText.body(size: 12.5, color: AppColors.textSecondary),
+            ),
+          ],
         ),
       );
     }
@@ -203,7 +223,6 @@ class _TemplateContentState extends State<_TemplateContent> {
                       onTap: () => setState(() {
                         _selectedTemplate = candidate;
                         _selectedPhaseId = null;
-                        _ensureSelectedPhase();
                         widget.onTemplateSelected(candidate);
                       }),
                     ))
@@ -286,9 +305,7 @@ class _TemplateContentState extends State<_TemplateContent> {
       _selectedPhaseId = null;
       return;
     }
-    if (!phases.any((phase) => phase['id']?.toString() == _selectedPhaseId)) {
-      _selectedPhaseId = phases.first['id']?.toString();
-    }
+    if (!phases.any((phase) => phase['id']?.toString() == _selectedPhaseId)) _selectedPhaseId = null;
   }
 }
 

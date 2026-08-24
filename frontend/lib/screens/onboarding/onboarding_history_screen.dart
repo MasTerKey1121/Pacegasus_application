@@ -24,7 +24,9 @@ class OnboardingHistoryScreen extends ConsumerWidget {
             ? d.notTrainingDuration
             : null;
     final durationIndex = duration == null ? -1 : _durationOptions.indexOf(duration);
-    final distanceIndex = _distanceOptions.indexOf(d.longestDistance);
+    final distanceIndex = d.longestDistance == null
+      ? -1
+      : _distanceOptions.indexOf(d.longestDistance!);
 
     return {
       'hasRunBefore': d.hasRunningExperience,
@@ -48,7 +50,11 @@ class OnboardingHistoryScreen extends ConsumerWidget {
         (data.isCurrentlyTraining == true
             ? data.trainingDuration != null
             : data.notTrainingDuration != null);
-    final canProceed = hasAnsweredExperience && hasAnsweredTraining && hasSelectedDuration && !ob.isSubmitting;
+    final canProceed = hasAnsweredExperience &&
+        hasAnsweredTraining &&
+        hasSelectedDuration &&
+        data.longestDistance != null &&
+        !ob.isSubmitting;
 
     return Scaffold(
       body: AppBackground(
@@ -193,7 +199,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                   data.hasRunningExperience == true ? 'เคยซ้อม/แข่งวิ่ง' : 'ไม่เคย',
                                 ),
                                 _SummaryRow('ชื่อ', _displayName(user)),
-                                _SummaryRow('เพศ', data.gender),
+                                _SummaryRow('เพศ', data.gender ?? 'ไม่ระบุ'),
                                 _SummaryRow('อายุ', _ageLabel(data)),
                                 _SummaryRow('น้ำหนัก', _withUnit(data.weightKg, 'กก.')),
                                 _SummaryRow('ส่วนสูง', _withUnit(data.heightCm, 'ซม.')),
@@ -208,7 +214,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                                 _SummaryRow('โรคประจำตัว', _selectedItems(data.conditions)),
                                 _SummaryRow('อาการบาดเจ็บที่เคยเป็น', _selectedItems(data.pastInjuries)),
                                 _SummaryRow('อาการบาดเจ็บปัจจุบัน', _selectedItems(data.currentInjuries)),
-                                _SummaryRow('ระยะวิ่งไกลสุด', data.longestDistance),
+                                _SummaryRow('ระยะวิ่งไกลสุด', data.longestDistance ?? 'ไม่ระบุ'),
                               ],
                             ),
                           ),

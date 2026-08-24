@@ -130,16 +130,21 @@ class HomeScreen extends ConsumerWidget {
 */
 
           GestureDetector(
-            onTap: program.isLoading ||
-                    (!program.isRegistered && !wellness.completedToday)
+            onTap: program.isLoading
                 ? null
-                : () => Navigator.of(context).push(
+                : () {
+                    if (!wellness.completedToday) {
+                      showAppToast(context, 'กรุณาทำ Daily Wellness Check-in ก่อน');
+                      return;
+                    }
+                    Navigator.of(context).push(
                       MaterialPageRoute(
                         builder: (_) => program.isRegistered
                             ? const TrainingScheduleScreen()
                             : const TrainingRegistrationScreen(),
                       ),
-                    ),
+                    );
+                  },
             child: AppCard(
               child: Row(
                 children: [
@@ -176,23 +181,25 @@ class HomeScreen extends ConsumerWidget {
 
           const SectionLabel(title: 'แผนวันนี้'),
           GestureDetector(
-            onTap: wellness.completedToday && !program.isRegistered
-                ? () => Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (_) => const TrainingRegistrationScreen(),
-                      ),
-                    )
-                : null,
+            onTap: () {
+              if (!wellness.completedToday) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const DailyWellnessScreen()),
+                );
+              } else if (!program.isRegistered) {
+                Navigator.of(context).push(
+                  MaterialPageRoute(builder: (_) => const TrainingRegistrationScreen()),
+                );
+              }
+            },
             child: AppCard(
               child: Column(
                 children: [
                 Text(wellness.completedToday ? '🏃' : '🔒',
                     style: const TextStyle(fontSize: 30)),
                 const SizedBox(height: 10),
-                if (!wellness.completedToday && !program.isScheduleSaved) Text(
-                  wellness.completedToday
-                      ? 'Easy run 5 km · Zone 2 · ประมาณ 35 นาที'
-                      : 'ทำ Daily Wellness Check-in เพื่อปลดล็อค',
+                if (!wellness.completedToday) Text(
+                  'ทำ Daily Wellness Check-in เพื่อปลดล็อค',
                   textAlign: TextAlign.center,
                   style: AppText.body(
                     size: 12.5,

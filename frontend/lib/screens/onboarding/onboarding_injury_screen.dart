@@ -14,10 +14,10 @@ class OnboardingInjuryScreen extends ConsumerWidget {
   const OnboardingInjuryScreen({super.key});
 
   Map<String, dynamic> _buildBody(OnboardingData d) {
-    final hasHistory = d.pastInjuries.isNotEmpty || d.currentInjuries.isNotEmpty;
+    final hasHistory = d.hasPastInjuries == true || d.hasCurrentInjuries == true;
     return {
       'hasInjuryHistory': hasHistory,
-      'hasChronicCondition': d.conditions.isNotEmpty,
+      'hasChronicCondition': d.hasChronicCondition == true,
       'injuries': [
         ...d.pastInjuries.map((b) => {
               'category': 'injury',
@@ -41,6 +41,10 @@ class OnboardingInjuryScreen extends ConsumerWidget {
     final notifier = ref.read(onboardingProvider);
     final ob = ref.watch(onboardingProvider);
     final data = ob.data;
+    final canProceed = data.hasChronicCondition != null &&
+        data.hasPastInjuries != null &&
+        data.hasCurrentInjuries != null &&
+        !ob.isSubmitting;
 
     return Scaffold(
       body: AppBackground(
@@ -74,8 +78,13 @@ class OnboardingInjuryScreen extends ConsumerWidget {
                             selected: data.conditions,
                             onToggle: (v) => notifier.update((d) {
                               d.conditions.contains(v) ? d.conditions.remove(v) : d.conditions.add(v);
+                              d.hasChronicCondition = d.conditions.isEmpty ? null : true;
                             }),
-                            onClear: () => notifier.update((d) => d.conditions.clear()),
+                            onClear: () => notifier.update((d) {
+                              d.conditions.clear();
+                              d.hasChronicCondition = false;
+                            }),
+                            answeredNone: data.hasChronicCondition == false,
                           ),
                           const SizedBox(height: 30),
                           Text('อาการบาดเจ็บที่เคยเป็น (หากมีเลือกได้มากกว่า 1)',
@@ -86,8 +95,13 @@ class OnboardingInjuryScreen extends ConsumerWidget {
                             selected: data.pastInjuries,
                             onToggle: (v) => notifier.update((d) {
                               d.pastInjuries.contains(v) ? d.pastInjuries.remove(v) : d.pastInjuries.add(v);
+                              d.hasPastInjuries = d.pastInjuries.isEmpty ? null : true;
                             }),
-                            onClear: () => notifier.update((d) => d.pastInjuries.clear()),
+                            onClear: () => notifier.update((d) {
+                              d.pastInjuries.clear();
+                              d.hasPastInjuries = false;
+                            }),
+                            answeredNone: data.hasPastInjuries == false,
                           ),
                           const SizedBox(height: 30),
                           Text('อาการบาดเจ็บในปัจจุบัน (หากมีเลือกได้มากกว่า 1)',
@@ -98,8 +112,13 @@ class OnboardingInjuryScreen extends ConsumerWidget {
                             selected: data.currentInjuries,
                             onToggle: (v) => notifier.update((d) {
                               d.currentInjuries.contains(v) ? d.currentInjuries.remove(v) : d.currentInjuries.add(v);
+                              d.hasCurrentInjuries = d.currentInjuries.isEmpty ? null : true;
                             }),
-                            onClear: () => notifier.update((d) => d.currentInjuries.clear()),
+                            onClear: () => notifier.update((d) {
+                              d.currentInjuries.clear();
+                              d.hasCurrentInjuries = false;
+                            }),
+                            answeredNone: data.hasCurrentInjuries == false,
                           ),
                           if (ob.errorMessage != null) ...[
                             const SizedBox(height: 16),
@@ -116,7 +135,7 @@ class OnboardingInjuryScreen extends ConsumerWidget {
                   Expanded(
                     child: GradientButton(
                       label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ถัดไป',
-                      onTap: ob.isSubmitting
+                      onTap: !canProceed
                           ? null
                           : () async {
                               final ok = await notifier.submitStep(
@@ -144,11 +163,13 @@ class _MultiWrap extends StatelessWidget {
   final Set<String> selected;
   final ValueChanged<String> onToggle;
   final VoidCallback onClear;
+  final bool answeredNone;
   const _MultiWrap({
     required this.options,
     required this.selected,
     required this.onToggle,
     required this.onClear,
+    required this.answeredNone,
   });
 
   @override
@@ -158,7 +179,7 @@ class _MultiWrap extends StatelessWidget {
       runSpacing: 10,
       children: [
         ...options.map((o) => MultiChip(label: o, selected: selected.contains(o), onTap: () => onToggle(o))),
-        MultiChip(label: 'ไม่มี', selected: selected.isEmpty, onTap: onClear),
+        MultiChip(label: 'ไม่มี', selected: answeredNone, onTap: onClear),
       ],
     );
   }
