@@ -372,7 +372,7 @@ int? _weekValue(dynamic value) => switch (value) {
 List<Map<String, dynamic>> _sessionSpecsForPhase(dynamic value, String? phaseId) {
   final seen = <String>{};
   return _mapList(value)
-      .where((spec) => spec['phase_id']?.toString() == phaseId)
+      .where((spec) => phaseId == null || spec['phase_id']?.toString() == phaseId)
       .where((spec) => seen.add(spec['session_type']?.toString() ?? ''))
       .toList(growable: false);
 }

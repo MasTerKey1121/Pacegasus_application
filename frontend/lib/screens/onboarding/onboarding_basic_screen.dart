@@ -78,8 +78,14 @@ class OnboardingBasicScreen extends ConsumerWidget {
     final data = ob.data;
     final errors = _validationErrors(data);
     final canProceed = errors.isEmpty && !ob.isSubmitting;
-    final hasStarted = [data.day, data.month, data.year, data.weightKg, data.heightCm, data.runningDaysPerWeek]
-            .any((value) => value.isNotEmpty) ||
+    final hasStarted = [
+      data.day,
+      data.month,
+      data.year,
+      data.weightKg,
+      data.heightCm,
+      data.runningDaysPerWeek,
+    ].any((value) => value.isNotEmpty) ||
         data.gender != null;
 
     return Scaffold(
@@ -147,8 +153,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
                                           (d) => d.year = normalizeBirthYear(v)?.toString() ?? v,
                                         ))),
                           ]),
-                          if (hasStarted && errors['birthDate'] != null)
-                            _ValidationText(errors['birthDate']!),
                           const SizedBox(height: 22),
                           Text('เพศกำเนิด',
                               style: AppText.body(
@@ -173,8 +177,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
-                          if (hasStarted && errors['gender'] != null)
-                            _ValidationText(errors['gender']!),
                           const SizedBox(height: 22),
                           Row(children: [
                             Expanded(
@@ -206,8 +208,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
-                          if (hasStarted && (errors['weight'] != null || errors['height'] != null))
-                            _ValidationText([errors['weight'], errors['height']].whereType<String>().join('  ')),
                           const SizedBox(height: 22),
                           Row(children: [
                             Expanded(
@@ -224,8 +224,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
                               ),
                             ),
                           ]),
-                          if (hasStarted && errors['runningDays'] != null)
-                            _ValidationText(errors['runningDays']!),
                           if (ob.errorMessage != null) ...[
                             const SizedBox(height: 14),
                             Text(ob.errorMessage!,
@@ -262,17 +260,6 @@ class OnboardingBasicScreen extends ConsumerWidget {
       ),
     );
   }
-}
-
-class _ValidationText extends StatelessWidget {
-  final String text;
-  const _ValidationText(this.text);
-
-  @override
-  Widget build(BuildContext context) => Padding(
-        padding: const EdgeInsets.only(top: 8),
-        child: Text(text, style: AppText.body(size: 12, color: AppColors.red1)),
-      );
 }
 
 class _DateBox extends StatelessWidget {
