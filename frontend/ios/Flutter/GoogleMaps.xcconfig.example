@@ -1,3 +1,0 @@
-// Copy to GoogleMaps.xcconfig and supply a Google Maps iOS SDK key.
-// This file is deliberately gitignored.
-GOOGLE_MAPS_API_KEY = your-google-maps-ios-api-key

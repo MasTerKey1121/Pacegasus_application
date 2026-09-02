@@ -1,4 +1,3 @@
-# Copy this file to android/local.properties and add a restricted Google Maps
-# API key.  Do not commit the copied file.
+# GISTDA Map reads GISTDA_MAP_API_KEY and GISTDA_BUNDLE_ID from frontend/.env.
+# Do not add map credentials to this file.
 sdk.dir=<your-android-sdk-path>
-GOOGLE_MAPS_API_KEY=<your-google-maps-android-api-key>
