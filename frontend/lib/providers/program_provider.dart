@@ -140,7 +140,8 @@ class ProgramNotifier extends ChangeNotifier {
   }
 
   Future<bool> registerPlan({String? level}) async {
-    if (level == null && (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
+    if (level == null &&
+        (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
       await _restoreOnboardingLevel();
     }
     final selectedLevel = level ?? _onboardingLevel;
@@ -250,7 +251,6 @@ class ProgramNotifier extends ChangeNotifier {
       await _api.addQuestsBatch(quests);
       _isScheduleSaved = true;
       isSavingSchedule = false;
-      await loadCurrentWeek();
       notifyListeners();
       return true;
     } catch (error) {
@@ -288,7 +288,6 @@ class ProgramNotifier extends ChangeNotifier {
       );
       _isScheduleSaved = true;
       isSavingSchedule = false;
-      await loadCurrentWeek();
       notifyListeners();
       return true;
     } catch (error) {
@@ -306,10 +305,13 @@ class ProgramNotifier extends ChangeNotifier {
     final quests = <Map<String, String>>[];
     for (var dayIndex = 0; dayIndex < week.length; dayIndex++) {
       final type = week[dayIndex];
-      if (type == null || type == SessionType.race || type == SessionType.restForced) {
+      if (type == null ||
+          type == SessionType.race ||
+          type == SessionType.restForced) {
         continue;
       }
-      final date = _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
+      final date =
+          _programStartDate!.add(Duration(days: weekIndex * 7 + dayIndex));
       quests.add({
         'scheduledDate': _dateOnly(date),
         'sessionType': _sessionTypeValue(type),

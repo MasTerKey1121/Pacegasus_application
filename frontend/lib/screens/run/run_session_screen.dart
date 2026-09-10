@@ -3,9 +3,10 @@ import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:sphere_maps_flutter/sphere_maps_flutter.dart';
+import 'package:latlong2/latlong.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
 import '../../providers/run_provider.dart';
@@ -22,7 +23,8 @@ class RunSessionScreen extends ConsumerStatefulWidget {
 }
 
 class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
-  bool get _isTreadmill => ref.read(runSetupProvider).environment == 'treadmill';
+  bool get _isTreadmill =>
+      ref.read(runSetupProvider).environment == 'treadmill';
   final _treadmillDistanceController = TextEditingController();
   int _backStep = 0;
   Timer? _backResetTimer;
@@ -31,7 +33,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   @override
   void initState() {
     super.initState();
-    _draftTimer = Timer.periodic(const Duration(seconds: 2), (_) => _saveDraft());
+    _draftTimer =
+        Timer.periodic(const Duration(seconds: 2), (_) => _saveDraft());
     if (_isTreadmill) {
       WidgetsBinding.instance.addPostFrameCallback((_) => _startTreadmill());
       return;
@@ -60,7 +63,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     );
   }
 
-  final _mapKey = GlobalKey<SphereMapState>();
+  final _mapController = MapController();
   StreamSubscription<Position>? _positionSub;
   _MapPoint _currentPosition = const _MapPoint(13.7563, 100.5018);
   final List<_MapPoint> _routePoints = [];
@@ -80,27 +83,22 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   String get _gistdaApiKey => dotenv.env['GISTDA_MAP_API_KEY'] ?? '';
   String get _gistdaBundleId =>
       dotenv.env['GISTDA_BUNDLE_ID'] ?? 'com.example.pacegasus';
+  String get _gistdaTileUrl => 'https://basemap.sphere.gistda.or.th/tiles/'
+      'thailand_images/EPSG3857/{z}/{x}/{y}.jpeg'
+      '?key=${Uri.encodeQueryComponent(_gistdaApiKey)}';
 
   void _syncMap() {
-    if (!_mapReady || _mapKey.currentState == null) return;
-    final map = _mapKey.currentState!;
-    map.call('location', args: [_currentPosition.toSphereLocation()]);
-    map.call('Overlays.clear');
-    map.call('Overlays.add', args: [Sphere.SphereObject('Marker', args: [
-      _currentPosition.toSphereLocation(),
-      {'title': 'Current location'},
-    ])]);
-    if (_routePoints.length > 1) {
-      map.call('Overlays.add', args: [Sphere.SphereObject('Polyline', args: [
-        _routePoints.map((point) => point.toSphereLocation()).toList(),
-        {'lineWidth': 6, 'lineColor': 'rgba(169, 112, 255, 0.9)'},
-      ])]);
-    }
+    if (!_mapReady) return;
+    _mapController.move(
+      _currentPosition.toLatLng(),
+      _mapController.camera.zoom,
+    );
   }
 
   void _markMapReady(String source) {
     if (!mounted || _mapReady) return;
-    debugPrint('[GISTDA Map] ready via $source; starting countdown when GPS is ready');
+    debugPrint(
+        '[GISTDA Map] ready via $source; starting countdown when GPS is ready');
     _mapLoadTimer?.cancel();
     setState(() {
       _mapReady = true;
@@ -125,7 +123,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   void _maybeStartCountdown() {
     if (ref.read(runProvider).isRunning) return;
-    if (_countdownStarted || (!_isTreadmill && (!_hasLocationPermission || !_hasInitialPosition))) {
+    if (_countdownStarted ||
+        (!_isTreadmill && (!_hasLocationPermission || !_hasInitialPosition))) {
       return;
     }
     if (_mapCanLoad && !_mapReady) {
@@ -173,7 +172,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('เริ่ม Session', style: AppText.body(color: AppColors.purple2)),
+            child: Text('เริ่ม Session',
+                style: AppText.body(color: AppColors.purple2)),
           ),
         ],
       ),
@@ -236,8 +236,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
           pos.longitude,
         );
         final seconds = pos.timestamp
-            .difference(_lastMeasuredPosition!.timestamp)
-            .inMilliseconds / 1000;
+                .difference(_lastMeasuredPosition!.timestamp)
+                .inMilliseconds /
+            1000;
         // Ignore GPS jumps and stationary noise.
         if (meters >= 2 && meters < 150 && seconds > 0) {
           run.recordGpsDistance(meters: meters, seconds: seconds);
@@ -270,10 +271,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _positionSub?.cancel();
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
-    _mapKey.currentState?.remove();
     _backResetTimer?.cancel();
     _draftTimer?.cancel();
     _treadmillDistanceController.dispose();
+    _mapController.dispose();
     super.dispose();
   }
 
@@ -283,7 +284,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _backResetTimer?.cancel();
     if (_backStep == 0) {
       _backStep = 1;
-      showAppToast(context, 'Session กำลังดำเนินอยู่ กดย้อนกลับอีกครั้งเพื่อยืนยันการจบ');
+      showAppToast(context,
+          'Session กำลังดำเนินอยู่ กดย้อนกลับอีกครั้งเพื่อยืนยันการจบ');
     } else if (_backStep == 1) {
       _backStep = 2;
       await showDialog<void>(
@@ -291,7 +293,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
           title: const Text('ต้องการจบ Session การวิ่งหรือไม่?'),
-          content: const Text('กดย้อนกลับอีกครั้งภายใน 5 วินาทีเพื่อจบ Session หรือเลือกวิ่งต่อ'),
+          content: const Text(
+              'กดย้อนกลับอีกครั้งภายใน 5 วินาทีเพื่อจบ Session หรือเลือกวิ่งต่อ'),
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx),
@@ -300,7 +303,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
           ],
         ),
       );
-      if (mounted) showAppToast(context, 'หากต้องการจบ Session ให้กดย้อนกลับอีกครั้ง');
+      if (mounted)
+        showAppToast(context, 'หากต้องการจบ Session ให้กดย้อนกลับอีกครั้ง');
     } else {
       await _finishRun();
       return;
@@ -317,11 +321,16 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         content: TextField(
           controller: controller,
           keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration: const InputDecoration(labelText: 'ระยะทางจากลู่วิ่ง (กม.)'),
+          decoration:
+              const InputDecoration(labelText: 'ระยะทางจากลู่วิ่ง (กม.)'),
         ),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('ยกเลิก')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('จบการวิ่ง')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('ยกเลิก')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('จบการวิ่ง')),
         ],
       ),
     );
@@ -337,12 +346,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   Future<void> _finishRun() async {
     final result = await ref.read(runProvider).stop(
-      sessionId: ref.read(runSetupProvider).sessionId!,
-      sideQuests: ref.read(runSetupProvider).activeSideQuests,
-      endLat: _currentPosition.latitude,
-      endLng: _currentPosition.longitude,
-      routePoints: _routePoints.map((point) => {'lat': point.latitude, 'lng': point.longitude}).toList(),
-    );
+          sessionId: ref.read(runSetupProvider).sessionId!,
+          sideQuests: ref.read(runSetupProvider).activeSideQuests,
+          endLat: _currentPosition.latitude,
+          endLng: _currentPosition.longitude,
+          routePoints: _routePoints
+              .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+              .toList(),
+        );
     if (!mounted || result == null) return;
     await runDraftStore.clear();
     Navigator.of(context).pushReplacement(
@@ -384,212 +395,251 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final doneCount = quests.where((q) => q.done).length;
 
     return WillPopScope(
-      onWillPop: () async {
-        if (!ref.read(runProvider).isRunning) return true;
-        await _handleBack();
-        return false;
-      },
-      child: Scaffold(
-      backgroundColor: AppColors.bg1,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            Padding(
-              padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
-              child: Column(
-                children: [
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        onWillPop: () async {
+          if (!ref.read(runProvider).isRunning) return true;
+          await _handleBack();
+          return false;
+        },
+        child: Scaffold(
+          backgroundColor: AppColors.bg1,
+          body: SafeArea(
+            child: Stack(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 20),
+                  child: Column(
                     children: [
-                      _Stat(value: run.distanceKm.toStringAsFixed(2), label: 'กม.'),
-                      _Stat(value: run.elapsedLabel, label: 'เวลา'),
-                      _Stat(
-                          value: run.speedKmh > 0
-                              ? run.speedKmh.toStringAsFixed(1)
-                              : '0.0',
-                          label: 'กม./ชม.'),
-                    ],
-                  ),
-                  const SizedBox(height: 22),
-                  Expanded(
-                    child: ClipRRect(
-                      borderRadius: BorderRadius.circular(24),
-                      child: Stack(
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
                         children: [
-                          if (_isTreadmill)
-                            const _TreadmillPanel()
-                          else if (Platform.isWindows)
-                            _WindowsLocationPanel(
-                              position: _currentPosition,
-                              hasLocation: _hasLocationPermission,
-                            )
-                          else if (_gistdaApiKey.isEmpty)
-                            const _MapConfigurationPanel()
-                          else
-                            SphereMapWidget(
-                              key: _mapKey,
-                              apiKey: _gistdaApiKey,
-                              bundleId: _gistdaBundleId,
-                              eventName: [
-                                IJavascriptChannel(
-                                  name: 'Ready',
-                                  onMessageReceived: (_) => _markMapReady('map event'),
-                                ),
-                                IJavascriptChannel(
-                                  name: 'error',
-                                  onMessageReceived: (message) {
-                                    debugPrint('[GISTDA Map] ${message.message}');
-                                    _askToStartWithoutMap();
-                                  },
-                                ),
-                              ],
-                              options: {
-                                'layer': Sphere.SphereStatic('Layers', 'NORMAL'),
-                                'zoom': 16,
-                                'zoomRange': {'min': 3, 'max': 20},
-                                'location': _currentPosition.toSphereLocation(),
-                                'lastView': false,
-                              },
-                            ),
-                          if (_locationMessage != null)
-                            Positioned(
-                              left: 12,
-                              right: 12,
-                              bottom: 12,
-                              child: Container(
-                                padding: const EdgeInsets.all(10),
-                                decoration: BoxDecoration(
-                                  color: AppColors.card.withOpacity(.94),
-                                  borderRadius: BorderRadius.circular(12),
-                                ),
-                                child: Text(
-                                  _locationMessage!,
-                                  textAlign: TextAlign.center,
-                                  style: AppText.body(size: 12),
-                                ),
-                              ),
-                            ),
-                          if (!run.isRunning)
-                            Positioned.fill(
-                              child: Container(
-                                color: Colors.black.withOpacity(.38),
-                                alignment: Alignment.center,
-                                child: Column(
-                                  mainAxisSize: MainAxisSize.min,
+                          _Stat(
+                              value: run.distanceKm.toStringAsFixed(2),
+                              label: 'กม.'),
+                          _Stat(value: run.elapsedLabel, label: 'เวลา'),
+                          _Stat(
+                              value: run.speedKmh > 0
+                                  ? run.speedKmh.toStringAsFixed(1)
+                                  : '0.0',
+                              label: 'กม./ชม.'),
+                        ],
+                      ),
+                      const SizedBox(height: 22),
+                      Expanded(
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(24),
+                          child: Stack(
+                            children: [
+                              if (_isTreadmill)
+                                const _TreadmillPanel()
+                              else if (Platform.isWindows)
+                                _WindowsLocationPanel(
+                                  position: _currentPosition,
+                                  hasLocation: _hasLocationPermission,
+                                )
+                              else if (_gistdaApiKey.isEmpty)
+                                const _MapConfigurationPanel()
+                              else
+                                FlutterMap(
+                                  mapController: _mapController,
+                                  options: MapOptions(
+                                    initialCenter: _currentPosition.toLatLng(),
+                                    initialZoom: 16,
+                                    minZoom: 3,
+                                    maxZoom: 19,
+                                    onMapReady: () =>
+                                        _markMapReady('Flutter map ready'),
+                                  ),
                                   children: [
-                                    if (!_isTreadmill && (!_hasLocationPermission ||
-                                        (_mapCanLoad &&
-                                            !_mapReady &&
-                                            !_mapLoadTimedOut)))
-                                      const CircularProgressIndicator()
-                                    else
-                                      Text(
-                                        _countdown > 0 ? '$_countdown' : 'เริ่ม!',
-                                        style: AppText.heading(size: 64),
+                                    TileLayer(
+                                      urlTemplate: _gistdaTileUrl,
+                                      userAgentPackageName: _gistdaBundleId,
+                                      maxNativeZoom: 19,
+                                    ),
+                                    if (_routePoints.length > 1)
+                                      PolylineLayer(
+                                        polylines: [
+                                          Polyline(
+                                            points: _routePoints
+                                                .map(
+                                                    (point) => point.toLatLng())
+                                                .toList(growable: false),
+                                            color: AppColors.purple2,
+                                            strokeWidth: 6,
+                                          ),
+                                        ],
                                       ),
-                                    const SizedBox(height: 12),
-                                    Text(
-                                      _isTreadmill
-                                          ? 'เตรียมเริ่มวิ่งบนลู่'
-                                          : !_hasLocationPermission
-                                          ? 'กำลังเชื่อมต่อ GPS'
-                                          : (_mapCanLoad &&
-                                                  !_mapReady &&
-                                                  !_mapLoadTimedOut)
-                                          ? 'กำลังโหลดแผนที่'
-                                          : _mapLoadTimedOut
-                                              ? 'แผนที่โหลดไม่สำเร็จ แต่บันทึกการวิ่งได้'
-                                              : 'เตรียมพร้อมออกวิ่ง',
-                                      style: AppText.heading(size: 15),
+                                    MarkerLayer(
+                                      markers: [
+                                        Marker(
+                                          point: _currentPosition.toLatLng(),
+                                          width: 38,
+                                          height: 38,
+                                          child: const Icon(
+                                            Icons.location_on_rounded,
+                                            color: AppColors.purple2,
+                                            size: 38,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                    const Positioned(
+                                      left: 8,
+                                      bottom: 8,
+                                      child: _GistdaAttribution(),
                                     ),
                                   ],
                                 ),
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text('ระยะทางที่เหลือ',
-                              style: AppText.body(
-                                  size: 11.5, color: AppColors.textTertiary)),
-                          Text(
-                              '${run.distanceKm.toStringAsFixed(1)} / ${run.goalDistanceKm.toStringAsFixed(0)} km',
-                              style: AppText.heading(size: 13.5)),
-                        ],
-                      ),
-                      GestureDetector(
-                        onTap: _openMissionsSheet,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.end,
-                          children: [
-                            Text('ภารกิจ', style: AppText.body(size: 11.5, color: AppColors.textTertiary)),
-                            Text(
-                              quests.isEmpty ? 'ไม่มีภารกิจ' : '$doneCount/${quests.length}',
-                              style: AppText.heading(size: 13.5),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 18),
-                  Row(
-                    children: [
-                      GestureDetector(
-                        onTap: !run.isRunning || run.isStopping
-                            ? null
-                            : () => ref.read(runProvider).togglePause(),
-                        child: Container(
-                          width: 54,
-                          height: 54,
-                          decoration: BoxDecoration(
-                            color: AppColors.card,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(color: AppColors.border),
+                              if (_locationMessage != null)
+                                Positioned(
+                                  left: 12,
+                                  right: 12,
+                                  bottom: 12,
+                                  child: Container(
+                                    padding: const EdgeInsets.all(10),
+                                    decoration: BoxDecoration(
+                                      color: AppColors.card.withOpacity(.94),
+                                      borderRadius: BorderRadius.circular(12),
+                                    ),
+                                    child: Text(
+                                      _locationMessage!,
+                                      textAlign: TextAlign.center,
+                                      style: AppText.body(size: 12),
+                                    ),
+                                  ),
+                                ),
+                              if (!run.isRunning)
+                                Positioned.fill(
+                                  child: Container(
+                                    color: Colors.black.withOpacity(.38),
+                                    alignment: Alignment.center,
+                                    child: Column(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        if (!_isTreadmill &&
+                                            (!_hasLocationPermission ||
+                                                (_mapCanLoad &&
+                                                    !_mapReady &&
+                                                    !_mapLoadTimedOut)))
+                                          const CircularProgressIndicator()
+                                        else
+                                          Text(
+                                            _countdown > 0
+                                                ? '$_countdown'
+                                                : 'เริ่ม!',
+                                            style: AppText.heading(size: 64),
+                                          ),
+                                        const SizedBox(height: 12),
+                                        Text(
+                                          _isTreadmill
+                                              ? 'เตรียมเริ่มวิ่งบนลู่'
+                                              : !_hasLocationPermission
+                                                  ? 'กำลังเชื่อมต่อ GPS'
+                                                  : (_mapCanLoad &&
+                                                          !_mapReady &&
+                                                          !_mapLoadTimedOut)
+                                                      ? 'กำลังโหลดแผนที่'
+                                                      : _mapLoadTimedOut
+                                                          ? 'แผนที่โหลดไม่สำเร็จ แต่บันทึกการวิ่งได้'
+                                                          : 'เตรียมพร้อมออกวิ่ง',
+                                          style: AppText.heading(size: 15),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                ),
+                            ],
                           ),
-                          child: Icon(
-                              run.isPaused
-                                  ? Icons.play_arrow_rounded
-                                  : Icons.pause_rounded,
-                              color: Colors.white),
                         ),
                       ),
-                      const SizedBox(width: 12),
-                      Expanded(
-                        child: GradientButton(
-                          label: '■ จบการวิ่ง',
-                          loading: run.isStopping,
-                          gradient: LinearGradient(
-                              colors: [AppColors.red1, AppColors.red2]),
-                          onTap: !run.isRunning || run.isStopping
-                              ? null
-                              : () => _isTreadmill ? _finishTreadmill() : _finishRun(),
-                        ),
+                      const SizedBox(height: 18),
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text('ระยะทางที่เหลือ',
+                                  style: AppText.body(
+                                      size: 11.5,
+                                      color: AppColors.textTertiary)),
+                              Text(
+                                  '${run.distanceKm.toStringAsFixed(1)} / ${run.goalDistanceKm.toStringAsFixed(0)} km',
+                                  style: AppText.heading(size: 13.5)),
+                            ],
+                          ),
+                          GestureDetector(
+                            onTap: _openMissionsSheet,
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.end,
+                              children: [
+                                Text('ภารกิจ',
+                                    style: AppText.body(
+                                        size: 11.5,
+                                        color: AppColors.textTertiary)),
+                                Text(
+                                  quests.isEmpty
+                                      ? 'ไม่มีภารกิจ'
+                                      : '$doneCount/${quests.length}',
+                                  style: AppText.heading(size: 13.5),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 18),
+                      Row(
+                        children: [
+                          GestureDetector(
+                            onTap: !run.isRunning || run.isStopping
+                                ? null
+                                : () => ref.read(runProvider).togglePause(),
+                            child: Container(
+                              width: 54,
+                              height: 54,
+                              decoration: BoxDecoration(
+                                color: AppColors.card,
+                                borderRadius: BorderRadius.circular(16),
+                                border: Border.all(color: AppColors.border),
+                              ),
+                              child: Icon(
+                                  run.isPaused
+                                      ? Icons.play_arrow_rounded
+                                      : Icons.pause_rounded,
+                                  color: Colors.white),
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: GradientButton(
+                              label: '■ จบการวิ่ง',
+                              loading: run.isStopping,
+                              gradient: LinearGradient(
+                                  colors: [AppColors.red1, AppColors.red2]),
+                              onTap: !run.isRunning || run.isStopping
+                                  ? null
+                                  : () => _isTreadmill
+                                      ? _finishTreadmill()
+                                      : _finishRun(),
+                            ),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 6),
+                      Text(
+                        run.isPaused
+                            ? 'หยุดชั่วคราว · ${run.elapsedLabel}'
+                            : 'กำลังวิ่ง · ${run.elapsedLabel}',
+                        style: AppText.body(
+                            size: 11.5, color: AppColors.textTertiary),
                       ),
                     ],
                   ),
-                  const SizedBox(height: 6),
-                  Text(
-                    run.isPaused
-                        ? 'หยุดชั่วคราว · ${run.elapsedLabel}'
-                        : 'กำลังวิ่ง · ${run.elapsedLabel}',
-                    style: AppText.body(size: 11.5, color: AppColors.textTertiary),
-                  ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
-      ),
-    ));
+          ),
+        ));
   }
 }
 
@@ -601,7 +651,26 @@ class _MapPoint {
   final double latitude;
   final double longitude;
 
-  Map<String, double> toSphereLocation() => {'lat': latitude, 'lon': longitude};
+  LatLng toLatLng() => LatLng(latitude, longitude);
+}
+
+class _GistdaAttribution extends StatelessWidget {
+  const _GistdaAttribution();
+
+  @override
+  Widget build(BuildContext context) => DecoratedBox(
+        decoration: BoxDecoration(
+          color: Colors.black.withValues(alpha: .62),
+          borderRadius: BorderRadius.circular(5),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 3),
+          child: Text(
+            '© GISTDA sphere',
+            style: AppText.body(size: 9, color: Colors.white),
+          ),
+        ),
+      );
 }
 
 class _MapConfigurationPanel extends StatelessWidget {
@@ -679,7 +748,8 @@ class _TreadmillPanel extends StatelessWidget {
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [
-            const Icon(Icons.directions_run_rounded, color: AppColors.purple2, size: 54),
+            const Icon(Icons.directions_run_rounded,
+                color: AppColors.purple2, size: 54),
             const SizedBox(height: 12),
             Text('กำลังวิ่งบนลู่', style: AppText.heading(size: 17)),
             const SizedBox(height: 6),
@@ -719,7 +789,8 @@ class _MissionsMiniWindow extends ConsumerWidget {
               children: [
                 Text('ภารกิจระหว่างวิ่ง', style: AppText.heading(size: 15)),
                 RoundIconButton(
-                    icon: Icons.close, onTap: () => Navigator.of(context).pop()),
+                    icon: Icons.close,
+                    onTap: () => Navigator.of(context).pop()),
               ],
             ),
             const SizedBox(height: 12),
@@ -727,31 +798,35 @@ class _MissionsMiniWindow extends ConsumerWidget {
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text('ไม่ได้เลือกภารกิจไว้สำหรับการวิ่งนี้',
-                    style:
-                        AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                    style: AppText.body(
+                        size: 12.5, color: AppColors.textSecondary)),
               )
             else
               ...quests.map((q) => Padding(
                     padding: const EdgeInsets.only(bottom: 10),
                     child: AppCard(
-                      borderColor:
-                          q.done ? AppColors.green1.withOpacity(.4) : AppColors.border,
+                      borderColor: q.done
+                          ? AppColors.green1.withOpacity(.4)
+                          : AppColors.border,
                       child: Row(
                         children: [
-                          Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
+                          Text(q.icon ?? '🎯',
+                              style: const TextStyle(fontSize: 20)),
                           const SizedBox(width: 10),
                           Expanded(
                             child: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
                               children: [
-                                Text(q.title, style: AppText.heading(size: 13.5)),
+                                Text(q.title,
+                                    style: AppText.heading(size: 13.5)),
                                 if (q.description.isNotEmpty)
                                   Text(q.description,
                                       style: AppText.body(
-                                          size: 11.5, color: AppColors.textSecondary)),
+                                          size: 11.5,
+                                          color: AppColors.textSecondary)),
                                 Text('+${q.coinReward} coin',
-                                    style:
-                                        AppText.body(size: 11, color: AppColors.gold1)),
+                                    style: AppText.body(
+                                        size: 11, color: AppColors.gold1)),
                               ],
                             ),
                           ),

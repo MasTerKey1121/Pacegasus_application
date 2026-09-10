@@ -18,7 +18,8 @@ class TrainingScheduleScreen extends ConsumerStatefulWidget {
       _TrainingScheduleScreenState();
 }
 
-class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen> {
+class _TrainingScheduleScreenState
+    extends ConsumerState<TrainingScheduleScreen> {
   String? _configuredTemplateLevel;
 
   @override
@@ -66,7 +67,8 @@ class _TrainingScheduleScreenState extends ConsumerState<TrainingScheduleScreen>
                 ),
                 const SizedBox(height: 18),
                 if (program.isLoading)
-                  const Expanded(child: Center(child: CircularProgressIndicator()))
+                  const Expanded(
+                      child: Center(child: CircularProgressIndicator()))
                 else if (!program.isRegistered)
                   Expanded(
                     child: Center(
@@ -144,7 +146,9 @@ Future<void> _changePlanWeeks(WidgetRef ref, int weeks) async {
         from: startDate,
         to: startDate.add(Duration(days: weeks * 7 - 1)),
       );
-  ref.read(trainingPlanProvider).syncFromServer(startDate: startDate, quests: quests);
+  ref
+      .read(trainingPlanProvider)
+      .syncFromServer(startDate: startDate, quests: quests);
 }
 
 class _ScheduleBuilder extends ConsumerWidget {
@@ -171,7 +175,8 @@ class _ScheduleBuilder extends ConsumerWidget {
     final isCurrentWeekEditable =
         startDate != null && plan.isWeekEditable(plan.currentWeek, startDate!);
     final hasPhases = _mapList(template?['programPhases']).isNotEmpty;
-    final progress = plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
+    final progress =
+        plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
     final duration = _durationLabel(
       _weekValue(template?['duration_weeks_min']),
       _weekValue(template?['duration_weeks_max']),
@@ -256,12 +261,12 @@ class _ScheduleBuilder extends ConsumerWidget {
               children: [
                 Text('จัดตารางรายสัปดาห์', style: AppText.heading(size: 15)),
                 const SizedBox(width: 2),
-              IconButton(
-                tooltip: 'เพิ่มเติม',
-                onPressed: () => _showSchedulingRules(context),
-                icon: const Icon(Icons.info_outline_rounded, size: 20),
-                color: AppColors.purple2,
-              ),
+                IconButton(
+                  tooltip: 'เพิ่มเติม',
+                  onPressed: () => _showSchedulingRules(context),
+                  icon: const Icon(Icons.info_outline_rounded, size: 20),
+                  color: AppColors.purple2,
+                ),
               ],
             ),
           ),
@@ -281,7 +286,8 @@ class _ScheduleBuilder extends ConsumerWidget {
                         type: type,
                         count: plan.remainingFor(type),
                         selected: plan.selectedType == type,
-                        onTap: () => ref.read(trainingPlanProvider).selectType(type),
+                        onTap: () =>
+                            ref.read(trainingPlanProvider).selectType(type),
                       ))
                   .toList(),
             ),
@@ -327,7 +333,8 @@ class _ScheduleBuilder extends ConsumerWidget {
                   label: plan.currentWeek == plan.planWeeks - 1
                       ? 'สัปดาห์สุดท้าย'
                       : 'ไปสัปดาห์ที่ ${plan.currentWeek + 2}',
-                  onTap: isCurrentWeekComplete && plan.currentWeek < plan.planWeeks - 1
+                  onTap: isCurrentWeekComplete &&
+                          plan.currentWeek < plan.planWeeks - 1
                       ? () => ref.read(trainingPlanProvider).nextWeek()
                       : null,
                 ),
@@ -383,11 +390,12 @@ class _ScheduleBuilder extends ConsumerWidget {
                       ref
                           .read(trainingPlanProvider)
                           .markWeekSaved(plan.currentWeek);
-                      await _syncAfterSave(context, ref, plan);
-                      if (!context.mounted) return;
-
+                      // The write has already succeeded. Leave this screen
+                      // immediately; MainShell restores the fresh program data
+                      // when Home is created.
                       Navigator.of(context).pushAndRemoveUntil(
-                        MaterialPageRoute<void>(builder: (_) => const MainShell()),
+                        MaterialPageRoute<void>(
+                            builder: (_) => const MainShell()),
                         (route) => false,
                       );
                     } else {
@@ -403,24 +411,6 @@ class _ScheduleBuilder extends ConsumerWidget {
         ],
       ),
     );
-  }
-}
-
-/// Refresh the local grid from the server before leaving the screen.  This
-/// prevents a just-saved week from looking editable if the user returns here.
-Future<void> _syncAfterSave(
-  BuildContext context,
-  WidgetRef ref,
-  TrainingPlanNotifier plan,
-) async {
-  final startDate = ref.read(programProvider).programStartDate;
-  if (startDate == null) return;
-  final quests = await ref.read(programProvider).loadQuestsRange(
-        from: startDate,
-        to: startDate.add(Duration(days: plan.planWeeks * 7 - 1)),
-      );
-  if (context.mounted) {
-    plan.syncFromServer(startDate: startDate, quests: quests);
   }
 }
 
@@ -444,7 +434,8 @@ void _showSchedulingRules(BuildContext context) {
           children: [
             Row(
               children: [
-                const Icon(Icons.info_outline_rounded, color: AppColors.purple2),
+                const Icon(Icons.info_outline_rounded,
+                    color: AppColors.purple2),
                 const SizedBox(width: 8),
                 Text('เพิ่มเติม', style: AppText.heading(size: 17)),
                 const Spacer(),
@@ -472,7 +463,8 @@ void _showSchedulingRules(BuildContext context) {
 }
 
 class _PhaseChip extends StatelessWidget {
-  const _PhaseChip({required this.phase, required this.active, required this.onTap});
+  const _PhaseChip(
+      {required this.phase, required this.active, required this.onTap});
 
   final PlanPhase phase;
   final bool active;
@@ -539,8 +531,10 @@ class _WorkoutChoice extends StatelessWidget {
           children: [
             Text(meta.icon, style: const TextStyle(fontSize: 18)),
             const SizedBox(height: 4),
-            Text(meta.label, textAlign: TextAlign.center, style: AppText.heading(size: 10)),
-            Text('เหลือ $count', style: AppText.body(size: 9.5, color: AppColors.textSecondary)),
+            Text(meta.label,
+                textAlign: TextAlign.center, style: AppText.heading(size: 10)),
+            Text('เหลือ $count',
+                style: AppText.body(size: 9.5, color: AppColors.textSecondary)),
           ],
         ),
       ),
@@ -602,7 +596,9 @@ class _WeekGrid extends StatelessWidget {
               padding: EdgeInsets.only(right: index == 6 ? 0 : 5),
               child: Column(
                 children: [
-                  Text(_days[index], style: AppText.body(size: 10, color: AppColors.textTertiary)),
+                  Text(_days[index],
+                      style: AppText.body(
+                          size: 10, color: AppColors.textTertiary)),
                   const SizedBox(height: 5),
                   GestureDetector(
                     onTap: disabled || blocked ? null : () => onTap(index),
@@ -625,19 +621,25 @@ class _WeekGrid extends StatelessWidget {
                         ),
                       ),
                       child: type == SessionType.restForced
-                          ? const Icon(Icons.lock_outline, size: 14, color: AppColors.textTertiary)
+                          ? const Icon(Icons.lock_outline,
+                              size: 14, color: AppColors.textTertiary)
                           : blocked
                               ? const Icon(Icons.block_rounded,
                                   size: 14, color: AppColors.textTertiary)
                               : type == null
-                              ? const Icon(Icons.add, size: 14, color: AppColors.textTertiary)
-                              : Column(
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(meta!.icon, style: const TextStyle(fontSize: 15)),
-                                    Text(meta.label.split(' ').first, style: AppText.body(size: 8.5)),
-                                  ],
-                                ),
+                                  ? const Icon(Icons.add,
+                                      size: 14, color: AppColors.textTertiary)
+                                  : Column(
+                                      mainAxisAlignment:
+                                          MainAxisAlignment.center,
+                                      children: [
+                                        Text(meta!.icon,
+                                            style:
+                                                const TextStyle(fontSize: 15)),
+                                        Text(meta.label.split(' ').first,
+                                            style: AppText.body(size: 8.5)),
+                                      ],
+                                    ),
                     ),
                   ),
                 ],

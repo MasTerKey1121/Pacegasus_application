@@ -31,7 +31,9 @@ class _MainShellState extends ConsumerState<MainShell> {
 
     Future.microtask(() async {
       await ref.read(programProvider).restore();
+      if (!mounted) return;
       await ref.read(wellnessProvider).loadToday();
+      if (!mounted) return;
 
       if (ref.read(wellnessProvider).completedToday) {
         ref.read(missionProvider).setDone('wellness', true);
@@ -50,8 +52,12 @@ class _MainShellState extends ConsumerState<MainShell> {
         title: const Text('พบ Session การวิ่งที่ยังไม่เสร็จ'),
         content: const Text('ต้องการวิ่งต่อจากเดิมหรือไม่?'),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(ctx, false), child: const Text('จบ Session')),
-          TextButton(onPressed: () => Navigator.pop(ctx, true), child: const Text('วิ่งต่อ')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, false),
+              child: const Text('จบ Session')),
+          TextButton(
+              onPressed: () => Navigator.pop(ctx, true),
+              child: const Text('วิ่งต่อ')),
         ],
       ),
     );
