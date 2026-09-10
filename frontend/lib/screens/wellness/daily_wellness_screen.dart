@@ -9,6 +9,9 @@ import '../../widgets/common.dart';
 class DailyWellnessScreen extends ConsumerWidget {
   const DailyWellnessScreen({super.key});
 
+  // Five selectable scores (1, 2, 3, 4, 5) require four intervals.
+  static const int _wellnessScoreDivisions = 4;
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(wellnessProvider);
@@ -54,7 +57,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                           value: (entry.sleepQuality ?? 1).toDouble(),
                           min: 1,
                           max: 5,
-                          divisions: 5,
+                          divisions: _wellnessScoreDivisions,
                           minCaption: 'แย่มาก',
                           maxCaption: 'ดีมาก',
                           displayText: entry.sleepQuality == null ? '—' : null,
@@ -78,7 +81,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                           value: (entry.muscleSoreness ?? 1).toDouble(),
                           min: 1,
                           max: 5,
-                          divisions: 5,
+                          divisions: _wellnessScoreDivisions,
                           minCaption: 'ไม่มี',
                           maxCaption: 'เมื่อยมาก',
                           displayText: entry.muscleSoreness == null ? '—' : null,
@@ -90,7 +93,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                           value: (entry.energyLevel ?? 1).toDouble(),
                           min: 1,
                           max: 5,
-                          divisions: 5,
+                          divisions: _wellnessScoreDivisions,
                           minCaption: 'อ่อนแรง',
                           maxCaption: 'เต็มพลัง',
                           displayText: entry.energyLevel == null ? '—' : null,
@@ -101,8 +104,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           label: 'ระดับความเครียด',
                           value: (entry.stressLevel ?? 1).toDouble(),
                           min: 1,
-                          max: 5 ,
-                          divisions: 5,
+                          max: 5,
+                          divisions: _wellnessScoreDivisions,
                           minCaption: 'ผ่อนคลาย',
                           maxCaption: 'เครียดมาก',
                           displayText: entry.stressLevel == null ? '—' : null,
@@ -114,7 +117,7 @@ class DailyWellnessScreen extends ConsumerWidget {
                           value: (entry.motivation ?? 1).toDouble(),
                           min: 1,
                           max: 5,
-                          divisions: 4,
+                          divisions: _wellnessScoreDivisions,
                           minCaption: 'ไม่อยากทำเลย',
                           maxCaption: 'พร้อมมาก',
                           displayText: entry.motivation == null ? '—' : null,

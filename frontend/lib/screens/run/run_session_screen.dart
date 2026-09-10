@@ -1,12 +1,13 @@
 import 'dart:async';
+import 'dart:convert';
 import 'dart:io';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:flutter_map/flutter_map.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
-import 'package:latlong2/latlong.dart';
+import 'package:http/http.dart' as http;
+import 'package:maplibre_gl/maplibre_gl.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
 import '../../providers/auth_provider.dart';
@@ -40,6 +41,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _startTreadmill());
       return;
     }
+    _gistdaStyleFuture = _loadGistdaDarkStyle();
     // Do not block GPS recording forever if the map provider cannot finish
     // loading (for example, an unavailable network or invalid map key).
     _mapLoadTimer = Timer(const Duration(seconds: 15), () {
@@ -64,7 +66,14 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     );
   }
 
-  final _mapController = MapController();
+  MapLibreMapController? _mapController;
+  Future<String>? _gistdaStyleFuture;
+  Line? _routeBorderLine;
+  Line? _routeLine;
+  Circle? _startMarker;
+  Circle? _currentMarker;
+  bool _syncingMapOverlays = false;
+  bool _mapOverlaySyncQueued = false;
   StreamSubscription<Position>? _positionSub;
   _MapPoint _currentPosition = const _MapPoint(13.7563, 100.5018);
   final List<_MapPoint> _routePoints = [];
@@ -82,18 +91,164 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   String? _locationMessage;
 
   String get _gistdaApiKey => dotenv.env['GISTDA_MAP_API_KEY'] ?? '';
-  String get _gistdaBundleId =>
-      dotenv.env['GISTDA_BUNDLE_ID'] ?? 'com.example.pacegasus';
-  String get _gistdaTileUrl => 'https://basemap.sphere.gistda.or.th/tiles/'
-      'thailand_images/EPSG3857/{z}/{x}/{y}.jpeg'
-      '?key=${Uri.encodeQueryComponent(_gistdaApiKey)}';
+
+  String _withGistdaKey(String url) =>
+      '$url${url.contains('?') ? '&' : '?'}key='
+      '${Uri.encodeQueryComponent(_gistdaApiKey)}';
+
+  Future<String> _loadGistdaDarkStyle() async {
+    const styleUrl =
+        'https://basemap.sphere.gistda.or.th/vector/sphere_night.json';
+    const capabilitiesUrl =
+        'https://basemap.sphere.gistda.or.th/capabilities/sphere.json';
+
+    final responses = await Future.wait([
+      http.get(Uri.parse(styleUrl)),
+      http.get(Uri.parse(capabilitiesUrl)),
+    ]);
+    if (responses.any((response) => response.statusCode != 200)) {
+      throw StateError('GISTDA vector style could not be loaded');
+    }
+
+    final style = Map<String, dynamic>.from(
+      jsonDecode(responses[0].body) as Map,
+    );
+    final capabilities = Map<String, dynamic>.from(
+      jsonDecode(responses[1].body) as Map,
+    );
+    final rawTiles = capabilities['tiles'] as List<dynamic>? ?? const [];
+    if (rawTiles.isEmpty) {
+      throw StateError('GISTDA vector tile URL is missing');
+    }
+
+    final sources = Map<String, dynamic>.from(style['sources'] as Map);
+    sources['sphere'] = <String, dynamic>{
+      'type': 'vector',
+      'tiles': rawTiles
+          .map((tile) => _withGistdaKey(tile.toString()))
+          .toList(growable: false),
+      'minzoom': capabilities['minzoom'] ?? 0,
+      'maxzoom': capabilities['maxzoom'] ?? 18,
+      'attribution': capabilities['attribution'] ?? 'GISTDA sphere',
+    };
+
+    // GISTDA protects raster tile requests with the same API key. Preserve
+    // the official night-style hillshade while authenticating its tiles.
+    final dem = sources['dem'];
+    if (dem is Map) {
+      final demSource = Map<String, dynamic>.from(dem);
+      final demTiles = demSource['tiles'];
+      if (demTiles is List) {
+        demSource['tiles'] = demTiles
+            .map((tile) => _withGistdaKey(tile.toString()))
+            .toList(growable: false);
+      }
+      sources['dem'] = demSource;
+    }
+    style['sources'] = sources;
+    return jsonEncode(style);
+  }
 
   void _syncMap() {
-    if (!_mapReady) return;
-    _mapController.move(
-      _currentPosition.toLatLng(),
-      _mapController.camera.zoom,
+    final controller = _mapController;
+    if (!_mapReady || controller == null) return;
+    controller.animateCamera(
+      CameraUpdate.newLatLng(_currentPosition.toMapLatLng()),
+      duration: const Duration(milliseconds: 350),
     );
+    _syncMapOverlays();
+  }
+
+  Future<void> _syncMapOverlays() async {
+    final controller = _mapController;
+    if (!_mapReady || controller == null) return;
+    if (_syncingMapOverlays) {
+      _mapOverlaySyncQueued = true;
+      return;
+    }
+
+    _syncingMapOverlays = true;
+    try {
+      final route = _routePoints
+          .map((point) => point.toMapLatLng())
+          .toList(growable: false);
+      final current = _currentPosition.toMapLatLng();
+      final start = route.isEmpty ? current : route.first;
+
+      if (_startMarker == null) {
+        _startMarker = await controller.addCircle(
+          CircleOptions(
+            geometry: start,
+            circleRadius: 7,
+            circleColor: '#34D399',
+            circleStrokeColor: '#081018',
+            circleStrokeWidth: 3,
+          ),
+        );
+      } else {
+        await controller.updateCircle(
+          _startMarker!,
+          CircleOptions(geometry: start),
+        );
+      }
+
+      if (_currentMarker == null) {
+        _currentMarker = await controller.addCircle(
+          CircleOptions(
+            geometry: current,
+            circleRadius: 8,
+            circleColor: '#FF4D18',
+            circleStrokeColor: '#FFFFFF',
+            circleStrokeWidth: 2,
+          ),
+        );
+      } else {
+        await controller.updateCircle(
+          _currentMarker!,
+          CircleOptions(geometry: current),
+        );
+      }
+
+      if (route.length > 1) {
+        if (_routeBorderLine == null) {
+          _routeBorderLine = await controller.addLine(
+            LineOptions(
+              geometry: route,
+              lineColor: '#101318',
+              lineWidth: 9,
+              lineOpacity: .9,
+              lineJoin: 'round',
+            ),
+          );
+          _routeLine = await controller.addLine(
+            LineOptions(
+              geometry: route,
+              lineColor: '#FF4D18',
+              lineWidth: 6,
+              lineOpacity: 1,
+              lineJoin: 'round',
+            ),
+          );
+        } else {
+          await controller.updateLine(
+            _routeBorderLine!,
+            LineOptions(geometry: route),
+          );
+          await controller.updateLine(
+            _routeLine!,
+            LineOptions(geometry: route),
+          );
+        }
+      }
+    } catch (error) {
+      debugPrint('[GISTDA Map] overlay sync failed: $error');
+    } finally {
+      _syncingMapOverlays = false;
+      if (_mapOverlaySyncQueued) {
+        _mapOverlaySyncQueued = false;
+        unawaited(_syncMapOverlays());
+      }
+    }
   }
 
   void _markMapReady(String source) {
@@ -275,7 +430,6 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _backResetTimer?.cancel();
     _draftTimer?.cancel();
     _treadmillDistanceController.dispose();
-    _mapController.dispose();
     super.dispose();
   }
 
@@ -442,55 +596,61 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                               else if (_gistdaApiKey.isEmpty)
                                 const _MapConfigurationPanel()
                               else
-                                FlutterMap(
-                                  mapController: _mapController,
-                                  options: MapOptions(
-                                    initialCenter: _currentPosition.toLatLng(),
-                                    initialZoom: 16,
-                                    minZoom: 3,
-                                    maxZoom: 19,
-                                    onMapReady: () =>
-                                        _markMapReady('Flutter map ready'),
-                                  ),
-                                  children: [
-                                    TileLayer(
-                                      urlTemplate: _gistdaTileUrl,
-                                      userAgentPackageName: _gistdaBundleId,
-                                      maxNativeZoom: 19,
-                                    ),
-                                    if (_routePoints.length > 1)
-                                      PolylineLayer(
-                                        polylines: [
-                                          Polyline(
-                                            points: _routePoints
-                                                .map(
-                                                    (point) => point.toLatLng())
-                                                .toList(growable: false),
-                                            color: AppColors.purple2,
-                                            strokeWidth: 6,
+                                FutureBuilder<String>(
+                                  future: _gistdaStyleFuture,
+                                  builder: (context, snapshot) {
+                                    if (snapshot.hasError) {
+                                      return _MapLoadErrorPanel(
+                                        onRetry: () {
+                                          setState(() {
+                                            _gistdaStyleFuture =
+                                                _loadGistdaDarkStyle();
+                                          });
+                                        },
+                                      );
+                                    }
+                                    if (!snapshot.hasData) {
+                                      return const _MapLoadingPanel();
+                                    }
+                                    return Stack(
+                                      children: [
+                                        MapLibreMap(
+                                          styleString: snapshot.data!,
+                                          initialCameraPosition: CameraPosition(
+                                            target:
+                                                _currentPosition.toMapLatLng(),
+                                            zoom: 16,
                                           ),
-                                        ],
-                                      ),
-                                    MarkerLayer(
-                                      markers: [
-                                        Marker(
-                                          point: _currentPosition.toLatLng(),
-                                          width: 38,
-                                          height: 38,
-                                          child: const Icon(
-                                            Icons.location_on_rounded,
-                                            color: AppColors.purple2,
-                                            size: 38,
+                                          minMaxZoomPreference:
+                                              const MinMaxZoomPreference(3, 19),
+                                          compassEnabled: false,
+                                          rotateGesturesEnabled: false,
+                                          tiltGesturesEnabled: false,
+                                          logoEnabled: false,
+                                          annotationOrder: const [
+                                            AnnotationType.line,
+                                            AnnotationType.circle,
+                                          ],
+                                          onMapCreated: (controller) {
+                                            _mapController = controller;
+                                            _routeBorderLine = null;
+                                            _routeLine = null;
+                                            _startMarker = null;
+                                            _currentMarker = null;
+                                          },
+                                          onStyleLoadedCallback: () =>
+                                              _markMapReady(
+                                            'GISTDA night vector style',
                                           ),
                                         ),
+                                        const Positioned(
+                                          left: 8,
+                                          bottom: 8,
+                                          child: _GistdaAttribution(),
+                                        ),
                                       ],
-                                    ),
-                                    const Positioned(
-                                      left: 8,
-                                      bottom: 8,
-                                      child: _GistdaAttribution(),
-                                    ),
-                                  ],
+                                    );
+                                  },
                                 ),
                               if (_locationMessage != null)
                                 Positioned(
@@ -654,7 +814,7 @@ class _MapPoint {
   final double latitude;
   final double longitude;
 
-  LatLng toLatLng() => LatLng(latitude, longitude);
+  LatLng toMapLatLng() => LatLng(latitude, longitude);
 }
 
 class _GistdaAttribution extends StatelessWidget {
@@ -671,6 +831,55 @@ class _GistdaAttribution extends StatelessWidget {
           child: Text(
             '© GISTDA sphere',
             style: AppText.body(size: 9, color: Colors.white),
+          ),
+        ),
+      );
+}
+
+class _MapLoadingPanel extends StatelessWidget {
+  const _MapLoadingPanel();
+
+  @override
+  Widget build(BuildContext context) => const ColoredBox(
+        color: Color(0xFF0D131C),
+        child: Center(
+          child: CircularProgressIndicator(color: Color(0xFFFF4D18)),
+        ),
+      );
+}
+
+class _MapLoadErrorPanel extends StatelessWidget {
+  const _MapLoadErrorPanel({required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  Widget build(BuildContext context) => ColoredBox(
+        color: const Color(0xFF0D131C),
+        child: Center(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const Icon(
+                  Icons.map_outlined,
+                  color: AppColors.textSecondary,
+                  size: 40,
+                ),
+                const SizedBox(height: 10),
+                Text(
+                  'โหลดแผนที่ GISTDA ไม่สำเร็จ',
+                  textAlign: TextAlign.center,
+                  style: AppText.body(color: AppColors.textSecondary),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: onRetry,
+                  child: const Text('ลองอีกครั้ง'),
+                ),
+              ],
+            ),
           ),
         ),
       );
