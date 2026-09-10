@@ -9,6 +9,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:latlong2/latlong.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/run_provider.dart';
 import '../../widgets/common.dart';
 import 'run_summary_screen.dart';
@@ -364,8 +365,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   Future<void> _saveDraft() async {
     final run = ref.read(runProvider);
     final setup = ref.read(runSetupProvider);
-    if (setup.sessionId == null) return;
+    final ownerUserId = ref.read(authProvider).user?['id']?.toString();
+    if (setup.sessionId == null || ownerUserId == null) return;
     await runDraftStore.save({
+      'ownerUserId': ownerUserId,
       'sessionId': setup.sessionId,
       'environment': setup.environment,
       'elapsedSeconds': run.elapsedSeconds,

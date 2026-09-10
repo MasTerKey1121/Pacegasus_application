@@ -8,9 +8,8 @@ import 'auth_provider.dart';
 final questApiProvider =
     Provider<QuestApi>((ref) => QuestApi(ref.read(apiClientProvider)));
 
-final runningSessionApiProvider =
-    Provider<RunningSessionApi>(
-        (ref) => RunningSessionApi(ref.read(apiClientProvider)));
+final runningSessionApiProvider = Provider<RunningSessionApi>(
+    (ref) => RunningSessionApi(ref.read(apiClientProvider)));
 
 /// map session_type ของ main quest (easy/tempo/vo2max/long_run)
 /// ไปเป็น trainingType ของ side quest (easy/tempo/interval/long_run)
@@ -69,24 +68,20 @@ class RunSetupNotifier extends ChangeNotifier {
     notifyListeners();
 
     try {
-      final trainingType =
-          mapToSideQuestTrainingType(mainQuestSessionType);
+      final trainingType = mapToSideQuestTrainingType(mainQuestSessionType);
 
       final response = await _questApi.getTodaySideQuests(
         environment: env,
         trainingType: trainingType,
       );
 
-      final data =
-          response['data'] as Map<String, dynamic>? ?? const {};
+      final data = response['data'] as Map<String, dynamic>? ?? const {};
 
-      final raw =
-          (data['sideQuests'] ?? data['quests'] ?? []) as List<dynamic>;
+      final raw = (data['sideQuests'] ?? data['quests'] ?? []) as List<dynamic>;
 
       sideQuests = raw
           .whereType<Map>()
-          .map((q) => SideQuest.fromJson(
-              Map<String, dynamic>.from(q)))
+          .map((q) => SideQuest.fromJson(Map<String, dynamic>.from(q)))
           .toList(growable: false);
 
       // User explicitly chooses which optional side quests to start.
@@ -127,24 +122,19 @@ class RunSetupNotifier extends ChangeNotifier {
         // exceed the backend's active-quest limit.
       );
 
-      final data =
-          res['data'] as Map<String, dynamic>? ?? const {};
+      final data = res['data'] as Map<String, dynamic>? ?? const {};
 
-      sessionId =
-          (data['id'] ?? data['sessionId'])?.toString();
+      sessionId = (data['id'] ?? data['sessionId'])?.toString();
 
-      if (selectedInstanceIds.isNotEmpty &&
-          sessionId != null) {
+      if (selectedInstanceIds.isNotEmpty && sessionId != null) {
         final res = await _questApi.startSideQuests(
           sessionId: sessionId!,
           instanceIds: selectedInstanceIds.toList(),
         );
 
-        final list =
-            (res['data'] as List).cast<Map<String, dynamic>>();
+        final list = (res['data'] as List).cast<Map<String, dynamic>>();
 
-        sideQuestIds =
-            list.map((e) => e['id'].toString()).toList();
+        sideQuestIds = list.map((e) => e['id'].toString()).toList();
 
         // จับคู่ id ที่ backend คืนมา กับ title/description ของ quest ที่เลือกไว้
         // (สมมติว่าลำดับที่คืนมาตรงกับลำดับที่ส่งไป — ดูหมายเหตุเรื่อง order ด้านบน)
@@ -239,15 +229,19 @@ class RunSetupNotifier extends ChangeNotifier {
         done: item['done'] == true,
       );
     }).toList(growable: false);
-    sideQuestIds = activeSideQuests.map((q) => q.sideQuestId).toList(growable: false);
+    sideQuestIds =
+        activeSideQuests.map((q) => q.sideQuestId).toList(growable: false);
     notifyListeners();
   }
 }
 
-final runSetupProvider =
-    ChangeNotifierProvider<RunSetupNotifier>(
-  (ref) => RunSetupNotifier(
+final runSetupProvider = ChangeNotifierProvider<RunSetupNotifier>((ref) {
+  final notifier = RunSetupNotifier(
     ref.read(questApiProvider),
     ref.read(runningSessionApiProvider),
-  ),
-);
+  );
+  ref.listen<AuthState>(authProvider, (previous, next) {
+    if (previous?.user?['id'] != next.user?['id']) notifier.reset();
+  });
+  return notifier;
+});

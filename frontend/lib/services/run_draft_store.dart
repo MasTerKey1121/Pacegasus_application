@@ -19,6 +19,21 @@ class RunDraftStore {
     }
   }
 
+  /// Returns a draft only when it belongs to the currently authenticated
+  /// user. Drafts created before ownership was recorded are discarded so they
+  /// cannot leak into a newly registered account.
+  Future<Map<String, dynamic>?> loadForUser(String? userId) async {
+    final draft = await load();
+    if (draft == null) return null;
+
+    final ownerUserId = draft['ownerUserId']?.toString();
+    if (userId == null || ownerUserId == null || ownerUserId != userId) {
+      await clear();
+      return null;
+    }
+    return draft;
+  }
+
   Future<void> save(Map<String, dynamic> draft) =>
       _storage.write(key: _key, value: jsonEncode(draft));
 

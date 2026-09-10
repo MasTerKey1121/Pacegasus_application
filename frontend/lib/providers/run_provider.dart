@@ -5,6 +5,7 @@ import '../models/run_result.dart';
 import '../models/side_quest.dart';
 import '../services/quest_api.dart';
 import '../services/running_session_api.dart';
+import 'auth_provider.dart';
 import 'run_setup_provider.dart';
 
 /// Drives the running screen using elapsed time plus GPS distance updates.
@@ -123,10 +124,7 @@ class RunSessionNotifier extends ChangeNotifier {
 
       final mm = paceMinPerKm.floor();
 
-      final ss = ((paceMinPerKm - mm) * 60)
-          .round()
-          .toString()
-          .padLeft(2, '0');
+      final ss = ((paceMinPerKm - mm) * 60).round().toString().padLeft(2, '0');
 
       lastResult = RunResult(
         distanceKm: double.parse(distanceKm.toStringAsFixed(2)),
@@ -151,6 +149,20 @@ class RunSessionNotifier extends ChangeNotifier {
     return '$m:$s';
   }
 
+  void reset() {
+    _timer?.cancel();
+    _timer = null;
+    isRunning = false;
+    isPaused = false;
+    isStopping = false;
+    elapsedSeconds = 0;
+    distanceKm = 0;
+    speedKmh = 0;
+    lastResult = null;
+    failedQuestTitles = [];
+    notifyListeners();
+  }
+
   @override
   void dispose() {
     _timer?.cancel();
@@ -158,10 +170,13 @@ class RunSessionNotifier extends ChangeNotifier {
   }
 }
 
-final runProvider =
-    ChangeNotifierProvider<RunSessionNotifier>(
-  (ref) => RunSessionNotifier(
+final runProvider = ChangeNotifierProvider<RunSessionNotifier>((ref) {
+  final notifier = RunSessionNotifier(
     ref.read(questApiProvider),
     ref.read(runningSessionApiProvider),
-  ),
-);
+  );
+  ref.listen<AuthState>(authProvider, (previous, next) {
+    if (previous?.user?['id'] != next.user?['id']) notifier.reset();
+  });
+  return notifier;
+});

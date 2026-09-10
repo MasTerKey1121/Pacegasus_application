@@ -4,6 +4,7 @@ import '../../app_theme.dart';
 import '../../widgets/common.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
+import '../../services/run_draft_store.dart';
 import '../../providers/program_provider.dart';
 import '../auth/login_screen.dart';
 import '../home/main_shell.dart';
@@ -31,8 +32,9 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     // ที่เก็บไว้ใน secure storage) แทนการ Navigator.push เฉยๆ แบบเดิม
     await ref.read(authProvider.notifier).logout();
     if (!mounted) return;
-    Navigator.of(context)
-        .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+    Navigator.of(context).pushAndRemoveUntil(
+        MaterialPageRoute(builder: (_) => const LoginScreen()),
+        (route) => false);
   }
 
   Future<void> _confirmDeleteAccount() async {
@@ -48,11 +50,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(false),
-            child: Text('ยกเลิก', style: AppText.body(color: AppColors.textSecondary)),
+            child: Text('ยกเลิก',
+                style: AppText.body(color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('ลบบัญชี', style: AppText.body(color: AppColors.red1, weight: FontWeight.w700)),
+            child: Text('ลบบัญชี',
+                style: AppText.body(
+                    color: AppColors.red1, weight: FontWeight.w700)),
           ),
         ],
       ),
@@ -63,11 +68,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     try {
       final authApi = ref.read(authApiProvider);
       await authApi.deleteAccount();
-      // ลบสำเร็จฝั่ง server แล้ว เคลียร์ session ฝั่ง client ต่อ
+      // The deleted account must not leave a resumable run on this device.
+      await runDraftStore.clear();
+      // ลบสำเร็จฝั่ง server แล้ว เคลียร์ session ฝั่ง clientต่อ
       await ref.read(authProvider.notifier).logout();
       if (!mounted) return;
-      Navigator.of(context)
-          .pushAndRemoveUntil(MaterialPageRoute(builder: (_) => const LoginScreen()), (route) => false);
+      Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false);
     } on ApiException catch (e) {
       if (mounted) showAppToast(context, e.message);
     } catch (_) {
@@ -90,7 +98,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         children: [
           Text('ตั้งค่า', style: AppText.heading(size: 20)),
           const SectionLabel(title: 'บัญชีและโปรไฟล์'),
-          _MenuTile(icon: Icons.person_outline, label: 'แก้ไขโปรไฟล์', onTap: () {}),
+          _MenuTile(
+              icon: Icons.person_outline, label: 'แก้ไขโปรไฟล์', onTap: () {}),
           const SizedBox(height: 10),
           if (program.isRegistered)
             _MenuTile(
@@ -99,20 +108,31 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
               onTap: () => Navigator.of(context).push(
                 MaterialPageRoute(
                   builder: (_) => _TrainingProgramDetailsScreen(
-                    title: template?['goal_label']?.toString() ?? 'โปรแกรมวิ่งของฉัน',
+                    title: template?['goal_label']?.toString() ??
+                        'โปรแกรมวิ่งของฉัน',
                     description: template?['description']?.toString() ??
                         'ตารางซ้อมที่คุณลงทะเบียนไว้ สามารถดูและจัดสัปดาห์ปัจจุบันหรืออนาคตได้',
-                    onDelete: _cancellingProgram ? () {} : _confirmDeleteProgram,
+                    onDelete:
+                        _cancellingProgram ? () {} : _confirmDeleteProgram,
                   ),
                 ),
               ),
             ),
           if (program.isRegistered) const SizedBox(height: 10),
-          _MenuTile(icon: Icons.menu_book_outlined, label: 'ประวัติการวิ่ง', onTap: () {}),
+          _MenuTile(
+              icon: Icons.menu_book_outlined,
+              label: 'ประวัติการวิ่ง',
+              onTap: () {}),
           const SizedBox(height: 10),
-          _MenuTile(icon: Icons.flag_outlined, label: 'เป้าหมายการวิ่ง', onTap: () {}),
+          _MenuTile(
+              icon: Icons.flag_outlined,
+              label: 'เป้าหมายการวิ่ง',
+              onTap: () {}),
           const SectionLabel(title: 'การเชื่อมต่อ'),
-          _MenuTile(icon: Icons.link_rounded, label: 'เชื่อมต่อ API ภายนอก', onTap: () {}),
+          _MenuTile(
+              icon: Icons.link_rounded,
+              label: 'เชื่อมต่อ API ภายนอก',
+              onTap: () {}),
           const SectionLabel(title: 'อื่นๆ'),
           _MenuTile(
             icon: Icons.logout_rounded,
@@ -145,11 +165,13 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
         actions: [
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: Text('กลับไปก่อน', style: AppText.body(color: AppColors.textSecondary)),
+            child: Text('กลับไปก่อน',
+                style: AppText.body(color: AppColors.textSecondary)),
           ),
           TextButton(
             onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: Text('จบโปรแกรม', style: AppText.body(color: AppColors.red1)),
+            child:
+                Text('จบโปรแกรม', style: AppText.body(color: AppColors.red1)),
           ),
         ],
       ),
@@ -167,7 +189,8 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } else {
       showAppToast(
         context,
-        ref.read(programProvider).errorMessage ?? 'จบโปรแกรมไม่สำเร็จ กรุณาลองใหม่',
+        ref.read(programProvider).errorMessage ??
+            'จบโปรแกรมไม่สำเร็จ กรุณาลองใหม่',
       );
     }
   }
@@ -200,7 +223,8 @@ class _TrainingProgramDetailsScreen extends StatelessWidget {
                         onTap: () => Navigator.of(context).pop(),
                       ),
                       const SizedBox(width: 14),
-                      Text('แก้ไขโปรแกรมวิ่ง', style: AppText.heading(size: 19)),
+                      Text('แก้ไขโปรแกรมวิ่ง',
+                          style: AppText.heading(size: 19)),
                     ],
                   ),
                   const SizedBox(height: 24),
@@ -268,7 +292,8 @@ class _TrainingProgramTileState extends State<_TrainingProgramTile> {
                   AnimatedRotation(
                     turns: _expanded ? .25 : 0,
                     duration: const Duration(milliseconds: 180),
-                    child: Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
+                    child: Icon(Icons.chevron_right_rounded,
+                        color: AppColors.textSecondary),
                   ),
                 ],
               ),
@@ -283,7 +308,8 @@ class _TrainingProgramTileState extends State<_TrainingProgramTile> {
               ),
               const SizedBox(height: 4),
               Text(widget.description,
-                  style: AppText.body(size: 12.5, color: AppColors.textSecondary)),
+                  style:
+                      AppText.body(size: 12.5, color: AppColors.textSecondary)),
               const SizedBox(height: 14),
               Row(
                 children: [
@@ -292,7 +318,8 @@ class _TrainingProgramTileState extends State<_TrainingProgramTile> {
                   ),
                   const SizedBox(width: 10),
                   Expanded(
-                    child: OutlineButton(label: 'จบโปรแกรม', onTap: widget.onDelete),
+                    child: OutlineButton(
+                        label: 'จบโปรแกรม', onTap: widget.onDelete),
                   ),
                 ],
               ),
@@ -307,7 +334,11 @@ class _MenuTile extends StatelessWidget {
   final String label;
   final VoidCallback onTap;
   final bool danger;
-  const _MenuTile({required this.icon, required this.label, required this.onTap, this.danger = false});
+  const _MenuTile(
+      {required this.icon,
+      required this.label,
+      required this.onTap,
+      this.danger = false});
 
   @override
   Widget build(BuildContext context) {
@@ -325,12 +356,17 @@ class _MenuTile extends StatelessWidget {
                 borderRadius: BorderRadius.circular(10),
               ),
               alignment: Alignment.center,
-              child: Icon(icon, size: 18, color: danger ? AppColors.red1 : AppColors.textPrimary),
+              child: Icon(icon,
+                  size: 18,
+                  color: danger ? AppColors.red1 : AppColors.textPrimary),
             ),
             const SizedBox(width: 12),
             Expanded(
               child: Text(label,
-                  style: AppText.body(size: 14, weight: FontWeight.w600, color: danger ? AppColors.red1 : AppColors.textPrimary)),
+                  style: AppText.body(
+                      size: 14,
+                      weight: FontWeight.w600,
+                      color: danger ? AppColors.red1 : AppColors.textPrimary)),
             ),
             Icon(Icons.chevron_right_rounded, color: AppColors.textSecondary),
           ],

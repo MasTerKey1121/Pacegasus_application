@@ -4,6 +4,7 @@ import '../../app_theme.dart';
 import '../../providers/wellness_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
+import '../../providers/auth_provider.dart';
 
 import 'home_screen.dart';
 import '../stats/stats_screen.dart';
@@ -43,7 +44,8 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _offerRunResume() async {
-    final draft = await runDraftStore.load();
+    final userId = ref.read(authProvider).user?['id']?.toString();
+    final draft = await runDraftStore.loadForUser(userId);
     if (!mounted || draft == null || draft['sessionId'] == null) return;
     final continueRun = await showDialog<bool>(
       context: context,
