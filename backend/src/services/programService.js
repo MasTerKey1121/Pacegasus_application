@@ -1,5 +1,38 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const adaptiveEngineService = require('./adaptiveEngineService');
+
+/**
+ * แนบผลการปรับแผน (Gate 1 ACWR / Gate 2 Wellness) ให้เฉพาะ quest ของ "วันนี้"
+ * เท่านั้น — quest ของวันอื่นในสัปดาห์ไม่ปรับ เพราะ ACWR/Wellness ของวันนั้นๆ
+ * ยังไม่เกิดขึ้นจริง (future) จึงคำนวณล่วงหน้าไม่ได้
+ */
+// pg คืนค่า DATE column เป็น JS Date ที่ parse แบบ local midnight (ไม่ใช่ UTC)
+// การใช้ toISOString() ตรงๆ จะเลื่อนวันที่ผิดไป 1 วันสำหรับ timezone ที่ +offset
+// (เช่น Asia/Bangkok UTC+7) จึงต้องอ่านค่าปีเดือนวันแบบ local เสมอ
+function toLocalDateStr(dateLike) {
+  if (typeof dateLike === 'string') return dateLike.slice(0, 10);
+  const d = new Date(dateLike);
+  const yyyy = d.getFullYear();
+  const mm = String(d.getMonth() + 1).padStart(2, '0');
+  const dd = String(d.getDate()).padStart(2, '0');
+  return `${yyyy}-${mm}-${dd}`;
+}
+
+async function annotateTodayQuest(userId, quests) {
+  const todayStr = toLocalDateStr(new Date());
+  return Promise.all(quests.map(async (quest) => {
+    const questDateStr = toLocalDateStr(quest.scheduled_date);
+    if (questDateStr !== todayStr || quest.status !== 'pending') {
+      return quest;
+    }
+    const adjustment = await adaptiveEngineService.computeAdjustment(userId, {
+      session_type: quest.session_type,
+      planned_value: quest.planned_value,
+    });
+    return { ...quest, adjustment };
+  }));
+}
 
 // ============================================================================
 // สมมติฐานที่ยังไม่ได้ confirm — mark ไว้ชัดเจน:
@@ -349,13 +382,15 @@ async function getCurrentWeek(userId) {
     [program.id, week_start, week_end]
   );
 
+  const annotatedQuests = await annotateTodayQuest(userId, quests);
+
   return {
     userProgramId: program.id,
     scheduleMode: program.schedule_mode,
     weekNumber: Number(week_number) + 1, // แสดงเป็น 1-indexed ให้ user
     weekStart: week_start,
     weekEnd: week_end,
-    quests,
+    quests: annotatedQuests,
   };
 }
 
@@ -511,12 +546,14 @@ async function getQuestsInRange(userId, from, to) {
     [program.id, rangeFrom, rangeTo]
   );
 
+  const annotatedQuests = await annotateTodayQuest(userId, quests);
+
   return {
     userProgramId: program.id,
     scheduleMode: program.schedule_mode,
     from: rangeFrom,
     to: rangeTo,
-    quests,
+    quests: annotatedQuests,
   };
 }
 

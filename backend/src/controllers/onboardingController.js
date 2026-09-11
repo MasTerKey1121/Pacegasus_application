@@ -48,14 +48,14 @@ function deriveExperienceLevel(value) {
   const weeks = value.weeksRunning ?? 0;
   const longest = value.longestDistanceKm ?? 0;
 
-  // Beginner: ยังฝึกไม่ถึง ~8 เดือน หรือวิ่งไกลสุดยังไม่ถึง 5 กม.
-  if (weeks < 34 || longest < 5) return 'beginner';
+  // Beginner: ฝึกต่อเนื่องยังไม่ถึง ~6 เดือน หรือวิ่งไกลสุดยังไม่ถึง 5 กม. (ยังไม่จบ 5K)
+  if (weeks < 26 || longest < 5) return 'beginner';
 
-  // Upper Intermediate: ฝึกต่อเนื่อง >= 1 ปี และเคยวิ่งไกลสุด >= 15 กม.
-  // (ใกล้ระยะ Half Marathon แล้ว พร้อมขยับไปคอร์ส 21k)
-  if (weeks >= 52 && longest >= 15) return 'upper_intermediate';
+  // Upper Intermediate: ฝึกต่อเนื่อง >= 1.5 ปี และเคยวิ่งไกลสุด >= 15 กม.
+  // (จบระยะใกล้ Half Marathon มาแล้ว พร้อมขยับไปคอร์ส 21k)
+  if (weeks >= 78 && longest >= 15) return 'upper_intermediate';
 
-  // Lower Intermediate: อยู่ระหว่างกลาง (ฝึกมาสักพัก วิ่งไกลสุดอยู่ในช่วง 10k)
+  // Lower Intermediate: ฝึกต่อเนื่อง 6 เดือน - 1.5 ปี หรือไกลสุดอยู่ช่วง 5-15 กม. (จบ 5K-10K มาแล้ว)
   return 'lower_intermediate';
 }
 
