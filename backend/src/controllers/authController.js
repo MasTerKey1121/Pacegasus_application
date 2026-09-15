@@ -14,6 +14,7 @@ const {
 function serializeUser(user) {
   return {
     id: user.id,
+    uid: user.uid,
     email: user.email,
     emailVerified: user.email_verified,
     displayName: user.display_name,

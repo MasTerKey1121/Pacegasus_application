@@ -46,6 +46,9 @@ node src/db/migrate.js src/db/007_add_program_template_descriptions.sql
 node src/db/migrate.js src/db/008_create_rpe_logs.sql
 node src/db/migrate.js src/db/009_add_game_progress.sql
 node src/db/migrate.js src/db/010_add_user_program_soft_delete.sql
+node src/db/migrate.js src/db/011_add_phase_progression_multiplier.sql
+node src/db/migrate.js src/db/012_add_beginner_week_progression.sql
+node src/db/migrate.js src/db/013_add_user_uid_and_friendships.sql
 ```
 
 The migration runner accepts an explicit path relative to `backend/`; therefore the `src/db/` prefix is required for additive migrations.
@@ -91,6 +94,7 @@ All endpoints below are prefixed with `/api`. Except for health and authenticati
 | Programs | `GET /programs/templates`, `POST /programs/start`, `DELETE /programs/current`, `GET /programs/current/week`, `GET/POST /programs/quests`, `POST /programs/quests/batch`, `PATCH /programs/quests/:questId/complete`, `DELETE /programs/quests/:questId` |
 | Running | `POST /running-sessions`, `GET /running-sessions/history`, `GET /running-sessions/:id`, `PATCH /running-sessions/:id/complete`, `PATCH /running-sessions/:id/abandon` |
 | RPE | `POST /rpe`, `GET /rpe/history`, `GET /rpe/risk-index` |
+| Friends | `GET /friends`, `GET /friends/lookup/:uid`, `GET/POST /friends/requests`, `PATCH /friends/requests/:friendshipId/accept`, `DELETE /friends/requests/:friendshipId`, `DELETE /friends/:friendshipId` |
 | Side quests | `GET /quests/side`, `POST /quests/running-sessions/:id/side-quests`, `PATCH /quests/side-quests/:id/progress`, `PATCH /quests/side-quests/:id/finish`, `GET /quests/side-quests/:id/album` |
 
 For registration OTP requests, provide `purpose: "register"`, `policyAccepted: true`, and a `policyVersion`. OTP endpoints are rate-limited. The canonical Side Quest endpoints are under `/api/quests`; the server currently also exposes compatibility aliases.
@@ -122,6 +126,20 @@ Example successful response:
 
 Import the main [Postman collection](test/Pacegasus_API_postman_collection%20(1).json), set `accessToken`, create a program first with `POST /api/programs/start`, then run **5.6 Cancel Current Program (Soft Delete)**.
 
+## Friends
+
+Every account has a permanent public `uid`: 10 characters from `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (no `0/O/1/I`). Migration `013` backfills it for existing accounts, and a database trigger generates it for every new account, so no application code has to create it. It is returned by `GET /api/users/me/full`, `GET /api/auth/me`, and the login responses. UID input is case-insensitive.
+
+A friendship is one `friendships` row per pair of users, whichever side sent the request:
+
+1. User A sends `POST /api/friends/requests` with `{ "uid": "<B's uid>" }`. The row is created as `pending` and the response is `201`.
+2. User B sees it in `GET /api/friends/requests?direction=incoming` and accepts it with `PATCH /api/friends/requests/:friendshipId/accept`. Only the recipient can accept. The status becomes `accepted`.
+3. Both users now see each other in `GET /api/friends`.
+
+If B adds A while A's request to B is still pending, the request is accepted immediately (`200`, `autoAccepted: true`). Declining, cancelling, and unfriending delete the row, so either user can send a new request later. The API returns `400` for adding yourself, `404` for an unknown or inactive UID, and `409` for a duplicate request or an existing friendship. Deleted accounts are hidden from friend lists and requests.
+
+Use `GET /api/friends/lookup/:uid` to show a profile preview before sending a request; `relationship.status` is `none`, `pending`, `accepted`, or `self`. The Postman collection folder **8. Friends** (**9. Friends** in `backend/testapi/`) covers the two-account flow. Set `accessToken` to account A, `friendAccessToken` to account B, and `friendUid` to B's UID, then run the requests in order. Request 3.1 Get Full Profile saves the signed-in user's UID to `myUid`. Detailed request and response tables are in [`backend/README.md`](backend/README.md).
+
 ## Tests
 
 The project uses Node's built-in test runner. From `backend/`:
@@ -130,7 +148,7 @@ The project uses Node's built-in test runner. From `backend/`:
 node --test tests/*.test.js
 ```
 
-The current tests cover program-template and batch-quest behavior, running-session service/controller behavior, and side-quest handler availability. They use mocked database calls; integration testing still requires a configured database and environment.
+The current tests cover program-template and batch-quest behavior, running-session service/controller behavior, side-quest handler availability, and friend requests. They use mocked database calls; integration testing still requires a configured database and environment.
 
 ## Repository layout
 

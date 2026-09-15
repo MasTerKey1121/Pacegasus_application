@@ -34,6 +34,7 @@ const getFullProfile = asyncHandler(async (req, res) => {
     data: {
       user: {
         id: user.id,
+        uid: user.uid,
         email: user.email,
         displayName: user.display_name,
         avatarUrl: user.avatar_url,

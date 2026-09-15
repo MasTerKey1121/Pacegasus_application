@@ -869,6 +869,12 @@
                   "    pm.expect(json.data).to.have.property('injury');",
                   "    pm.expect(json.data).to.have.property('goals');",
                   "    pm.expect(json.data).to.have.property('runningHistory');",
+                  "});",
+                  "",
+                  "pm.test('User has uid for friend system', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.user.uid).to.match(/^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$/);",
+                  "    pm.collectionVariables.set('myUid', json.data.user.uid);",
                   "});"
                 ]
               }
@@ -899,7 +905,7 @@
                 "full"
               ]
             },
-            "description": "**GET /api/users/me/full**\n\nรวมข้อมูลผู้ใช้ทั้งหมดในครั้งเดียว (user + basicInfo + injury + goals + runningHistory) — เหมาะใช้ตอนโหลดหน้า Home/Profile หลัง onboarding เสร็จ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ อัปเดตตาม schema ล่าสุด: `basicInfo` ไม่มี `weekly_distance_km`/`timezone` แล้ว, `injury` แยกเป็น `has_injury_history`/`has_chronic_condition` และแต่ละรายการใน `injuries` มี `category` แทน `severity`/`occurred_at`/`notes`, `goals` ไม่มี `target_date` แล้ว, และ `runningHistory` เปลี่ยนเป็น `has_run_before`/`is_currently_running`/`weeks_running`/`longest_distance_km` แทนชุดฟิลด์เดิมทั้งหมด\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"email\": \"...\", \"displayName\": \"...\", \"onboardingCompleted\": true, \"onboardingStep\": 4, ... },\n    \"basicInfo\": {\n      \"date_of_birth\": \"...\", \"gender\": \"male\", \"height_cm\": \"175.00\", \"weight_kg\": \"68.00\",\n      \"running_experience_level\": \"intermediate\", \"running_days_per_week\": 3\n    },\n    \"injury\": {\n      \"has_injury_history\": true, \"has_chronic_condition\": false,\n      \"injuries\": [ { \"category\": \"injury\", \"body_part\": \"knee\", \"injury_type\": \"runner's knee\", \"is_current\": false } ]\n    },\n    \"goals\": [ { \"goal_type\": \"run_10k\", \"target_distance_km\": 10, \"target_pace_sec_per_km\": 330, \"is_primary\": true } ],\n    \"runningHistory\": {\n      \"has_run_before\": true, \"is_currently_running\": true, \"weeks_running\": 26, \"longest_distance_km\": 12\n    }\n  }\n}\n```\n\nหมายเหตุ: `basicInfo`/`injury`/`runningHistory` จะเป็น `null`/ค่า default ถ้ายังไม่เคยบันทึก onboarding ขั้นตอนนั้น"
+            "description": "**GET /api/users/me/full**\n\nรวมข้อมูลผู้ใช้ทั้งหมดในครั้งเดียว (user + basicInfo + injury + goals + runningHistory) — เหมาะใช้ตอนโหลดหน้า Home/Profile หลัง onboarding เสร็จ\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n⚠️ อัปเดตตาม schema ล่าสุด: `basicInfo` ไม่มี `weekly_distance_km`/`timezone` แล้ว, `injury` แยกเป็น `has_injury_history`/`has_chronic_condition` และแต่ละรายการใน `injuries` มี `category` แทน `severity`/`occurred_at`/`notes`, `goals` ไม่มี `target_date` แล้ว, และ `runningHistory` เปลี่ยนเป็น `has_run_before`/`is_currently_running`/`weeks_running`/`longest_distance_km` แทนชุดฟิลด์เดิมทั้งหมด\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"uid\": \"Z2SAA2LDRK\", \"email\": \"...\", \"displayName\": \"...\", \"onboardingCompleted\": true, \"onboardingStep\": 4, ... },\n    \"basicInfo\": {\n      \"date_of_birth\": \"...\", \"gender\": \"male\", \"height_cm\": \"175.00\", \"weight_kg\": \"68.00\",\n      \"running_experience_level\": \"intermediate\", \"running_days_per_week\": 3\n    },\n    \"injury\": {\n      \"has_injury_history\": true, \"has_chronic_condition\": false,\n      \"injuries\": [ { \"category\": \"injury\", \"body_part\": \"knee\", \"injury_type\": \"runner's knee\", \"is_current\": false } ]\n    },\n    \"goals\": [ { \"goal_type\": \"run_10k\", \"target_distance_km\": 10, \"target_pace_sec_per_km\": 330, \"is_primary\": true } ],\n    \"runningHistory\": {\n      \"has_run_before\": true, \"is_currently_running\": true, \"weeks_running\": 26, \"longest_distance_km\": 12\n    }\n  }\n}\n```\n\nหมายเหตุ: `basicInfo`/`injury`/`runningHistory` จะเป็น `null`/ค่า default ถ้ายังไม่เคยบันทึก onboarding ขั้นตอนนั้น\n\n`user.uid` = รหัสผู้ใช้ 10 ตัวอักษร (สุ่มตอนสร้างบัญชี, แก้ไขไม่ได้) ใช้แชร์ให้เพื่อนแอดผ่านโฟลเดอร์ Friends — auto-save ลง `myUid`"
           },
           "response": []
         },
@@ -2149,6 +2155,539 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "8. Friends",
+      "description": "ระบบเพื่อน — แอดเพื่อนด้วย `uid` (10 ตัวอักษร) แล้วฝั่งผู้รับต้องกดยืนยันก่อนจึงเป็นเพื่อน (`pending` → `accepted`)\n\n### เตรียมก่อนรัน (ต้องใช้ 2 บัญชี)\n1. Login บัญชี **A** ตามโฟลเดอร์ 1. Authentication → `accessToken` ถูก save อัตโนมัติ\n2. Login บัญชี **B** แล้วคัดลอก accessToken ของ B มาใส่ collection variable `friendAccessToken`\n3. ใส่ UID ของบัญชี B ใน `friendUid` (ดูได้จาก `data.user.uid` ของ 3.1 Get Full Profile / 1.7 Me เมื่อ login เป็น B)\n4. รันเรียงตามลำดับ 8.1 → 8.11 (`friendshipId` ถูก save ต่อกันอัตโนมัติ)\n\nถ้าเคยรันแล้ว A กับ B เป็นเพื่อนกันค้างอยู่ ให้ยิง Remove Friend ก่อนเริ่มรอบใหม่",
+      "item": [
+        {
+          "name": "8.1 Lookup User by UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns public profile of the uid', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.user.uid).to.eql(pm.collectionVariables.get('friendUid').trim().toUpperCase());",
+                  "  pm.expect(json.data.user).to.not.have.property('email');",
+                  "  pm.expect(json.data.relationship).to.have.property('status');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/lookup/{{friendUid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "lookup",
+                "{{friendUid}}"
+              ]
+            },
+            "description": "**GET /api/friends/lookup/:uid**\n\nดูโปรไฟล์สาธารณะของผู้ใช้จาก UID ก่อนกดแอด พร้อมสถานะความสัมพันธ์\n\n`relationship.status`: `none` | `self` | `pending` | `accepted` (กรณี pending/accepted จะมี `friendshipId`, `direction`, `requestedAt`, `respondedAt` ด้วย)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 },\n    \"relationship\": { \"status\": \"none\" }\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ หรือบัญชีไม่ active |"
+          },
+          "response": []
+        },
+        {
+          "name": "8.2 Validation - Invalid UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Returns validation detail', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.success).to.eql(false);",
+                  "  pm.expect(json.details).to.be.an('array').that.is.not.empty;",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"bad-uid\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ]
+            },
+            "description": "**POST /api/friends/requests** (เคส error)\n\nUID ต้องเป็น 10 ตัวอักษรจากชุด `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` เท่านั้น\n\n### Response 400\n```json\n{ \"success\": false, \"message\": \"ข้อมูลคำขอเป็นเพื่อนไม่ถูกต้อง\", \"details\": [\"UID ต้องเป็นตัวอักษรหรือตัวเลข 10 ตัว\"] }\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "8.3 Send Friend Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200 or 201', function () { pm.expect([200,201]).to.include(pm.response.code); });",
+                  "pm.test('Creates pending request (or auto-accepts a reverse request)', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.status).to.eql(pm.response.code === 201 ? 'pending' : 'accepted');",
+                  "  pm.collectionVariables.set('friendshipId', json.data.friendshipId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"{{friendUid}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ]
+            },
+            "description": "**POST /api/friends/requests**\n\nส่งคำขอเป็นเพื่อนจาก UID (รับตัวพิมพ์เล็กได้)\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งคำขอเป็นเพื่อนแล้ว\",\n  \"data\": {\n    \"friendshipId\": \"98b7277e-be58-4a77-a4ec-030871f0e1c6\",\n    \"status\": \"pending\",\n    \"direction\": \"outgoing\",\n    \"requestedAt\": \"2026-09-15T14:57:28.936Z\",\n    \"respondedAt\": null,\n    \"autoAccepted\": false,\n    \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 }\n  }\n}\n```\n\n### Response 200 OK (auto-accept)\nถ้า B ส่งคำขอมาหา A ค้างไว้ก่อนแล้ว การที่ A แอด B กลับถือเป็นการตอบรับทันที → `status: \"accepted\"`, `autoAccepted: true`\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ หรือแอดตัวเอง |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ |\n| 409 | ส่งคำขอไปแล้วรอการตอบรับ หรือเป็นเพื่อนกันอยู่แล้ว |"
+          },
+          "response": []
+        },
+        {
+          "name": "8.4 Validation - Duplicate Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409', function () { pm.response.to.have.status(409); });",
+                  "pm.test('Rejects duplicate request', function () { pm.expect(pm.response.json().success).to.eql(false); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"{{friendUid}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ]
+            },
+            "description": "**POST /api/friends/requests** (เคส error)\n\nส่งคำขอซ้ำหาคนเดิมขณะที่ยัง pending อยู่\n\n### Response 409\n```json\n{ \"success\": false, \"message\": \"ส่งคำขอเป็นเพื่อนไปแล้ว กรุณารอการตอบรับ\" }\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "8.5 List Outgoing Requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Contains the request just sent', function () {",
+                  "  const json = pm.response.json();",
+                  "  const ids = json.data.requests.map(function (r) { return r.friendshipId; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('friendshipId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests?direction=outgoing&limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ],
+              "query": [
+                {
+                  "key": "direction",
+                  "value": "outgoing"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/friends/requests?direction=outgoing**\n\nคำขอที่เราส่งออกไปและยังรออีกฝ่ายตอบรับ (เรียงล่าสุดก่อน)\n\n| Query | ค่า |\n|---|---|\n| `direction` | `incoming` (default) \\| `outgoing` |\n| `limit` | 1-100 (default 50) |\n| `offset` | ≥0 (default 0) |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"requests\": [\n      { \"friendshipId\": \"...\", \"status\": \"pending\", \"direction\": \"outgoing\", \"requestedAt\": \"...\", \"respondedAt\": null, \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 } }\n    ],\n    \"direction\": \"outgoing\",\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "8.6 List Incoming Requests (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B sees the pending request from A', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.direction).to.eql('incoming');",
+                  "  const target = json.data.requests.find(function (r) { return r.friendshipId === pm.collectionVariables.get('friendshipId'); }) || json.data.requests[0];",
+                  "  pm.expect(target, 'incoming request').to.exist;",
+                  "  pm.collectionVariables.set('friendshipId', target.friendshipId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests?direction=incoming",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ],
+              "query": [
+                {
+                  "key": "direction",
+                  "value": "incoming"
+                }
+              ]
+            },
+            "description": "**GET /api/friends/requests?direction=incoming**\n\nคำขอที่คนอื่นส่งมาหาเรา ใช้แสดงรายการพร้อมปุ่ม ยอมรับ / ปฏิเสธ — `user` คือข้อมูลของผู้ส่ง\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"requests\": [\n      { \"friendshipId\": \"...\", \"status\": \"pending\", \"direction\": \"incoming\", \"requestedAt\": \"...\", \"respondedAt\": null, \"user\": { \"id\": \"...\", \"uid\": \"Z2SAA2LDRK\", \"displayName\": \"Runner A\", \"avatarUrl\": null, \"level\": 1 } }\n    ],\n    \"direction\": \"incoming\",\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "8.7 Accept Friend Request (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Friendship becomes accepted', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.status).to.eql('accepted');",
+                  "  pm.expect(json.data.respondedAt).to.be.a('string');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests/{{friendshipId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests",
+                "{{friendshipId}}",
+                "accept"
+              ]
+            },
+            "description": "**PATCH /api/friends/requests/:friendshipId/accept**\n\nตอบรับคำขอเป็นเพื่อน — **เฉพาะผู้รับคำขอเท่านั้น** (ถ้า A ผู้ส่งยิงเองจะได้ 404)\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"ตอบรับคำขอเป็นเพื่อนแล้ว\",\n  \"data\": {\n    \"friendshipId\": \"...\",\n    \"status\": \"accepted\",\n    \"direction\": \"incoming\",\n    \"requestedAt\": \"2026-09-15T14:57:28.936Z\",\n    \"respondedAt\": \"2026-09-15T14:57:30.830Z\",\n    \"user\": { \"id\": \"...\", \"uid\": \"Z2SAA2LDRK\", \"displayName\": \"Runner A\", \"avatarUrl\": null, \"level\": 1 }\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `friendshipId` ไม่ใช่ UUID |\n| 404 | ไม่พบคำขอ / ไม่ใช่ผู้รับ / ตอบรับไปแล้ว |"
+          },
+          "response": []
+        },
+        {
+          "name": "8.8 List Friends",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B is in the friend list of A', function () {",
+                  "  const json = pm.response.json();",
+                  "  const uids = json.data.friends.map(function (f) { return f.user.uid; });",
+                  "  pm.expect(uids).to.include(pm.collectionVariables.get('friendUid').trim().toUpperCase());",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/friends**\n\nรายชื่อเพื่อนที่ `accepted` แล้ว เรียงจากที่เพิ่งเป็นเพื่อนล่าสุดก่อน (`limit` 1-100 default 50, `offset` default 0)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"friends\": [\n      { \"friendshipId\": \"...\", \"status\": \"accepted\", \"direction\": \"outgoing\", \"requestedAt\": \"...\", \"respondedAt\": \"...\", \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 } }\n    ],\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "8.9 Remove Friend",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Unfriended', function () { pm.expect(pm.response.json().data.action).to.eql('unfriended'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/{{friendshipId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "{{friendshipId}}"
+              ]
+            },
+            "description": "**DELETE /api/friends/:friendshipId**\n\nลบเพื่อน ทำได้ทั้งสองฝ่าย (ลบแถวทิ้ง จึงแอดกันใหม่ได้)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ลบเพื่อนแล้ว\", \"data\": { \"friendshipId\": \"...\", \"action\": \"unfriended\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `friendshipId` ไม่ใช่ UUID |\n| 404 | ไม่พบเพื่อนคนนี้ |"
+          },
+          "response": []
+        },
+        {
+          "name": "8.10 Send Friend Request Again",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('New pending request after unfriend', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.status).to.eql('pending');",
+                  "  pm.collectionVariables.set('friendshipId', json.data.friendshipId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"{{friendUid}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests"
+              ]
+            },
+            "description": "**POST /api/friends/requests**\n\nส่งคำขอใหม่หลังลบเพื่อนแล้ว — ใช้เตรียมคำขอ pending สำหรับทดสอบการปฏิเสธใน request ถัดไป"
+          },
+          "response": []
+        },
+        {
+          "name": "8.11 Decline Friend Request (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Declined by addressee', function () { pm.expect(pm.response.json().data.action).to.eql('declined'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/friends/requests/{{friendshipId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "friends",
+                "requests",
+                "{{friendshipId}}"
+              ]
+            },
+            "description": "**DELETE /api/friends/requests/:friendshipId**\n\nลบคำขอที่ยัง `pending`: ผู้รับยิง = **ปฏิเสธ** (`action: \"declined\"`), ผู้ส่งยิง = **ยกเลิกคำขอ** (`action: \"cancelled\"`)\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ปฏิเสธคำขอเป็นเพื่อนแล้ว\", \"data\": { \"friendshipId\": \"...\", \"action\": \"declined\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `friendshipId` ไม่ใช่ UUID |\n| 404 | ไม่พบคำขอที่รอการตอบรับ |"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -2203,6 +2742,26 @@
     {
       "key": "sideQuestInstanceId3",
       "value": ""
+    },
+    {
+      "key": "friendUid",
+      "value": "",
+      "description": "UID 10 ตัวอักษรของบัญชี B ที่จะแอดเป็นเพื่อน"
+    },
+    {
+      "key": "friendshipId",
+      "value": "",
+      "description": "ID ของคำขอ/ความสัมพันธ์เพื่อน (auto-save ในโฟลเดอร์ Friends)"
+    },
+    {
+      "key": "myUid",
+      "value": "",
+      "description": "UID ของบัญชีที่ login อยู่ (auto-save จาก 3.1 Get Full Profile)"
+    },
+    {
+      "key": "friendAccessToken",
+      "value": "",
+      "description": "accessToken ของบัญชี B — ใช้ใน request ที่ต้องยิงในนามผู้รับคำขอ (incoming / accept / decline)"
     }
   ]
 }
