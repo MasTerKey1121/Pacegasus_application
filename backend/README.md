@@ -7,6 +7,7 @@ Express.js REST API สำหรับ Pacegasus — ครอบคลุมว
 3. **Daily Wellness Check-in**: บันทึกความพร้อมร่างกายรายวัน (Slider 5 มิติ) — เป็น informational เท่านั้น ไม่ gate flow อื่นในระบบ
 4. **Main Quest (Program)**: สมัคร/ดูตารางฝึกซ้อมรายสัปดาห์ (auto หรือ manual schedule) และจัดการเควสรายวัน
 5. **Side Quest**: ดึงเควสเสริมประจำวันตามสภาพแวดล้อมและประเภทการฝึก, ผูกเควสเข้ากับ running session (รองรับ batch), อัปเดต progress, ปิดเควส, และดึงอัลบั้มภาพ
+6. **Friends**: ทุกบัญชีมี `uid` สุ่ม 10 ตัวอักษร ใช้ค้นหา/แอดเพื่อนด้วย UID — ฝั่งผู้รับต้องกดยืนยันก่อนจึงเป็นเพื่อน (`pending` → `accepted`), ปฏิเสธ/ยกเลิกคำขอ และลบเพื่อนได้
 
 Database schema ถูกออกแบบใหม่ทั้งหมด (fresh install) อยู่ที่ `src/db/schema.sql`
 ระบบ Auth + Onboarding **ผ่านการทดสอบจริง** (boot server, run migration, call ทุก endpoint) แล้วในสภาพแวดล้อมพัฒนา
@@ -47,6 +48,18 @@ npm run migrate
 node src/db/migrate.js 003_create_daily_wellness_checkins.sql
 ```
 
+migration ระบบเพื่อน (รันหลัง migration 004–012 ตามลำดับ — ดูรายการเต็มใน `README.md` ที่ root ของ repo):
+
+```bash
+node src/db/migrate.js src/db/013_add_user_uid_and_friendships.sql
+```
+
+migration นี้จะ
+- เพิ่มคอลัมน์ `users.uid` แล้ว **backfill UID ให้บัญชีเดิมทุกบัญชี** จากนั้นตั้ง `NOT NULL` + unique
+- สร้าง trigger `trg_users_uid` ให้สุ่ม UID อัตโนมัติทุกครั้งที่ INSERT บัญชีใหม่ (ไม่ต้องแก้โค้ดสมัครสมาชิก) และห้ามแก้ UID หลังสร้าง
+- สร้าง enum `friendship_status_enum` และตาราง `friendships`
+- รันซ้ำได้ปลอดภัย (idempotent)
+
 ## 3) รันเซิร์ฟเวอร์
 
 ```bash
@@ -62,7 +75,8 @@ Default: `http://localhost:4000` — frontend (React Native/Expo) ที่ร�
 
 | ตาราง | หน้าที่ |
 |---|---|
-| `users` | บัญชีผู้ใช้หลัก, สถานะ onboarding |
+| `users` | บัญชีผู้ใช้หลัก, สถานะ onboarding, `uid` (รหัสสาธารณะ 10 ตัวอักษร สุ่มอัตโนมัติด้วย trigger, unique, แก้ไขไม่ได้) — เพิ่ม `uid` จาก migration `013_add_user_uid_and_friendships.sql` |
+| `friendships` | ความสัมพันธ์เพื่อน 1 แถวต่อ 1 คู่ผู้ใช้: `requester_id` (ผู้ส่ง), `addressee_id` (ผู้รับ), `status` (`pending` → `accepted`), `responded_at` — มี unique index แบบไม่สนทิศทาง (A→B กับ B→A ถือเป็นคู่เดียวกัน) และ CHECK ห้ามแอดตัวเอง — เพิ่มจาก migration `013` |
 | `user_auth_providers` | เชื่อมวิธี login (email / google) กับผู้ใช้ 1 คน |
 | `otp_codes` | OTP ที่ hash แล้ว, มี `otp_ref` (รหัสอ้างอิง 6 หลักคู่กับแต่ละ OTP), expiry / max attempts / resend cooldown |
 | `refresh_tokens` | เก็บ hash ของ refresh token สำหรับหมุนเวียน session |
@@ -187,8 +201,12 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 | Method | Path | คำอธิบาย |
 |---|---|---|
-| GET | `/users/me/full` | รวมข้อมูลผู้ใช้ + basic info + injury/chronic condition + goals + running history ในครั้งเดียว (เหมาะกับหน้า Home/Profile) |
-| Delete | `/users/me` | ลบบัญชีผู้ใช้โดยผู้ใช้เอง |
+| GET | `/users/me/full` | รวมข้อมูลผู้ใช้ + basic info + injury/chronic condition + goals + running history ในครั้งเดียว (เหมาะกับหน้า Home/Profile) — `data.user.uid` คือ UID สำหรับแชร์ให้เพื่อนแอด |
+| GET | `/users/me/progress` | coin, level, exp ของผู้ใช้ |
+| DELETE | `/users/me` | ลบบัญชีผู้ใช้โดยผู้ใช้เอง (soft delete) |
+
+> `uid` ถูกส่งกลับใน `GET /users/me/full`, `GET /auth/me` และ `data.user` ของ response login (`/auth/otp/verify`, `/auth/google`) ด้วย
+
 ---
 
 ### Daily Wellness Check-in (ต้อง Login ก่อน — แนบ `Authorization: Bearer <accessToken>` ทุก request)
@@ -630,11 +648,285 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 ---
 
+### Friends (ต้อง Login ก่อน — แนบ `Authorization: Bearer <accessToken>` ทุก request)
+
+> **สถานะ:** ผ่านการทดสอบ end-to-end กับ database จริงแล้ว (ส่งคำขอ, ส่งซ้ำ, แอดตัวเอง, UID ไม่มีอยู่, ผู้ส่งพยายามกดยอมรับเอง, ตอบรับ, แอดกลับ, ปฏิเสธ, ลบเพื่อน) + unit test ที่ `tests/friendService.test.js`
+> **หลักการ:** แอดเพื่อนด้วย `uid` ของอีกฝ่าย → เกิดคำขอสถานะ `pending` → **ฝั่งผู้รับเท่านั้น** ที่กดยืนยันได้ → สถานะเป็น `accepted` จึงนับเป็นเพื่อน
+>
+> - ถ้า A ส่งคำขอหา B ค้างอยู่ แล้ว B แอด A กลับ → ระบบถือว่าตอบรับทันที (`autoAccepted: true`)
+> - ปฏิเสธ / ยกเลิกคำขอ / ลบเพื่อน = ลบแถวใน `friendships` ทิ้ง จึงส่งคำขอใหม่ได้ภายหลัง
+> - บัญชีที่ถูกลบ (`status = 'deleted'`) ค้นหาด้วย UID ไม่เจอ และไม่แสดงในรายชื่อเพื่อน/คำขอ
+> - response ของผู้ใช้อื่นเปิดเผยเฉพาะ `id`, `uid`, `displayName`, `avatarUrl`, `level` (ไม่มี email)
+
+| Method | Path | Body / Query | คำอธิบาย |
+|---|---|---|---|
+| GET | `/friends/lookup/:uid` | – | ดูโปรไฟล์ของผู้ใช้จาก UID พร้อมสถานะความสัมพันธ์ (ใช้แสดงก่อนกดแอด) |
+| POST | `/friends/requests` | `{ uid }` | ส่งคำขอเป็นเพื่อน |
+| GET | `/friends/requests?direction=&limit=&offset=` | query `direction` = `incoming` (default) \| `outgoing` | คำขอที่รอการตอบรับ — ที่ได้รับ หรือที่ส่งออกไป |
+| PATCH | `/friends/requests/:friendshipId/accept` | – | ตอบรับคำขอ (เฉพาะผู้รับ) |
+| DELETE | `/friends/requests/:friendshipId` | – | ผู้รับ = ปฏิเสธ, ผู้ส่ง = ยกเลิกคำขอ |
+| GET | `/friends?limit=&offset=` | – | รายชื่อเพื่อนที่ `accepted` แล้ว |
+| DELETE | `/friends/:friendshipId` | – | ลบเพื่อน (ทำได้ทั้งสองฝ่าย) |
+
+**รูปแบบ UID:** 10 ตัวอักษรจากชุด `23456789ABCDEFGHJKLMNPQRSTUVWXYZ` (ตัด `0`, `O`, `1`, `I` ออกเพื่อไม่ให้สับสน) เช่น `LL4X6G2V23` — ฝั่ง API รับตัวพิมพ์เล็กได้และตัดช่องว่างหัวท้ายให้
+
+**Object คำขอ/เพื่อน (ใช้ร่วมกันทุก endpoint)**
+
+| Field | Type | คำอธิบาย |
+|---|---|---|
+| `friendshipId` | string (UUID) | id ของแถวใน `friendships` ใช้กับ endpoint accept / decline / remove |
+| `status` | `"pending"` \| `"accepted"` | สถานะความสัมพันธ์ |
+| `direction` | `"outgoing"` \| `"incoming"` | มุมมองของผู้ใช้ปัจจุบัน: `outgoing` = เราเป็นคนส่งคำขอ, `incoming` = อีกฝ่ายส่งมาหาเรา |
+| `requestedAt` | string (ISO datetime) | เวลาที่ส่งคำขอ |
+| `respondedAt` | string \| null | เวลาที่ตอบรับ (`null` ถ้ายัง `pending`) |
+| `user` | object | ข้อมูลของ **อีกฝ่าย**: `id`, `uid`, `displayName`, `avatarUrl`, `level` |
+
+#### GET `/friends/lookup/:uid`
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `uid` | string (10 ตัวอักษร) | ✅ | UID ของผู้ใช้ที่ต้องการค้นหา |
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": {
+    "user": { "id": "...", "uid": "LL4X6G2V23", "displayName": "Runner B", "avatarUrl": null, "level": 1 },
+    "relationship": { "status": "none" }
+  }
+}
+```
+
+`relationship.status` เป็นได้: `none` (ยังไม่มีความสัมพันธ์), `self` (UID ของตัวเอง), หรือ `pending`/`accepted` ซึ่งจะมาพร้อม `friendshipId`, `direction`, `requestedAt`, `respondedAt`
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | UID ผิดรูปแบบ |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบผู้ใช้จาก UID นี้ หรือบัญชีไม่ active |
+
+---
+
+#### POST `/friends/requests`
+
+**Request body**
+
+| Field | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `uid` | string (10 ตัวอักษร) | ✅ | UID ของผู้ใช้ที่ต้องการแอด |
+
+**Response `201`** — สร้างคำขอใหม่
+
+```json
+{
+  "success": true,
+  "message": "ส่งคำขอเป็นเพื่อนแล้ว",
+  "data": {
+    "friendshipId": "98b7277e-be58-4a77-a4ec-030871f0e1c6",
+    "status": "pending",
+    "direction": "outgoing",
+    "requestedAt": "2026-09-15T14:57:28.936Z",
+    "respondedAt": null,
+    "autoAccepted": false,
+    "user": { "id": "...", "uid": "LL4X6G2V23", "displayName": "Runner B", "avatarUrl": null, "level": 1 }
+  }
+}
+```
+
+**Response `200`** — อีกฝ่ายส่งคำขอมาหาเราก่อนแล้ว ระบบตอบรับให้ทันที: `message = "ผู้ใช้นี้ส่งคำขอมาก่อนแล้ว เป็นเพื่อนกันเรียบร้อย"`, `data.status = "accepted"`, `data.autoAccepted = true`
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | ไม่ส่ง `uid` / UID ผิดรูปแบบ / แอดตัวเอง |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบผู้ใช้จาก UID นี้ หรือบัญชีไม่ active |
+| `409` | ส่งคำขอไปแล้วและยังรอการตอบรับ, เป็นเพื่อนกันอยู่แล้ว, หรือทั้งสองฝ่ายส่งคำขอหากันพร้อมกันพอดี |
+
+---
+
+#### GET `/friends/requests?direction=&limit=&offset=`
+
+**Query params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `direction` | `"incoming"` \| `"outgoing"` | ไม่ (default `incoming`) | `incoming` = คำขอที่คนอื่นส่งมาหาเรา (ใช้แสดงปุ่มยอมรับ/ปฏิเสธ), `outgoing` = คำขอที่เราส่งออกไป |
+| `limit` | integer 1-100 | ไม่ (default 50) | จำนวนรายการ |
+| `offset` | integer ≥0 | ไม่ (default 0) | ข้ามกี่รายการ |
+
+เรียงจากคำขอล่าสุดก่อน
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": {
+    "requests": [
+      {
+        "friendshipId": "...",
+        "status": "pending",
+        "direction": "incoming",
+        "requestedAt": "...",
+        "respondedAt": null,
+        "user": { "id": "...", "uid": "Z2SAA2LDRK", "displayName": "Runner A", "avatarUrl": null, "level": 1 }
+      }
+    ],
+    "direction": "incoming",
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | `direction`/`limit`/`offset` ไม่ถูกต้อง |
+| `401` | ไม่ได้ login |
+
+---
+
+#### PATCH `/friends/requests/:friendshipId/accept`
+
+ตอบรับคำขอเป็นเพื่อน — **ต้องเป็นผู้รับคำขอ (addressee) เท่านั้น** ผู้ส่งกดยอมรับคำขอของตัวเองไม่ได้
+
+**Path params**
+
+| Key | Type | Required | คำอธิบาย |
+|---|---|---|---|
+| `friendshipId` | string (UUID) | ✅ | ได้จาก `GET /friends/requests?direction=incoming` |
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "message": "ตอบรับคำขอเป็นเพื่อนแล้ว",
+  "data": {
+    "friendshipId": "...",
+    "status": "accepted",
+    "direction": "incoming",
+    "requestedAt": "2026-09-15T14:57:28.936Z",
+    "respondedAt": "2026-09-15T14:57:30.830Z",
+    "user": { "id": "...", "uid": "Z2SAA2LDRK", "displayName": "Runner A", "avatarUrl": null, "level": 1 }
+  }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | `friendshipId` ไม่ใช่ UUID |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบคำขอ, ผู้ใช้ปัจจุบันไม่ใช่ผู้รับ, คำขอถูกตอบรับไปแล้ว หรือผู้ส่งลบบัญชีไปแล้ว |
+
+---
+
+#### DELETE `/friends/requests/:friendshipId`
+
+ลบคำขอที่ยัง `pending` — ถ้าผู้ใช้ปัจจุบันเป็นผู้รับ = **ปฏิเสธ**, ถ้าเป็นผู้ส่ง = **ยกเลิกคำขอ**
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "message": "ปฏิเสธคำขอเป็นเพื่อนแล้ว",
+  "data": { "friendshipId": "...", "action": "declined" }
+}
+```
+
+`action` = `declined` (ผู้รับ, message `ปฏิเสธคำขอเป็นเพื่อนแล้ว`) หรือ `cancelled` (ผู้ส่ง, message `ยกเลิกคำขอเป็นเพื่อนแล้ว`)
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | `friendshipId` ไม่ใช่ UUID |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบคำขอที่ยัง pending ซึ่งผู้ใช้ปัจจุบันเกี่ยวข้อง |
+
+---
+
+#### GET `/friends?limit=&offset=`
+
+รายชื่อเพื่อนที่ `accepted` แล้ว เรียงจากที่เพิ่งเป็นเพื่อนล่าสุดก่อน (`limit` 1-100 default 50, `offset` default 0)
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "data": {
+    "friends": [
+      {
+        "friendshipId": "...",
+        "status": "accepted",
+        "direction": "outgoing",
+        "requestedAt": "...",
+        "respondedAt": "...",
+        "user": { "id": "...", "uid": "LL4X6G2V23", "displayName": "Runner B", "avatarUrl": null, "level": 1 }
+      }
+    ],
+    "limit": 50,
+    "offset": 0
+  }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | `limit`/`offset` ไม่ถูกต้อง |
+| `401` | ไม่ได้ login |
+
+---
+
+#### DELETE `/friends/:friendshipId`
+
+ลบเพื่อน ทำได้ทั้งสองฝ่าย
+
+**Response `200`**
+
+```json
+{
+  "success": true,
+  "message": "ลบเพื่อนแล้ว",
+  "data": { "friendshipId": "...", "action": "unfriended" }
+}
+```
+
+**Error responses**
+
+| Status | เงื่อนไข |
+|---|---|
+| `400` | `friendshipId` ไม่ใช่ UUID |
+| `401` | ไม่ได้ login |
+| `404` | ไม่พบความสัมพันธ์ที่ `accepted` ซึ่งผู้ใช้ปัจจุบันเกี่ยวข้อง |
+
+**ทดสอบด้วย Postman:** โฟลเดอร์ **9. Friends** ใน `testapi/Pacegasus_API_postman_collection (1).json` — ต้องใช้ 2 บัญชี ตั้ง `accessToken` = บัญชี A, `friendAccessToken` = บัญชี B และ `friendUid` = UID ของบัญชี B แล้วรันเรียงตามลำดับ 9.1 → 9.11
+
+---
+
 ## หมายเหตุด้านความปลอดภัย
 
 - OTP และ refresh token ไม่เคยถูกเก็บเป็น plaintext — เก็บเป็น bcrypt hash (OTP) และ sha256 hash (refresh token)
 - `otp_ref` ไม่ใช่ secret (ไม่ hash) — ใช้เพื่อระบุ "คำขอรอบไหน" เท่านั้น ความปลอดภัยของ OTP ยังขึ้นอยู่กับตัวรหัส OTP 6 หลักที่ hash ไว้เป็นหลัก
 - Rate limit บน endpoint ขอ/ยืนยัน OTP กันการยิงสแปม
 - Access token อายุสั้น (`15m` default) + refresh token หมุนทุกครั้งที่ใช้ (rotation) เพื่อลดความเสี่ยงจาก token รั่วไหล
-- Onboarding, Wellness Check-in, Main Quest (Program) และ Side Quest routes ทุกตัวถูกป้องกันด้วย JWT middleware (`requireAuth`)
+- Onboarding, Wellness Check-in, Main Quest (Program), Side Quest และ Friends routes ทุกตัวถูกป้องกันด้วย JWT middleware (`requireAuth`)
+- `uid` เป็นรหัสสาธารณะสำหรับแชร์ ไม่ใช่ secret — สุ่มจาก CSPRNG (`gen_random_uuid()`) ประมาณ 2^50 แบบ จึงเดาไล่หาได้ยาก และ API ระบบเพื่อนไม่เปิดเผย email ของผู้ใช้อื่น
+- สิทธิ์ของ friend request ถูกบังคับใน SQL (`WHERE addressee_id = <ผู้ใช้ปัจจุบัน>` ฯลฯ) ไม่ใช่เช็คฝั่ง application อย่างเดียว
 - POST `/quests/running-sessions/:id/side-quests` ครอบทั้ง batch ด้วย DB transaction พร้อม row-level lock (`FOR UPDATE`) เพื่อกัน race condition เวลามีคำขอพร้อมกันหลายอันมาแข่งกันผูกเควสเข้า session เดียวกัน
