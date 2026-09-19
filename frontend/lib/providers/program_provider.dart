@@ -23,6 +23,7 @@ class ProgramNotifier extends ChangeNotifier {
   bool isRegistering = false;
   bool isSavingSchedule = false;
   String? errorMessage;
+  String? currentWeekErrorMessage;
   String? _onboardingLevel;
   String? selectedTemplateLevel;
   bool _isRegistered = false;
@@ -67,6 +68,7 @@ class ProgramNotifier extends ChangeNotifier {
     isRegistering = false;
     isSavingSchedule = false;
     errorMessage = null;
+    currentWeekErrorMessage = null;
     _onboardingLevel = null;
     selectedTemplateLevel = null;
     _isRegistered = false;
@@ -78,12 +80,13 @@ class ProgramNotifier extends ChangeNotifier {
 
   /// Restores state that would otherwise be lost when the app is restarted.
   /// An active program is the source of truth for whether registration is done.
-  Future<void> restore() async {
-    if (_hasRestored || isLoading) return;
+  Future<void> restore({bool force = false}) async {
+    if ((_hasRestored && !force) || isLoading) return;
 
     _hasRestored = true;
     isLoading = true;
     errorMessage = null;
+    currentWeekErrorMessage = null;
     notifyListeners();
 
     try {
@@ -93,9 +96,18 @@ class ProgramNotifier extends ChangeNotifier {
     } on ApiException catch (error) {
       // A 404 means this user has not registered a program yet; it is not an
       // error state for the Home screen.
-      if (error.statusCode != 404) errorMessage = error.message;
+      if (error.statusCode == 404) {
+        _isRegistered = false;
+        _isScheduleSaved = false;
+        _programStartDate = null;
+        quests = const [];
+      } else {
+        errorMessage = error.message;
+        currentWeekErrorMessage = error.message;
+      }
     } catch (error) {
       errorMessage = error.toString();
+      currentWeekErrorMessage = errorMessage;
     }
 
     // The level is needed only when a completed-onboarding user registers a
@@ -140,6 +152,37 @@ class ProgramNotifier extends ChangeNotifier {
   }
 
   Future<bool> registerPlan({String? level}) async {
+    if (isRegistering || isLoading) return false;
+    isRegistering = true;
+    errorMessage = null;
+    notifyListeners();
+    // Recover an existing program before attempting another registration.
+    // Only an explicit 404 permits creating a new one.
+    try {
+      final response = await _api.getCurrentWeek();
+      _setQuests(response);
+      _isRegistered = true;
+      currentWeekErrorMessage = null;
+      isRegistering = false;
+      notifyListeners();
+      return true;
+    } on ApiException catch (error) {
+      if (error.statusCode != 404) {
+        errorMessage = error.message;
+        currentWeekErrorMessage = error.message;
+        isRegistering = false;
+        notifyListeners();
+        return false;
+      }
+      _isRegistered = false;
+      currentWeekErrorMessage = null;
+    } catch (error) {
+      errorMessage = error.toString();
+      currentWeekErrorMessage = errorMessage;
+      isRegistering = false;
+      notifyListeners();
+      return false;
+    }
     if (level == null &&
         (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
       await _restoreOnboardingLevel();
@@ -147,6 +190,7 @@ class ProgramNotifier extends ChangeNotifier {
     final selectedLevel = level ?? _onboardingLevel;
     if (selectedLevel == null || selectedLevel.isEmpty) {
       errorMessage = 'ไม่พบระดับการวิ่งจาก Onboarding';
+      isRegistering = false;
       notifyListeners();
       return false;
     }
@@ -158,14 +202,25 @@ class ProgramNotifier extends ChangeNotifier {
     errorMessage = null;
     notifyListeners();
     try {
-      await _api.start(level: selectedLevel);
-      // A training program is available to the UI only after its schedule
-      // (API 5.2) has been retrieved successfully.
-      final loaded = await loadCurrentWeek();
+      final response = await _api.start(level: selectedLevel);
+      _setQuests(response);
+      _isRegistered = true;
+      // Creation has committed even if this subsequent read is unavailable.
+      await loadCurrentWeek();
       isRegistering = false;
       notifyListeners();
-      return loaded;
+      return true;
     } catch (error) {
+      if (error is ApiException &&
+          (error.statusCode == 409 ||
+              (error.statusCode == 400 &&
+                  error.message
+                      .contains('คุณมีโปรแกรมที่กำลังดำเนินการอยู่แล้ว')))) {
+        final restored = await loadCurrentWeek();
+        isRegistering = false;
+        notifyListeners();
+        return restored;
+      }
       errorMessage = error.toString();
       isRegistering = false;
       notifyListeners();
@@ -186,6 +241,7 @@ class ProgramNotifier extends ChangeNotifier {
       _isRegistered = false;
       _isScheduleSaved = false;
       _programStartDate = null;
+      currentWeekErrorMessage = null;
       isLoading = false;
       notifyListeners();
       return true;
@@ -212,6 +268,7 @@ class ProgramNotifier extends ChangeNotifier {
   Future<bool> loadCurrentWeek() async {
     isLoading = true;
     errorMessage = null;
+    currentWeekErrorMessage = null;
     notifyListeners();
 
     try {
@@ -223,6 +280,7 @@ class ProgramNotifier extends ChangeNotifier {
       return true;
     } catch (error) {
       errorMessage = error.toString();
+      currentWeekErrorMessage = errorMessage;
       isLoading = false;
       notifyListeners();
       return false;

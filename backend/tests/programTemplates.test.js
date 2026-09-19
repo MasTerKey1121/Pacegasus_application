@@ -5,6 +5,43 @@ const db = require('../src/config/db');
 const programController = require('../src/controllers/programController');
 const programService = require('../src/services/programService');
 
+for (const scheduleSaved of [false, true]) {
+  test(`current week restores an active plan with scheduleSaved=${scheduleSaved}`, async (t) => {
+    const originalQuery = db.query;
+    t.after(() => { db.query = originalQuery; });
+    db.query = async (sql, params) => {
+      if (sql.includes('FROM user_programs up')) {
+        return { rows: [{ id: 'program-1', start_date: '2026-09-01',
+          schedule_mode: 'manual', program_template_id: 'template-1',
+          template_level: 'beginner' }] };
+      }
+      if (sql.includes('FLOOR')) {
+        return { rows: [{ week_number: 2, week_start: '2026-09-15', week_end: '2026-09-21' }] };
+      }
+      if (sql.includes('SELECT EXISTS')) {
+        assert.deepEqual(params, ['program-1']);
+        return { rows: [{ schedule_saved: scheduleSaved }] };
+      }
+      if (sql.includes('FROM main_quest_instances')) return { rows: [] };
+      throw new Error(`Unexpected query: ${sql}`);
+    };
+    const result = await programService.getCurrentWeek('user-1');
+    assert.equal(result.userProgramId, 'program-1');
+    assert.equal(result.startDate, '2026-09-01');
+    assert.equal(result.templateLevel, 'beginner');
+    assert.equal(result.weekNumber, 3);
+    assert.equal(result.scheduleSaved, scheduleSaved);
+    assert.deepEqual(result.quests, []);
+  });
+}
+
+test('current week returns 404 only when there is no active program', async (t) => {
+  const originalQuery = db.query;
+  t.after(() => { db.query = originalQuery; });
+  db.query = async () => ({ rows: [] });
+  await assert.rejects(programService.getCurrentWeek('user-1'), { statusCode: 404 });
+});
+
 test('program template API handlers are exposed', () => {
   assert.equal(typeof programController.getProgramTemplates, 'function');
   assert.equal(typeof programService.getProgramTemplates, 'function');
@@ -96,8 +133,9 @@ test('manual quest batch is sorted and committed as one transaction', async (t) 
 
   assert.deepEqual(quests.map((quest) => quest.scheduled_date), ['2026-08-10', '2026-08-12']);
   assert.equal(calls[0].sql, 'BEGIN');
-  assert.match(calls[1].sql, /INSERT INTO main_quest_instances/);
-  assert.equal(calls[1].params[1], '2026-08-10');
+  const inserts = calls.filter((call) => call.sql.includes('INSERT INTO main_quest_instances'));
+  assert.equal(inserts.length, 2);
+  assert.equal(inserts[0].params[1], '2026-08-10');
   assert.equal(calls.at(-2).sql, 'COMMIT');
   assert.equal(calls.at(-1).sql, 'RELEASE');
 });

@@ -20,7 +20,11 @@ class _TrainingRegistrationScreenState
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(programProvider).loadTemplates());
+    Future.microtask(() async {
+      await ref.read(programProvider).restore(force: true);
+      if (!mounted) return;
+      await ref.read(programProvider).loadTemplates();
+    });
   }
 
   @override
@@ -35,8 +39,7 @@ class _TrainingRegistrationScreenState
     }
     final selectedLevel = program.selectedTemplateLevel;
     final isEligible = _canSelectTemplate(template, program.onboardingLevel);
-    final isLoading = program.isLoadingTemplates ||
-        (program.isLoading && !program.isRegistered);
+    final isLoading = program.isLoadingTemplates || program.isLoading;
 
     return Scaffold(
       body: AppBackground(
@@ -54,7 +57,8 @@ class _TrainingRegistrationScreenState
                           : () => Navigator.of(context).pop(),
                     ),
                     const SizedBox(width: 14),
-                    Text('ลงทะเบียนตารางซ้อม', style: AppText.heading(size: 19)),
+                    Text('ลงทะเบียนตารางซ้อม',
+                        style: AppText.heading(size: 19)),
                   ],
                 ),
                 const SizedBox(height: 20),
@@ -81,17 +85,21 @@ class _TrainingRegistrationScreenState
                 GradientButton(
                   label: program.isRegistering
                       ? 'กำลังลงทะเบียน...'
-                      : selectedLevel == null
-                          ? 'กรุณาเลือกตารางซ้อม'
-                          : !isEligible
-                          ? 'ระดับการวิ่งของคุณยังไม่ถึงสำหรับแผนนี้'
-                          : 'บันทึกและลงทะเบียนตารางซ้อม',
-                  gradient: isEligible ? AppColors.greenGradient : AppColors.goldGradient,
+                      : program.isRegistered
+                          ? 'จัดตารางซ้อมของแผนปัจจุบัน'
+                          : selectedLevel == null
+                              ? 'กรุณาเลือกตารางซ้อม'
+                              : !isEligible
+                                  ? 'ระดับการวิ่งของคุณยังไม่ถึงสำหรับแผนนี้'
+                                  : 'บันทึกและลงทะเบียนตารางซ้อม',
+                  gradient: isEligible
+                      ? AppColors.greenGradient
+                      : AppColors.goldGradient,
                   loading: program.isRegistering || isLoading,
                   onTap: program.isRegistering ||
                           isLoading ||
-                          selectedLevel == null ||
-                          !isEligible
+                          (!program.isRegistered &&
+                              (selectedLevel == null || !isEligible))
                       ? null
                       : () async {
                           final ok = await ref
@@ -103,12 +111,6 @@ class _TrainingRegistrationScreenState
                               MaterialPageRoute(
                                 builder: (_) => const TrainingScheduleScreen(),
                               ),
-                            );
-                          } else {
-                            showAppToast(
-                              context,
-                              program.errorMessage ??
-                                  'ลงทะเบียนไม่สำเร็จ กรุณาลองใหม่',
                             );
                           }
                         },
@@ -148,7 +150,8 @@ class _TemplateContentState extends State<_TemplateContent> {
   @override
   void didUpdateWidget(covariant _TemplateContent oldWidget) {
     super.didUpdateWidget(oldWidget);
-    final levels = widget.templates.map((item) => item['level']?.toString()).toSet();
+    final levels =
+        widget.templates.map((item) => item['level']?.toString()).toSet();
     if (_selectedTemplate != null &&
         !levels.contains(_selectedTemplate!['level'])) {
       _selectedTemplate = null;
@@ -174,7 +177,8 @@ class _TemplateContentState extends State<_TemplateContent> {
               runSpacing: 8,
               children: widget.templates
                   .map((candidate) => SelectChip(
-                        label: _templateGoalLabel(candidate['goal_label']?.toString()),
+                        label: _templateGoalLabel(
+                            candidate['goal_label']?.toString()),
                         active: false,
                         onTap: () => setState(() {
                           _selectedTemplate = candidate;
@@ -218,7 +222,8 @@ class _TemplateContentState extends State<_TemplateContent> {
             runSpacing: 8,
             children: widget.templates
                 .map((candidate) => SelectChip(
-                      label: _templateGoalLabel(candidate['goal_label']?.toString()),
+                      label: _templateGoalLabel(
+                          candidate['goal_label']?.toString()),
                       active: candidate['level'] == template['level'],
                       onTap: () => setState(() {
                         _selectedTemplate = candidate;
@@ -247,7 +252,8 @@ class _TemplateContentState extends State<_TemplateContent> {
                 const SizedBox(height: 10),
                 Text(
                   template['description']?.toString() ?? '',
-                  style: AppText.body(size: 12.5, color: AppColors.textSecondary),
+                  style:
+                      AppText.body(size: 12.5, color: AppColors.textSecondary),
                 ),
                 if (phases.isNotEmpty) ...[
                   const SizedBox(height: 14),
@@ -258,10 +264,13 @@ class _TemplateContentState extends State<_TemplateContent> {
                     runSpacing: 6,
                     children: phases
                         .map((phase) => SelectChip(
-                              label: _phaseLabel(phase['phase_code']?.toString()),
-                              active: phase['id']?.toString() == _selectedPhaseId,
+                              label:
+                                  _phaseLabel(phase['phase_code']?.toString()),
+                              active:
+                                  phase['id']?.toString() == _selectedPhaseId,
                               onTap: () => setState(
-                                () => _selectedPhaseId = phase['id']?.toString(),
+                                () =>
+                                    _selectedPhaseId = phase['id']?.toString(),
                               ),
                             ))
                         .toList(),
@@ -305,7 +314,8 @@ class _TemplateContentState extends State<_TemplateContent> {
       _selectedPhaseId = null;
       return;
     }
-    if (!phases.any((phase) => phase['id']?.toString() == _selectedPhaseId)) _selectedPhaseId = null;
+    if (!phases.any((phase) => phase['id']?.toString() == _selectedPhaseId))
+      _selectedPhaseId = null;
   }
 }
 
@@ -346,7 +356,8 @@ class _WorkoutRow extends StatelessWidget {
                 children: [
                   Text(title, style: AppText.heading(size: 14)),
                   Text(detail,
-                      style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
+                      style: AppText.body(
+                          size: 11.5, color: AppColors.textSecondary)),
                 ],
               ),
             ),
@@ -369,16 +380,18 @@ int? _weekValue(dynamic value) => switch (value) {
       _ => int.tryParse(value?.toString() ?? ''),
     };
 
-List<Map<String, dynamic>> _sessionSpecsForPhase(dynamic value, String? phaseId) {
+List<Map<String, dynamic>> _sessionSpecsForPhase(
+    dynamic value, String? phaseId) {
   final seen = <String>{};
   return _mapList(value)
-      .where((spec) => phaseId == null || spec['phase_id']?.toString() == phaseId)
+      .where(
+          (spec) => phaseId == null || spec['phase_id']?.toString() == phaseId)
       .where((spec) => seen.add(spec['session_type']?.toString() ?? ''))
       .toList(growable: false);
 }
 
 String _planName(String? goal) => switch (goal) {
-      'sub_50' => 'Sub 50 5K',  
+      'sub_50' => 'Sub 50 5K',
       '10k_sub_1.40' => 'Sub 1.40 10K',
       '21k_sub_3.30' => 'Sub 3.30 Half Marathon',
       _ => (goal ?? 'Training plan').replaceAll('_', ' ').toUpperCase(),
@@ -397,7 +410,8 @@ String _durationLabel(int? minWeeks, int? maxWeeks) {
   return '$minWeeks-$maxWeeks สัปดาห์';
 }
 
-String _phaseLabel(String? phase) => (phase ?? '').replaceAll('_', ' ').toUpperCase();
+String _phaseLabel(String? phase) =>
+    (phase ?? '').replaceAll('_', ' ').toUpperCase();
 
 bool _canSelectTemplate(Map<String, dynamic>? template, String? userLevel) {
   if (template == null) return false;

@@ -403,6 +403,14 @@ async function getCurrentWeek(userId) {
 
   const annotatedQuests = await annotateTodayQuest(userId, quests);
 
+  // A saved schedule can belong to another week (including a completed one).
+  const { rows: scheduleRows } = await db.query(
+    `SELECT EXISTS (
+       SELECT 1 FROM main_quest_instances WHERE user_program_id = $1
+     ) AS schedule_saved`,
+    [program.id]
+  );
+
   return {
     userProgramId: program.id,
     programTemplateId: program.program_template_id,
