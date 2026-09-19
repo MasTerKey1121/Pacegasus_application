@@ -428,19 +428,6 @@ class _AddFriendSheetState extends ConsumerState<_AddFriendSheet> {
                         label: Text(
                             _sending ? 'กำลังส่งคำขอ…' : 'ส่งคำขอเป็นเพื่อน')),
                     const SizedBox(height: 12),
-                    const OutlinedButton(
-                        onPressed: null,
-                        child: Padding(
-                            padding: EdgeInsets.symmetric(vertical: 14),
-                            child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(Icons.qr_code_scanner_rounded),
-                                  SizedBox(width: 10),
-                                  Flexible(
-                                      child: Text(
-                                          'เพิ่มด้วย QR Code · เร็ว ๆ นี้')),
-                                ]))),
                   ])),
         ),
       );
