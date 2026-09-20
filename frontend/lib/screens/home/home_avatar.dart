@@ -1,92 +1,63 @@
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:model_viewer_plus/model_viewer_plus.dart';
+import '../../providers/avatar_provider.dart';
 
-/// Temporary 2.5D mannequin, ready to be replaced by the final character asset.
-class HomeAvatar extends StatelessWidget {
-  const HomeAvatar({super.key});
+typedef AvatarViewerBuilder = Widget Function(
+    RunnerShirt shirt, RunnerStage stage, bool animate, bool interactive);
+
+/// A replaceable rendering boundary allows widget tests without a platform view.
+final avatarViewerBuilderProvider = Provider<AvatarViewerBuilder>((ref) {
+  return (shirt, stage, animate, interactive) {
+    if (!kIsWeb &&
+        defaultTargetPlatform != TargetPlatform.android &&
+        defaultTargetPlatform != TargetPlatform.iOS) {
+      return Image.asset(shirt.previewAsset(stage), fit: BoxFit.contain);
+    }
+    return ModelViewer(
+      key: ValueKey('${shirt.name}-${stage.name}-$animate-$interactive'),
+      src: kIsWeb
+          ? 'assets/${shirt.modelAsset(stage)}'
+          : shirt.modelAsset(stage),
+      alt: 'อวตารนักวิ่ง เสื้อ${shirt.label}',
+      loading: Loading.eager,
+      autoPlay: animate,
+      cameraControls: interactive,
+      disableZoom: true,
+      disablePan: true,
+      interactionPrompt: InteractionPrompt.none,
+      cameraOrbit: '0deg 78deg 140%',
+      cameraTarget: 'auto auto auto',
+      fieldOfView: '35deg',
+      minCameraOrbit: 'auto 65deg auto',
+      maxCameraOrbit: 'auto 100deg 200%',
+      shadowIntensity: .6,
+      exposure: 1.1,
+      ar: false,
+      debugLogging: false,
+    );
+  };
+});
+
+class HomeAvatar extends ConsumerWidget {
+  const HomeAvatar({super.key, this.interactive = false});
+  final bool interactive;
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-          child: FittedBox(
-        fit: BoxFit.contain,
-        child: SizedBox(
-            width: 230,
-            height: 310,
-            child: Stack(children: [
-              Positioned(
-                  left: 0,
-                  right: 0,
-                  bottom: 8,
-                  height: 62,
-                  child: Container(
-                      decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(120),
-                    gradient: const LinearGradient(
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter,
-                        colors: [Color(0xFF9570AC), Color(0xFF352640)]),
-                    border:
-                        Border.all(color: const Color(0xFFB093C5), width: 2),
-                    boxShadow: const [
-                      BoxShadow(
-                          color: Color(0x66130D20),
-                          blurRadius: 20,
-                          offset: Offset(0, 12))
-                    ],
-                  ))),
-              _part(87, 24, 58, 65, 28, const [
-                Color(0xFFF0DEFC),
-                Color(0xFFAF91C4),
-                Color(0xFF785E93)
-              ]),
-              _part(53, 101, 27, 98, 20,
-                  const [Color(0xFFCFBCE7), Color(0xFF816397)],
-                  angle: .2),
-              _part(153, 101, 27, 98, 20,
-                  const [Color(0xFFCFBCE7), Color(0xFF816397)],
-                  angle: -.2),
-              _part(76, 178, 34, 84, 12,
-                  const [Color(0xFF9578B2), Color(0xFF533E70)],
-                  angle: .05),
-              _part(122, 178, 34, 84, 12,
-                  const [Color(0xFF9578B2), Color(0xFF533E70)],
-                  angle: -.05),
-              _part(72, 94, 88, 98, 30, const [
-                Color(0xFFE2D4F4),
-                Color(0xFFA78AC6),
-                Color(0xFF715688)
-              ]),
-              const Positioned(
-                  left: 101,
-                  top: 118,
-                  child: Text('P',
-                      style: TextStyle(
-                          fontSize: 32,
-                          fontWeight: FontWeight.bold,
-                          color: Color(0xFF694D87)))),
-              _part(62, 251, 48, 24, 10,
-                  const [Color(0xFFE3D4F6), Color(0xFFB398D0)]),
-              _part(123, 251, 48, 24, 10,
-                  const [Color(0xFFE3D4F6), Color(0xFFB398D0)]),
-            ])),
-      ));
-
-  Widget _part(double left, double top, double width, double height,
-          double radius, List<Color> colors,
-          {double angle = 0}) =>
-      Positioned(
-        left: left,
-        top: top,
-        width: width,
-        height: height,
-        child: Transform.rotate(
-            angle: angle,
-            child: Container(
-              decoration: BoxDecoration(
-                  borderRadius: BorderRadius.circular(radius),
-                  gradient: LinearGradient(
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                      colors: colors)),
-            )),
-      );
+  Widget build(BuildContext context, WidgetRef ref) {
+    final wardrobe = ref.watch(avatarProvider);
+    final animate = wardrobe.motion &&
+        !MediaQuery.disableAnimationsOf(context) &&
+        TickerMode.valuesOf(context).enabled &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
+    return Semantics(
+      label: 'อวตารนักวิ่ง เสื้อ${wardrobe.shirt.label}',
+      child: IgnorePointer(
+        ignoring: !interactive,
+        child: ref.watch(avatarViewerBuilderProvider)(
+            wardrobe.shirt, wardrobe.stage, animate, interactive),
+      ),
+    );
+  }
 }

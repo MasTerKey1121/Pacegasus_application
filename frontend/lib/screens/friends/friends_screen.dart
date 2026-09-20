@@ -121,11 +121,6 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text('เพื่อนร่วมทาง', style: AppText.heading(size: 28)),
-                const SizedBox(height: 4),
-                Text('เพิ่มเพื่อน แล้วออกวิ่งไปด้วยกัน',
-                    style: AppText.body(color: AppColors.textSecondary)),
-                const SizedBox(height: 24),
                 Row(children: [
                   Expanded(
                       child: TextField(

@@ -1,17 +1,19 @@
 import 'dart:math' as math;
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
+import '../../providers/avatar_provider.dart';
 import '../home/home_avatar.dart';
 
-/// Prepared for the clothing inventory API; navigation stays disabled on Home.
-class WardrobeScreen extends StatefulWidget {
+/// Local starter wardrobe; catalog/inventory server integration comes later.
+class WardrobeScreen extends ConsumerStatefulWidget {
   const WardrobeScreen({super.key});
 
   @override
-  State<WardrobeScreen> createState() => _WardrobeScreenState();
+  ConsumerState<WardrobeScreen> createState() => _WardrobeScreenState();
 }
 
-class _WardrobeScreenState extends State<WardrobeScreen> {
+class _WardrobeScreenState extends ConsumerState<WardrobeScreen> {
   final _sheet = DraggableScrollableController();
   static const _background = Color(0xFF110E20);
   static const _panel = Color(0xFF201A32);
@@ -57,7 +59,8 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                 right: 0,
                 height: avatarHeight,
                 child: const Center(
-                    child: SizedBox(width: 230, child: HomeAvatar()))),
+                    child: SizedBox(
+                        width: 260, child: HomeAvatar(interactive: true)))),
             Positioned(
                 top: 12,
                 left: 12,
@@ -142,19 +145,57 @@ class _WardrobeScreenState extends State<WardrobeScreen> {
                       Text('เสื้อผ้าและไอเทมของคุณ',
                           style: AppText.body(
                               size: 13, color: AppColors.textSecondary)),
-                      const SizedBox(height: 32),
-                      const Icon(Icons.checkroom_outlined,
-                          size: 36, color: AppColors.textTertiary),
+                      const SizedBox(height: 16),
+                      Wrap(spacing: 10, runSpacing: 10, children: [
+                        for (final shirt in RunnerShirt.values)
+                          ChoiceChip(
+                            key: ValueKey('shirt-${shirt.name}'),
+                            avatar: Icon(Icons.checkroom,
+                                color: shirt == RunnerShirt.starter
+                                    ? const Color(0xFFD9B467)
+                                    : const Color(0xFFD2DCE4)),
+                            label: Text(shirt.label),
+                            selected: ref.watch(avatarProvider).shirt == shirt,
+                            onSelected: (_) =>
+                                ref.read(avatarProvider).selectShirt(shirt),
+                          ),
+                      ]),
                       const SizedBox(height: 12),
-                      Text('เร็ว ๆ นี้',
-                          textAlign: TextAlign.center,
-                          style: AppText.heading(
-                              size: 16, color: AppColors.textSecondary)),
-                      const SizedBox(height: 6),
-                      Text('เครื่องแต่งกายจะปรากฏที่นี่เมื่อเปิดใช้งาน',
-                          textAlign: TextAlign.center,
+                      Text('แท่นยืน', style: AppText.heading(size: 16)),
+                      const SizedBox(height: 8),
+                      Wrap(spacing: 10, runSpacing: 10, children: [
+                        for (final stage in RunnerStage.values)
+                          ChoiceChip(
+                            key: ValueKey('stage-${stage.name}'),
+                            avatar: Icon(Icons.circle_outlined,
+                                color: stage == RunnerStage.track
+                                    ? const Color(0xFFD9B467)
+                                    : const Color(0xFFC5A2FF)),
+                            label: Text(stage.label),
+                            selected: ref.watch(avatarProvider).stage == stage,
+                            onSelected: (_) =>
+                                ref.read(avatarProvider).selectStage(stage),
+                          ),
+                      ]),
+                      const SizedBox(height: 12),
+                      SwitchListTile.adaptive(
+                        contentPadding: EdgeInsets.zero,
+                        title: const Text('ขยับเบา ๆ'),
+                        value: ref.watch(avatarProvider).motion,
+                        onChanged: ref.read(avatarProvider).toggleMotion,
+                      ),
+                      Text(
+                          'ลากตัวละครเพื่อหมุนดู • ชุดที่เลือกใช้ในหน้าหลักด้วย',
                           style: AppText.body(
                               size: 12, color: AppColors.textSecondary)),
+                      if (ref.watch(avatarProvider).storageError
+                          case final String error)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 12),
+                          child: Text(error,
+                              style:
+                                  const TextStyle(color: Colors.orangeAccent)),
+                        ),
                     ],
                   )),
                 ]),

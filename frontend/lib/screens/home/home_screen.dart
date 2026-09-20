@@ -10,6 +10,7 @@ import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
 import '../friends/friends_screen.dart';
+import '../wardrobe/wardrobe_screen.dart';
 import '../run/run_select_screen.dart';
 import '../settings/settings_screen.dart';
 import '../stats/stats_screen.dart';
@@ -321,7 +322,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         () => Navigator.of(context).push(MaterialPageRoute(
                             builder: (_) => const FriendsScreen()))),
                     const SizedBox(height: 8),
-                    _shortcut(Icons.checkroom_outlined, 'แต่งตัว', null),
+                    _shortcut(
+                        Icons.checkroom_outlined,
+                        'แต่งตัว',
+                        () => Navigator.of(context).push(MaterialPageRoute(
+                            builder: (_) => const WardrobeScreen()))),
                     const SizedBox(height: 8),
                     _shortcut(Icons.storefront_outlined, 'ร้านค้า', null),
                   ])),
