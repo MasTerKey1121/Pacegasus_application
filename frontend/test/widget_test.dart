@@ -9,8 +9,6 @@ import 'package:google_fonts/google_fonts.dart';
 // ignore: implementation_imports
 import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/providers/auth_provider.dart';
-import 'package:pacegasus/providers/avatar_provider.dart';
-import 'package:pacegasus/screens/home/home_avatar.dart';
 import 'package:pacegasus/providers/program_provider.dart';
 import 'package:pacegasus/providers/wellness_provider.dart';
 import 'package:pacegasus/screens/home/home_screen.dart';
@@ -169,8 +167,6 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(overrides: [
-      avatarViewerBuilderProvider.overrideWithValue(
-          (shirt, stage, animate, interactive) => const SizedBox()),
       authProvider.overrideWith((ref) => _Auth()),
       programProvider.overrideWith((ref) => program ?? _Program()),
       wellnessProvider.overrideWith((ref) =>
@@ -179,32 +175,6 @@ void main() {
     ], child: MaterialApp(theme: ThemeData.dark(), home: const HomeScreen())));
     await tester.pumpAndSettle();
   }
-
-  testWidgets(
-      'wardrobe selection is shared with home and motion can be stopped',
-      (tester) async {
-    await home(tester);
-    final container =
-        ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
-    await tester.tap(find.text('แต่งตัว'));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('shirt-cloud')));
-    await tester.pumpAndSettle();
-    expect(container.read(avatarProvider).shirt, RunnerShirt.cloud);
-    await tester.drag(find.text('เครื่องแต่งกาย'), const Offset(0, -280));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const ValueKey('stage-orbit')));
-    await tester.pumpAndSettle();
-    expect(container.read(avatarProvider).stage, RunnerStage.orbit);
-    await tester.tap(find.text('ขยับเบา ๆ'));
-    await tester.pumpAndSettle();
-    expect(container.read(avatarProvider).motion, isFalse);
-    await tester.tap(find.byTooltip('กลับ'));
-    await tester.pumpAndSettle();
-    expect(find.byType(HomeScreen), findsOneWidget);
-    expect(container.read(avatarProvider).shirt, RunnerShirt.cloud);
-    expect(tester.takeException(), isNull);
-  });
 
   double extent(WidgetTester tester) => tester
       .widget<DraggableScrollableSheet>(

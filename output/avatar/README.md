@@ -1,5 +1,10 @@
 # Pacegasus avatar prototype
 
+> Paused: the 3D viewer, wardrobe, and bundled model references have been removed
+> from the Flutter app at the user's request. The Blender source is retained for
+> later work. Preview commands and integration notes below describe the former
+> prototype and are not currently available in the app.
+
 Open `pacegasus_runner.blend` in Blender to edit the actual 3D model.
 The source is reproducible with Blender 5.2:
 
