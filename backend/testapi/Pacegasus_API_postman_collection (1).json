@@ -2986,6 +2986,1597 @@
           "response": []
         }
       ]
+    },
+    {
+      "name": "10. Clubs",
+      "description": "ระบบคลับ — สมาชิกสูงสุด 20 คน (รวม leader) ผู้ใช้ 1 คนอยู่ได้ 1 คลับ ยศ: `leader` > `sub_leader` > `member`\n\nleader มีทุกสิทธิ์เสมอ และกำหนดสิทธิ์ของยศอื่นได้ 4 อย่าง: `canApproveRequests` (อนุมัติ/ปฏิเสธคำขอเข้า), `canInvite` (เชิญ/ยกเลิกคำเชิญ), `canKick` (เตะคนที่ยศต่ำกว่า), `canEditInfo` (แก้ชื่อ/คำอธิบาย/รูป/tag)\n\nค่าเริ่มต้น: `sub_leader` อนุมัติ/เชิญ/เตะได้ แต่แก้ข้อมูลคลับไม่ได้, `member` ไม่มีสิทธิ์จัดการ — เปลี่ยนยศ, โอนหัวหน้า, ยุบคลับ ทำได้เฉพาะ leader\n\n### เตรียมก่อนรัน (ต้องใช้ 2 บัญชี เหมือนโฟลเดอร์ 9. Friends)\n1. `accessToken` = บัญชี **A** (จะเป็น leader), `friendAccessToken` = บัญชี **B**, `friendUid` = UID ของ B\n2. ทั้ง A และ B ต้อง**ยังไม่อยู่ในคลับใด** (ถ้าค้างจากรอบก่อน ให้ยิง 10.20 Disband / 10.18 Leave ก่อน)\n3. รันเรียง 10.1 → 10.20 (`clubId`, `clubRequestId`, `friendUserId` ถูก save ต่อกันอัตโนมัติ)",
+      "item": [
+        {
+          "name": "10.1 Create Club",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Creator becomes leader of a new club', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.memberCount).to.eql(1);",
+                  "  pm.expect(json.data.maxMembers).to.eql(20);",
+                  "  pm.expect(json.data.myMembership.role).to.eql('leader');",
+                  "  pm.collectionVariables.set('clubId', json.data.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"name\": \"Runners {{$timestamp}}\",\n  \"description\": \"คลับวิ่งเช้าวันเสาร์ สายชิล\",\n  \"imageUrl\": \"https://picsum.photos/seed/club/400\",\n  \"tags\": [\"running\", \"bangkok\"]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs"
+              ]
+            },
+            "description": "**POST /api/clubs**\n\nสร้างคลับใหม่ ผู้สร้างเป็น `leader` ทันที (ไม่ต้องมีสมาชิกเริ่มต้น) — auto-save `clubId`\n\n| Field | Type | Required | หมายเหตุ |\n|---|---|---|---|\n| `name` | string | ✅ | 3-40 ตัวอักษร ห้ามซ้ำ (ไม่สนตัวพิมพ์เล็ก/ใหญ่) |\n| `description` | string | | ไม่เกิน 500 ตัวอักษร |\n| `imageUrl` | string (URL) | | http/https |\n| `tags` | string[] | | ไม่เกิน 5 tag, tag ละไม่เกิน 20 ตัว ไม่มีช่องว่าง (เก็บเป็นตัวพิมพ์เล็ก) |\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"สร้างคลับแล้ว\",\n  \"data\": {\n    \"id\": \"...\", \"name\": \"Runners 1758700000\", \"description\": \"...\", \"imageUrl\": \"https://...\", \"tags\": [\"running\", \"bangkok\"], \"memberCount\": 1, \"maxMembers\": 20, \"createdAt\": \"...\", \"updatedAt\": \"...\",\n    \"myMembership\": { \"role\": \"leader\", \"permissions\": { \"canApproveRequests\": true, \"canInvite\": true, \"canKick\": true, \"canEditInfo\": true } }\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | ข้อมูลไม่ถูกต้อง |\n| 409 | อยู่ในคลับอื่นแล้ว หรือชื่อคลับซ้ำ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.2 Get My Club",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns my club with me as leader', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.club.id).to.eql(pm.collectionVariables.get('clubId'));",
+                  "  const leader = json.data.members.find(function (m) { return m.role === 'leader'; });",
+                  "  pm.collectionVariables.set('userId', leader.user.id);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "me"
+              ]
+            },
+            "description": "**GET /api/clubs/me**\n\nคลับที่ตัวเองอยู่ (โครงสร้างเดียวกับ 10.4) — `data: null` ถ้ายังไม่อยู่คลับไหน\n\nTest script save `userId` ของ A (leader) ไว้ใช้ใน 10.13\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"club\": { \"id\": \"...\", \"name\": \"Runners 1758700000\", \"description\": \"...\", \"imageUrl\": \"https://...\", \"tags\": [\"running\", \"bangkok\"], \"memberCount\": 1, \"maxMembers\": 20, \"createdAt\": \"...\", \"updatedAt\": \"...\" },\n    \"members\": [ { \"user\": { \"id\": \"...\", \"uid\": \"Z2SAA2LDRK\", \"displayName\": \"Runner A\", \"avatarUrl\": null, \"level\": 3 }, \"role\": \"leader\", \"joinedAt\": \"...\" } ],\n    \"myMembership\": { \"role\": \"leader\", \"permissions\": { \"canApproveRequests\": true, \"canInvite\": true, \"canKick\": true, \"canEditInfo\": true } },\n    \"myPendingRequest\": null\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "10.3 Search Clubs",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Search result contains the new club', function () {",
+                  "  const json = pm.response.json();",
+                  "  const ids = json.data.clubs.map(function (c) { return c.id; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('clubId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs?q=Runners&tag=running&hasSlot=true&limit=20&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs"
+              ],
+              "query": [
+                {
+                  "key": "q",
+                  "value": "Runners"
+                },
+                {
+                  "key": "tag",
+                  "value": "running"
+                },
+                {
+                  "key": "hasSlot",
+                  "value": "true"
+                },
+                {
+                  "key": "limit",
+                  "value": "20"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/clubs**\n\nค้นหาคลับ เรียงจากคลับที่สมาชิกเยอะก่อน\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n| Query | หมายเหตุ |\n|---|---|\n| `q` | ค้นจากชื่อ (บางส่วน, ไม่สนตัวพิมพ์) |\n| `tag` | tag เดียว ตรงตัว |\n| `hasSlot` | `true` = เฉพาะคลับที่ยังไม่เต็ม |\n| `limit` / `offset` | 1-100 (default 20) / default 0 |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"clubs\": [\n      { \"id\": \"...\", \"name\": \"Runners 1758700000\", \"description\": \"...\", \"imageUrl\": \"https://...\", \"tags\": [\"running\", \"bangkok\"], \"memberCount\": 1, \"maxMembers\": 20, \"createdAt\": \"...\", \"updatedAt\": \"...\", \"leader\": { \"id\": \"...\", \"uid\": \"Z2SAA2LDRK\", \"displayName\": \"Runner A\", \"avatarUrl\": null, \"level\": 3 }, \"myPendingRequest\": null }\n    ],\n    \"total\": 1,\n    \"limit\": 20,\n    \"offset\": 0\n  }\n}\n```\n\n`myPendingRequest` = `{ \"requestId\", \"kind\" }` ถ้าผู้เรียกมีคำขอ/คำเชิญค้างกับคลับนั้น"
+          },
+          "response": []
+        },
+        {
+          "name": "10.4 Get Club Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Non-member sees club without membership', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.members).to.be.an('array');",
+                  "  pm.expect(json.data.myMembership).to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}"
+              ]
+            },
+            "description": "**GET /api/clubs/:clubId**\n\nรายละเอียดคลับ + รายชื่อสมาชิก (leader → sub_leader → member) ดูได้ทุกคน\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n`myMembership` = ยศและสิทธิ์ของผู้เรียก (`null` ถ้าไม่ใช่สมาชิก), `myPendingRequest` = คำขอ/คำเชิญที่ค้างอยู่กับคลับนี้\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `clubId` ไม่ใช่ UUID |\n| 404 | ไม่พบคลับ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.5 Update Club Info",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Club info updated', function () {",
+                  "  pm.expect(pm.response.json().data.tags).to.include('weekend');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"description\": \"คลับวิ่งเช้าวันเสาร์ ทุกเพซยินดีต้อนรับ\",\n  \"tags\": [\n    \"running\",\n    \"bangkok\",\n    \"weekend\"\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}"
+              ]
+            },
+            "description": "**PATCH /api/clubs/:clubId**\n\nแก้ชื่อ / คำอธิบาย / รูป / tag — ส่งเฉพาะ field ที่จะแก้ (อย่างน้อย 1 field) ต้องมีสิทธิ์ `canEditInfo`\n\nส่ง `description: \"\"` หรือ `imageUrl: null` เพื่อลบค่า\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"แก้ไขข้อมูลคลับแล้ว\", \"data\": { \"id\": \"...\", \"name\": \"Runners 1758700000\", \"description\": \"...\", \"imageUrl\": \"https://...\", \"tags\": [\"running\", \"bangkok\"], \"memberCount\": 1, \"maxMembers\": 20, \"createdAt\": \"...\", \"updatedAt\": \"...\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | ข้อมูลไม่ถูกต้อง / ไม่ส่ง field ใดเลย |\n| 403 | ไม่ใช่สมาชิก หรือยศไม่มีสิทธิ์ `canEditInfo` |\n| 404 | ไม่พบคลับ |\n| 409 | ชื่อคลับซ้ำ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.6 Request to Join (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Join request is pending', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.status).to.eql('pending');",
+                  "  pm.expect(json.data.request.kind).to.eql('request');",
+                  "  pm.collectionVariables.set('clubRequestId', json.data.request.requestId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"message\": \"ขอเข้าร่วมด้วยครับ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/join-requests",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "join-requests"
+              ]
+            },
+            "description": "**POST /api/clubs/:clubId/join-requests**\n\nส่งคำขอเข้าคลับ รอ leader/ผู้มีสิทธิ์ `canApproveRequests` อนุมัติ — auto-save `clubRequestId`\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งคำขอเข้าคลับแล้ว\",\n  \"data\": {\n    \"status\": \"pending\",\n    \"request\": { \"requestId\": \"...\", \"clubId\": \"...\", \"kind\": \"request\", \"message\": \"ขอเข้าร่วมด้วยครับ\", \"invitedBy\": null, \"createdAt\": \"...\" }\n  }\n}\n```\n\n### Response 200 OK (เข้าคลับทันที)\nถ้าคลับเชิญผู้ใช้คนนี้ค้างไว้อยู่แล้ว การขอเข้าถือเป็นการตอบรับคำเชิญ → `{ \"status\": \"joined\", \"clubId\": \"...\" }`\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 404 | ไม่พบคลับ |\n| 409 | อยู่ในคลับอื่นแล้ว / ส่งคำขอไปแล้ว / คลับเต็ม |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.7 List Club Join Requests",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B request is in the list', function () {",
+                  "  const json = pm.response.json();",
+                  "  const ids = json.data.requests.map(function (r) { return r.requestId; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('clubRequestId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/join-requests?kind=request&limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "join-requests"
+              ],
+              "query": [
+                {
+                  "key": "kind",
+                  "value": "request"
+                },
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/clubs/:clubId/join-requests**\n\nสำหรับ staff ของคลับ\n- `kind=request` (default) = คำขอเข้าที่รออนุมัติ — ต้องมีสิทธิ์ `canApproveRequests`\n- `kind=invite` = คำเชิญที่ส่งออกไปแล้วรอตอบรับ — ต้องมีสิทธิ์ `canInvite`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"requests\": [\n      { \"requestId\": \"...\", \"clubId\": \"...\", \"kind\": \"request\", \"message\": \"ขอเข้าร่วมด้วยครับ\", \"invitedBy\": null, \"createdAt\": \"...\", \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 } }\n    ],\n    \"kind\": \"request\",\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 403 | ไม่ใช่สมาชิก หรือยศไม่มีสิทธิ์ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.8 Approve Join Request",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B joins the club', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.status).to.eql('joined');",
+                  "  pm.collectionVariables.set('friendUserId', json.data.userId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/join-requests/{{clubRequestId}}/approve",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "join-requests",
+                "{{clubRequestId}}",
+                "approve"
+              ]
+            },
+            "description": "**PATCH /api/clubs/:clubId/join-requests/:requestId/approve**\n\nอนุมัติคำขอเข้าคลับ ต้องมีสิทธิ์ `canApproveRequests` — auto-save `friendUserId` (user id ของ B) ไว้ใช้กับ endpoint จัดการสมาชิก\n\nเมื่อเข้าคลับแล้ว คำขอ/คำเชิญอื่นที่ค้างของผู้ใช้คนนั้นจะถูกลบทั้งหมด\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"อนุมัติคำขอเข้าคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"userId\": \"...\", \"status\": \"joined\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 403 | ยศไม่มีสิทธิ์ `canApproveRequests` |\n| 404 | ไม่พบคำขอ |\n| 409 | คลับเต็ม (20 คน) หรือผู้ใช้เข้าคลับอื่นไปแล้ว |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.9 Get Role Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns permissions of every role', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.leader.canEditInfo).to.eql(true);",
+                  "  pm.expect(data).to.have.all.keys('leader', 'sub_leader', 'member');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/permissions",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "permissions"
+              ]
+            },
+            "description": "**GET /api/clubs/:clubId/permissions**\n\nดูสิทธิ์ของแต่ละยศ (สมาชิกคลับดูได้ทุกคน)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"leader\":     { \"canApproveRequests\": true, \"canInvite\": true, \"canKick\": true, \"canEditInfo\": true },\n    \"sub_leader\": { \"canApproveRequests\": true, \"canInvite\": true, \"canKick\": true, \"canEditInfo\": false },\n    \"member\":     { \"canApproveRequests\": false, \"canInvite\": false, \"canKick\": false, \"canEditInfo\": false }\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 403 | ไม่ใช่สมาชิกคลับ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.10 Update Role Permissions",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('sub_leader permissions updated', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.role).to.eql('sub_leader');",
+                  "  pm.expect(data.permissions.canEditInfo).to.eql(true);",
+                  "  pm.expect(data.permissions.canKick).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"canEditInfo\": true,\n  \"canKick\": false\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/permissions/sub_leader",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "permissions",
+                "sub_leader"
+              ]
+            },
+            "description": "**PATCH /api/clubs/:clubId/permissions/:role**\n\nleader กำหนดสิทธิ์ให้ยศ `sub_leader` หรือ `member` — ส่งเฉพาะสิทธิ์ที่จะเปลี่ยน (อย่างน้อย 1 ค่า)\n\n| Field | สิทธิ์ |\n|---|---|\n| `canApproveRequests` | อนุมัติ/ปฏิเสธคำขอเข้า |\n| `canInvite` | เชิญ/ยกเลิกคำเชิญ |\n| `canKick` | เตะสมาชิกที่ยศต่ำกว่า |\n| `canEditInfo` | แก้ชื่อ/คำอธิบาย/รูป/tag |\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"อัปเดตสิทธิ์แล้ว\", \"data\": { \"role\": \"sub_leader\", \"permissions\": { \"canApproveRequests\": true, \"canInvite\": true, \"canKick\": false, \"canEditInfo\": true } } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `role` ไม่ใช่ `sub_leader`/`member` หรือไม่ส่งสิทธิ์ใดเลย |\n| 403 | ไม่ใช่ leader |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.11 Change Member Role",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B promoted to sub_leader', function () {",
+                  "  pm.expect(pm.response.json().data.role).to.eql('sub_leader');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"role\": \"sub_leader\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/members/{{friendUserId}}/role",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "members",
+                "{{friendUserId}}",
+                "role"
+              ]
+            },
+            "description": "**PATCH /api/clubs/:clubId/members/:userId/role**\n\nleader เปลี่ยนยศสมาชิกเป็น `sub_leader` หรือ `member` (ตั้ง leader ใช้ 10.13 แทน)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"เปลี่ยนยศสมาชิกแล้ว\", \"data\": { \"clubId\": \"...\", \"userId\": \"...\", \"role\": \"sub_leader\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | role ไม่ถูกต้อง / เปลี่ยนยศตัวเอง |\n| 403 | ไม่ใช่ leader |\n| 404 | ไม่พบสมาชิกคนนี้ในคลับ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.12 Validation - Kick Higher Rank (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 403', function () { pm.response.to.have.status(403); });",
+                  "pm.test('sub_leader cannot kick the leader', function () {",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/members/{{userId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "members",
+                "{{userId}}"
+              ]
+            },
+            "description": "**DELETE /api/clubs/:clubId/members/:userId** (ตัวอย่าง error)\n\nB (sub_leader) พยายามเตะ A (leader) → **403** เพราะเตะได้เฉพาะคนที่ยศต่ำกว่า (และใน 10.10 ปิด `canKick` ของ sub_leader ไว้แล้วด้วย)\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)"
+          },
+          "response": []
+        },
+        {
+          "name": "10.13 Transfer Leadership",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B becomes the new leader', function () {",
+                  "  pm.expect(pm.response.json().data.newLeaderId).to.eql(pm.collectionVariables.get('friendUserId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{friendUserId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/transfer-leadership",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "transfer-leadership"
+              ]
+            },
+            "description": "**POST /api/clubs/:clubId/transfer-leadership**\n\nโอนตำแหน่ง leader ให้สมาชิกคนอื่น ผู้โอนจะถูกลดเป็น `sub_leader`\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"โอนตำแหน่งหัวหน้าคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"previousLeaderId\": \"...\", \"newLeaderId\": \"...\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | โอนให้ตัวเอง |\n| 403 | ไม่ใช่ leader |\n| 404 | ไม่พบสมาชิกคนนี้ในคลับ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.14 Transfer Leadership Back (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('A is leader again', function () {",
+                  "  pm.expect(pm.response.json().data.newLeaderId).to.eql(pm.collectionVariables.get('userId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"userId\": \"{{userId}}\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/transfer-leadership",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "transfer-leadership"
+              ]
+            },
+            "description": "**POST /api/clubs/:clubId/transfer-leadership**\n\nB โอนตำแหน่งคืนให้ A เพื่อให้ request ถัดไปใช้ A เป็น leader ต่อได้\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)"
+          },
+          "response": []
+        },
+        {
+          "name": "10.15 Kick Member",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B kicked', function () {",
+                  "  pm.expect(pm.response.json().data.action).to.eql('kicked');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/members/{{friendUserId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "members",
+                "{{friendUserId}}"
+              ]
+            },
+            "description": "**DELETE /api/clubs/:clubId/members/:userId**\n\nเตะสมาชิกออก ต้องมีสิทธิ์ `canKick` และเตะได้เฉพาะคนที่**ยศต่ำกว่า**ตัวเอง (leader เตะได้ทุกคน)\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"เตะสมาชิกออกจากคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"userId\": \"...\", \"action\": \"kicked\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | เตะตัวเอง (ใช้ Leave แทน) |\n| 403 | ไม่มีสิทธิ์ `canKick` หรือเป้าหมายยศเท่า/สูงกว่า |\n| 404 | ไม่พบสมาชิกคนนี้ในคลับ |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.16 Invite User by UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201', function () { pm.response.to.have.status(201); });",
+                  "pm.test('Invite is pending', function () {",
+                  "  const json = pm.response.json();",
+                  "  pm.expect(json.data.request.kind).to.eql('invite');",
+                  "  pm.collectionVariables.set('clubRequestId', json.data.request.requestId);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"uid\": \"{{friendUid}}\",\n  \"message\": \"มาวิ่งด้วยกันนะ\"\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/invites",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "invites"
+              ]
+            },
+            "description": "**POST /api/clubs/:clubId/invites**\n\nเชิญผู้ใช้เข้าคลับด้วย UID ต้องมีสิทธิ์ `canInvite` — auto-save `clubRequestId`\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"ส่งคำเชิญแล้ว\",\n  \"data\": {\n    \"status\": \"pending\",\n    \"request\": { \"requestId\": \"...\", \"clubId\": \"...\", \"kind\": \"invite\", \"message\": \"มาวิ่งด้วยกันนะ\", \"invitedBy\": \"...\", \"createdAt\": \"...\" },\n    \"user\": { \"id\": \"...\", \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 1 }\n  }\n}\n```\n\n### Response 200 OK (เข้าคลับทันที)\nถ้าผู้ใช้คนนั้นส่งคำขอเข้ามาค้างอยู่แล้ว และผู้เชิญมีสิทธิ์ `canApproveRequests` การเชิญถือเป็นการอนุมัติ → `{ \"status\": \"joined\", \"user\": {...} }`\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ / เชิญตัวเอง |\n| 403 | ยศไม่มีสิทธิ์ `canInvite` |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ |\n| 409 | ผู้ใช้อยู่ในคลับแล้ว / เชิญไปแล้ว / คลับเต็ม |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.17 List My Invites (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B sees the invite', function () {",
+                  "  const json = pm.response.json();",
+                  "  const ids = json.data.requests.map(function (r) { return r.requestId; });",
+                  "  pm.expect(ids).to.include(pm.collectionVariables.get('clubRequestId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/me/join-requests?kind=invite",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "me",
+                "join-requests"
+              ],
+              "query": [
+                {
+                  "key": "kind",
+                  "value": "invite"
+                }
+              ]
+            },
+            "description": "**GET /api/clubs/me/join-requests**\n\nของผู้ใช้เอง\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n- `kind=invite` (default) = คำเชิญที่ได้รับ\n- `kind=request` = คำขอเข้าคลับที่ตัวเองส่งไป\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"requests\": [\n      {\n        \"requestId\": \"...\", \"clubId\": \"...\", \"kind\": \"invite\", \"message\": \"มาวิ่งด้วยกันนะ\", \"invitedBy\": \"...\", \"createdAt\": \"...\",\n        \"club\": { \"id\": \"...\", \"name\": \"Runners 1758700000\", \"imageUrl\": \"https://...\", \"tags\": [\"running\"], \"memberCount\": 1, \"maxMembers\": 20 },\n        \"inviter\": { \"uid\": \"Z2SAA2LDRK\", \"displayName\": \"Runner A\" }\n      }\n    ],\n    \"kind\": \"invite\",\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "10.18 Accept Invite (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B joins via invite', function () {",
+                  "  pm.expect(pm.response.json().data.status).to.eql('joined');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/me/join-requests/{{clubRequestId}}/accept",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "me",
+                "join-requests",
+                "{{clubRequestId}}",
+                "accept"
+              ]
+            },
+            "description": "**PATCH /api/clubs/me/join-requests/:requestId/accept**\n\nตอบรับคำเชิญเข้าคลับ\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\n> ปฏิเสธคำเชิญ / ยกเลิกคำขอของตัวเอง ใช้ `DELETE /api/clubs/me/join-requests/:requestId` → `action: \"declined\"` หรือ `\"cancelled\"`\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"เข้าร่วมคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"status\": \"joined\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 404 | ไม่พบคำเชิญ |\n| 409 | อยู่ในคลับอื่นแล้ว หรือคลับเต็ม |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.19 Leave Club (as B)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('B left the club', function () {",
+                  "  pm.expect(pm.response.json().data.action).to.eql('left');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{friendAccessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}/leave",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}",
+                "leave"
+              ]
+            },
+            "description": "**POST /api/clubs/:clubId/leave**\n\nออกจากคลับ\n\n🔑 ยิงในนามบัญชี **B** (ใช้ `{{friendAccessToken}}`)\n\nleader ออกได้เมื่อเหลือคนเดียวเท่านั้น (คลับจะถูกยุบ → `action: \"disbanded\"`) ถ้ายังมีสมาชิกอื่นต้องโอนตำแหน่งก่อน\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ออกจากคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"action\": \"left\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 403 | ไม่ใช่สมาชิก |\n| 409 | leader ออกทั้งที่ยังมีสมาชิกอื่น |"
+          },
+          "response": []
+        },
+        {
+          "name": "10.20 Disband Club",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Club disbanded', function () {",
+                  "  pm.expect(pm.response.json().data.action).to.eql('disbanded');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/clubs/{{clubId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "clubs",
+                "{{clubId}}"
+              ]
+            },
+            "description": "**DELETE /api/clubs/:clubId**\n\nยุบคลับ (เฉพาะ leader) สมาชิก คำขอ และคำเชิญทั้งหมดถูกลบตาม\n\n### Response 200 OK\n```json\n{ \"success\": true, \"message\": \"ยุบคลับแล้ว\", \"data\": { \"clubId\": \"...\", \"action\": \"disbanded\" } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 403 | ไม่ใช่ leader |\n| 404 | ไม่พบคลับ |"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "11. Avatar",
+      "description": "ระบบ Avatar 2.5D — แต่งตัวได้ 13 ช่อง (`GET /api/avatar/slots`): `face`, `hair`, `beard`, `mustache`, `headwear`, `necklace`, `inner_top`, `outer_top`, `pants`, `socks`, `shoes`, `back`, `aura`\n\n- ช่อง `isRequired` (`face`, `inner_top`, `pants`) ถอดจนว่างไม่ได้\n- ใส่ได้ช่องละ 1 ไอเท็ม และต้องเป็นไอเท็มที่อยู่ใน inventory ของตัวเอง\n- `GET /api/avatar/me` ครั้งแรกจะสร้าง avatar + แจกไอเท็ม `is_default` ทั้งหมด + ใส่ของ default ในช่องบังคับให้\n- `equipment` ที่ตอบกลับเรียงตาม `layerOrder` (หลัง → หน้า) frontend วาดซ้อนตามลำดับได้เลย\n\nใช้ `{{accessToken}}` (บัญชี A) ยกเว้น 11.6 ที่ดู avatar ของ B จาก `friendUid`",
+      "item": [
+        {
+          "name": "11.1 List Avatar Slots",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns customizable slots', function () {",
+                  "  const slots = pm.response.json().data;",
+                  "  const codes = slots.map(function (s) { return s.code; });",
+                  "  pm.expect(codes).to.include.members(['face', 'hair', 'outer_top', 'pants', 'shoes', 'aura']);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/slots",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "slots"
+              ]
+            },
+            "description": "**GET /api/avatar/slots**\n\nรายการช่องแต่งตัว เรียงตาม `sortOrder` (ลำดับแท็บในหน้าแต่งตัว/ร้านค้า)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": [\n    { \"code\": \"face\", \"name\": \"ใบหน้า\", \"layerOrder\": 30, \"sortOrder\": 10, \"isRequired\": true },\n    { \"code\": \"hair\", \"name\": \"ทรงผม\", \"layerOrder\": 36, \"sortOrder\": 20, \"isRequired\": false },\n    ...\n    { \"code\": \"aura\", \"name\": \"ออร่า / เอฟเฟกต์\", \"layerOrder\": 0, \"sortOrder\": 130, \"isRequired\": false }\n  ]\n}\n```\n\n`layerOrder` = ลำดับวาดซ้อนเริ่มต้น (น้อย = อยู่ด้านหลัง)"
+          },
+          "response": []
+        },
+        {
+          "name": "11.2 Get My Avatar",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns skin tone and equipment', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.skinTone).to.match(/^#[0-9A-F]{6}$/);",
+                  "  pm.expect(data.equipment).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "me"
+              ]
+            },
+            "description": "**GET /api/avatar/me**\n\navatar ของตัวเอง (สร้างให้อัตโนมัติถ้ายังไม่มี)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"skinTone\": \"#F1C27D\",\n    \"equipment\": [\n      { \"slot\": \"pants\", \"layerOrder\": 14, \"colorHex\": null, \"item\": { ... } },\n      { \"slot\": \"hair\", \"layerOrder\": 36, \"colorHex\": \"#3B2A20\", \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true } }\n    ],\n    \"updatedAt\": \"...\"\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "11.3 List Inventory",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns owned items', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.items).to.be.an('array');",
+                  "  const first = data.items[0];",
+                  "  pm.collectionVariables.set('avatarItemId', first ? first.item.id : '');",
+                  "  pm.collectionVariables.set('avatarItemSlot', first ? first.item.slot : '');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/inventory?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "inventory"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/avatar/inventory**\n\nไอเท็มที่ตัวเองมี เรียงจากที่ได้มาล่าสุด — auto-save ไอเท็มแรกลง `avatarItemId` / `avatarItemSlot` ไว้ใช้ใน 11.4\n\n| Query | หมายเหตุ |\n|---|---|\n| `slot` | กรองช่อง คั่นด้วย `,` หรือส่งซ้ำ (`?slot=hair&slot=beard`) |\n| `rarity` | `common` / `rare` / `epic` / `legendary` คั่นด้วย `,` ได้ |\n| `limit` / `offset` | 1-100 (default 50) / default 0 |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"items\": [\n      { \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true }, \"source\": \"shop\", \"acquiredAt\": \"...\", \"equipped\": false }\n    ],\n    \"total\": 1,\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```\n\n`source`: `default` | `shop` | `reward` | `admin`"
+          },
+          "response": []
+        },
+        {
+          "name": "11.4 Update My Avatar",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "// ถ้า 11.3 เจอไอเท็มใน inventory จะลองใส่ไอเท็มนั้น ไม่งั้นส่ง equipment ว่าง (เปลี่ยนแค่สีผิว)",
+                  "const itemId = pm.collectionVariables.get('avatarItemId');",
+                  "const slot = pm.collectionVariables.get('avatarItemSlot');",
+                  "pm.variables.set('avatarEquipmentJson', JSON.stringify(itemId ? [{ slot: slot, itemId: itemId }] : []));"
+                ]
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Avatar saved', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.skinTone).to.eql('#E0AC69');",
+                  "  const itemId = pm.collectionVariables.get('avatarItemId');",
+                  "  if (itemId) {",
+                  "    const ids = data.equipment.map(function (e) { return e.item.id; });",
+                  "    pm.expect(ids).to.include(itemId);",
+                  "  }",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"skinTone\": \"#E0AC69\",\n  \"equipment\": {{avatarEquipmentJson}}\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "me"
+              ]
+            },
+            "description": "**PUT /api/avatar/me**\n\nบันทึกการแต่งตัวทั้งชุดในครั้งเดียว (ผู้เล่นลองแต่งแล้วกดบันทึก) — ส่งเฉพาะช่องที่เปลี่ยน ต้องมีอย่างน้อย 1 field\n\n```json\n{\n  \"skinTone\": \"#E0AC69\",\n  \"equipment\": [\n    { \"slot\": \"hair\", \"itemId\": \"<uuid>\", \"colorHex\": \"#3B2A20\" },\n    { \"slot\": \"beard\", \"itemId\": null }\n  ]\n}\n```\n\n| Field | หมายเหตุ |\n|---|---|\n| `skinTone` | `#RRGGBB` |\n| `equipment[].slot` | code ของช่อง (ห้ามซ้ำใน request เดียว) |\n| `equipment[].itemId` | UUID ของไอเท็มที่มีอยู่แล้ว, `null` = ถอดออก |\n| `equipment[].colorHex` | `#RRGGBB` ใช้ได้เฉพาะไอเท็ม `isTintable` |\n\nPre-request script สร้าง `equipment` จากไอเท็มที่ได้ใน 11.3 ให้อัตโนมัติ\n\n### Response 200 OK\nโครงสร้างเดียวกับ 11.2 (`message: \"บันทึก avatar แล้ว\"`)\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | ช่องไม่มีอยู่ / ไอเท็มใส่ผิดช่อง / ถอดช่องบังคับ / ใส่สีกับไอเท็มที่เปลี่ยนสีไม่ได้ |\n| 403 | ยังไม่มีไอเท็มนี้ |\n| 404 | ไม่พบไอเท็ม |"
+          },
+          "response": []
+        },
+        {
+          "name": "11.5 Validation - Unequip Required Slot",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });",
+                  "pm.test('Required slot cannot be empty', function () {",
+                  "  pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"equipment\": [\n    {\n      \"slot\": \"face\",\n      \"itemId\": null\n    }\n  ]\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            },
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "me"
+              ]
+            },
+            "description": "**PUT /api/avatar/me** (ตัวอย่าง error)\n\nถอด `face` ซึ่งเป็นช่องบังคับ → **400** `ช่อง \"ใบหน้า\" ต้องใส่ไอเท็มเสมอ`"
+          },
+          "response": []
+        },
+        {
+          "name": "11.6 Get Avatar by UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns avatar of the uid', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.user.uid).to.eql(pm.collectionVariables.get('friendUid').trim().toUpperCase());",
+                  "  pm.expect(data.equipment).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/avatar/users/{{friendUid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "avatar",
+                "users",
+                "{{friendUid}}"
+              ]
+            },
+            "description": "**GET /api/avatar/users/:uid**\n\nดู avatar ของผู้ใช้อื่น (เช่นจากรายชื่อเพื่อน/สมาชิกคลับ) — ถ้าเขายังไม่เคยเปิดหน้า avatar จะได้ `equipment: []`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\" },\n    \"skinTone\": \"#F1C27D\",\n    \"equipment\": [ ... ],\n    \"updatedAt\": \"...\"\n  }\n}\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ |"
+          },
+          "response": []
+        }
+      ]
+    },
+    {
+      "name": "12. Shop",
+      "description": "ร้านค้าไอเท็ม avatar จ่ายด้วย coin (`GET /api/users/me/progress` → `coinBalance`)\n\n- 1 listing = รอบขายของไอเท็ม 1 ชิ้น มีราคา (`priceCoins`, `originalPriceCoins` = ราคาก่อนลด) และช่วงเวลาขาย (`startsAt` – `endsAt`, `endsAt: null` = ขายถาวร)\n- API แสดงเฉพาะของที่**กำลังขายอยู่** ณ ตอนนี้, ไอเท็มซื้อได้ครั้งเดียว\n- ของที่ซื้อแล้วเข้า inventory (`source: \"shop\"`) ใส่ได้ทันทีผ่าน 11.4\n\n⚠️ ต้องมีข้อมูลใน `avatar_items` + `shop_listings` ก่อน (จัดการจาก backoffice) ไม่อย่างนั้น 12.1 จะได้รายการว่างและ 12.3-12.5 จะได้ 404",
+      "item": [
+        {
+          "name": "12.1 List Shop Items",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns listings on sale', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.items).to.be.an('array');",
+                  "  const notOwned = data.items.find(function (l) { return !l.owned; }) || data.items[0];",
+                  "  pm.collectionVariables.set('shopListingId', notOwned ? notOwned.listingId : '');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/items?sort=featured&limit=30&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "sort",
+                  "value": "featured"
+                },
+                {
+                  "key": "limit",
+                  "value": "30"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/shop/items**\n\nรายการสินค้าที่กำลังขาย — auto-save listing แรกที่ยังไม่มีลง `shopListingId`\n\n| Query | หมายเหตุ |\n|---|---|\n| `slot` | กรองช่อง คั่นด้วย `,` หรือส่งซ้ำ เช่น `hair,headwear` |\n| `rarity` | `common` / `rare` / `epic` / `legendary` คั่นด้วย `,` ได้ |\n| `q` | ค้นจากชื่อไอเท็ม |\n| `minPrice` / `maxPrice` | ช่วงราคา (coin) |\n| `owned` | `true` = เฉพาะที่มีแล้ว, `false` = เฉพาะที่ยังไม่มี |\n| `featured` | `true` = เฉพาะสินค้าแนะนำ |\n| `sort` | `featured` (default) / `newest` / `price_asc` / `price_desc` / `ending_soon` |\n| `limit` / `offset` | 1-100 (default 30) / default 0 |\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"items\": [ { \"listingId\": \"...\", \"priceCoins\": 150, \"originalPriceCoins\": 200, \"startsAt\": \"...\", \"endsAt\": \"2026-10-31T17:00:00.000Z\", \"isFeatured\": true, \"owned\": false, \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true } } ],\n    \"total\": 1,\n    \"limit\": 30,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        },
+        {
+          "name": "12.2 List Shop Items (Filtered)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('All items match the filters', function () {",
+                  "  pm.response.json().data.items.forEach(function (l) {",
+                  "    pm.expect(['hair', 'headwear', 'outer_top']).to.include(l.item.slot);",
+                  "    pm.expect(['rare', 'epic']).to.include(l.item.rarity);",
+                  "    pm.expect(l.priceCoins).to.be.within(0, 1000);",
+                  "    pm.expect(l.owned).to.eql(false);",
+                  "  });",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/items?slot=hair,headwear,outer_top&rarity=rare,epic&minPrice=0&maxPrice=1000&owned=false&sort=price_asc",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "items"
+              ],
+              "query": [
+                {
+                  "key": "slot",
+                  "value": "hair,headwear,outer_top"
+                },
+                {
+                  "key": "rarity",
+                  "value": "rare,epic"
+                },
+                {
+                  "key": "minPrice",
+                  "value": "0"
+                },
+                {
+                  "key": "maxPrice",
+                  "value": "1000"
+                },
+                {
+                  "key": "owned",
+                  "value": "false"
+                },
+                {
+                  "key": "sort",
+                  "value": "price_asc"
+                }
+              ]
+            },
+            "description": "**GET /api/shop/items** (ตัวอย่างใช้ตัวกรองหลายตัว)\n\nเฉพาะ ผม / หมวก / เสื้อนอก ระดับ rare หรือ epic ราคา 0-1000 coin ที่ยังไม่มี เรียงราคาน้อยไปมาก"
+          },
+          "response": []
+        },
+        {
+          "name": "12.3 Get Shop Item Detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns the listing', function () {",
+                  "  pm.expect(pm.response.json().data.listingId).to.eql(pm.collectionVariables.get('shopListingId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/items/{{shopListingId}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "items",
+                "{{shopListingId}}"
+              ]
+            },
+            "description": "**GET /api/shop/items/:listingId**\n\nรายละเอียดสินค้า 1 รายการ\n\n### Response 200 OK\n```json\n{ \"success\": true, \"data\": { \"listingId\": \"...\", \"priceCoins\": 150, \"originalPriceCoins\": 200, \"startsAt\": \"...\", \"endsAt\": \"2026-10-31T17:00:00.000Z\", \"isFeatured\": true, \"owned\": false, \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true } } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | `listingId` ไม่ใช่ UUID |\n| 404 | ไม่พบสินค้า หรือหมดช่วงเวลาขายแล้ว |"
+          },
+          "response": []
+        },
+        {
+          "name": "12.4 Purchase Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 201 (or 400 when coins are not enough)', function () { pm.expect([201, 400]).to.include(pm.response.code); });",
+                  "pm.test('Purchase deducts coins', function () {",
+                  "  const json = pm.response.json();",
+                  "  if (pm.response.code === 400) {",
+                  "    pm.expect(json.details).to.have.property('required');",
+                  "    return;",
+                  "  }",
+                  "  pm.expect(json.data.progress.coinBalance).to.be.at.least(0);",
+                  "  pm.expect(json.data.item).to.have.property('id');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/items/{{shopListingId}}/purchase",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "items",
+                "{{shopListingId}}",
+                "purchase"
+              ]
+            },
+            "description": "**POST /api/shop/items/:listingId/purchase**\n\nซื้อไอเท็มด้วย coin (หักเหรียญ + บันทึกประวัติ + เพิ่มเข้า inventory ใน transaction เดียว)\n\n### Response 201 Created\n```json\n{\n  \"success\": true,\n  \"message\": \"ซื้อไอเท็มแล้ว\",\n  \"data\": {\n    \"purchaseId\": \"...\",\n    \"purchasedAt\": \"...\",\n    \"priceCoins\": 150,\n    \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true },\n    \"progress\": { \"coinBalance\": 350, \"level\": 3, \"exp\": 120, \"expToNext\": 220 }\n  }\n}\n```\n\n### Response 400 (เหรียญไม่พอ)\n```json\n{ \"success\": false, \"message\": \"เหรียญไม่พอ\", \"details\": { \"required\": 150, \"coinBalance\": 40 } }\n```\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | เหรียญไม่พอ |\n| 404 | ไม่พบสินค้า หรือหมดช่วงเวลาขายแล้ว |\n| 409 | มีไอเท็มนี้อยู่แล้ว |"
+          },
+          "response": []
+        },
+        {
+          "name": "12.5 Validation - Buy Owned Item",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 409 (or 400 if 12.4 did not buy it)', function () { pm.expect([409, 400]).to.include(pm.response.code); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/items/{{shopListingId}}/purchase",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "items",
+                "{{shopListingId}}",
+                "purchase"
+              ]
+            },
+            "description": "**POST /api/shop/items/:listingId/purchase** (ตัวอย่าง error)\n\nซื้อไอเท็มเดิมซ้ำหลังจาก 12.4 ซื้อสำเร็จ → **409** `คุณมีไอเท็มนี้อยู่แล้ว` (เหรียญไม่ถูกหัก)"
+          },
+          "response": []
+        },
+        {
+          "name": "12.6 Get Purchase History",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Returns purchases', function () {",
+                  "  pm.expect(pm.response.json().data.purchases).to.be.an('array');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{accessToken}}"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/shop/purchases?limit=50&offset=0",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "shop",
+                "purchases"
+              ],
+              "query": [
+                {
+                  "key": "limit",
+                  "value": "50"
+                },
+                {
+                  "key": "offset",
+                  "value": "0"
+                }
+              ]
+            },
+            "description": "**GET /api/shop/purchases**\n\nประวัติการซื้อ ล่าสุดก่อน (`priceCoins` = ราคาจริง ณ ตอนซื้อ)\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"purchases\": [\n      { \"purchaseId\": \"...\", \"listingId\": \"...\", \"priceCoins\": 150, \"coinBalanceAfter\": 350, \"purchasedAt\": \"...\", \"item\": { \"id\": \"...\", \"code\": \"hair_spiky_01\", \"slot\": \"hair\", \"name\": \"ผมตั้ง\", \"description\": null, \"rarity\": \"rare\", \"thumbnailUrl\": \"https://...\", \"assetUrl\": \"https://...\", \"renderData\": { \"layers\": [{ \"url\": \"https://...\", \"z\": 36 }], \"hidesSlots\": [] }, \"isTintable\": true } }\n    ],\n    \"limit\": 50,\n    \"offset\": 0\n  }\n}\n```"
+          },
+          "response": []
+        }
+      ]
     }
   ],
   "variable": [
@@ -3060,6 +4651,36 @@
       "key": "friendshipId",
       "value": "",
       "description": "ID ของคำขอ/ความสัมพันธ์เพื่อน (auto-save ในโฟลเดอร์ Friends)"
+    },
+    {
+      "key": "clubId",
+      "value": "",
+      "description": "ID ของคลับที่สร้างจาก 10.1 (auto-save)"
+    },
+    {
+      "key": "clubRequestId",
+      "value": "",
+      "description": "ID ของคำขอ/คำเชิญเข้าคลับ (auto-save จาก 10.6 / 10.16)"
+    },
+    {
+      "key": "friendUserId",
+      "value": "",
+      "description": "user id (UUID) ของบัญชี B (auto-save จาก 10.8 Approve Join Request)"
+    },
+    {
+      "key": "avatarItemId",
+      "value": "",
+      "description": "ID ไอเท็มแรกใน inventory (auto-save จาก 11.3)"
+    },
+    {
+      "key": "avatarItemSlot",
+      "value": "",
+      "description": "ช่องของ avatarItemId (auto-save จาก 11.3)"
+    },
+    {
+      "key": "shopListingId",
+      "value": "",
+      "description": "ID ของ listing ในร้านค้า (auto-save จาก 12.1)"
     }
   ]
 }
