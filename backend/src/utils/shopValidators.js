@@ -1,6 +1,6 @@
 const { Joi, slotCodeSchema, raritySchema, paging } = require('./avatarValidators');
 
-const SHOP_SORTS = ['featured', 'newest', 'price_asc', 'price_desc', 'ending_soon'];
+const SHOP_SORTS = ['featured', 'newest', 'price_asc', 'price_desc', 'rarity_asc', 'rarity_desc', 'ending_soon'];
 
 const listingIdSchema = Joi.string().uuid().required();
 

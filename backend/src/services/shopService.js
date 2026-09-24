@@ -8,6 +8,8 @@ const ON_SALE = `l.is_active AND i.is_active
 
 // whitelist เท่านั้น ห้ามต่อ string จาก query ตรงๆ
 const SORT_ORDER = {
+  rarity_asc: "CASE i.rarity WHEN 'common' THEN 0 WHEN 'rare' THEN 1 WHEN 'epic' THEN 2 WHEN 'legendary' THEN 3 END, l.price_coins",
+  rarity_desc: "CASE i.rarity WHEN 'common' THEN 0 WHEN 'rare' THEN 1 WHEN 'epic' THEN 2 WHEN 'legendary' THEN 3 END DESC, l.price_coins",
   featured: 'l.is_featured DESC, l.sort_order, l.starts_at DESC',
   newest: 'l.starts_at DESC',
   price_asc: 'l.price_coins, l.starts_at DESC',
@@ -64,7 +66,7 @@ async function listItems(userId, filters) {
     `SELECT ${LISTING_COLUMNS}, COUNT(*) OVER () AS total_count
      ${LISTING_FROM}
      WHERE ${where.join(' AND ')}
-     ORDER BY ${SORT_ORDER[filters.sort]}
+     ORDER BY ${SORT_ORDER[filters.sort]}, l.id
      LIMIT $${params.length - 1} OFFSET $${params.length}`,
     params
   );
