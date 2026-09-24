@@ -8,6 +8,9 @@ const sideQuestRoutes = require('./sideQuestRoutes');
 const runningRoutes = require('./runningRoutes');
 const rpeRoutes = require('./rpeRoutes');
 const friendRoutes = require('./friendRoutes');
+const clubRoutes = require('./clubRoutes');
+const avatarRoutes = require('./avatarRoutes');
+const shopRoutes = require('./shopRoutes');
 
 const router = express.Router();
 
@@ -21,6 +24,9 @@ router.use('/programs', programRoutes);
 router.use('/running-sessions', runningRoutes);
 router.use('/rpe', rpeRoutes);
 router.use('/friends', friendRoutes);
+router.use('/clubs', clubRoutes);
+router.use('/avatar', avatarRoutes);
+router.use('/shop', shopRoutes);
 router.use('/', sideQuestRoutes);
 router.use('/quests', sideQuestRoutes);
 
