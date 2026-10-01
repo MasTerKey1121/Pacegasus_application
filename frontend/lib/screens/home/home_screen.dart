@@ -10,6 +10,9 @@ import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
 import '../friends/friends_screen.dart';
+import '../club/club_screen.dart';
+import '../leaderboard/leaderboard_screen.dart';
+import '../shop/shop_screen.dart';
 import '../run/run_select_screen.dart';
 import '../settings/settings_screen.dart';
 import '../stats/stats_screen.dart';
@@ -308,23 +311,27 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
               Positioned(
                   top: 88,
                   left: 16,
-                  child: Column(children: [
-                    _shortcut(
-                        Icons.emoji_events_outlined,
-                        'อันดับ',
-                        () => showAppToast(
-                            context, 'ระบบอันดับจะเปิดให้ใช้งานภายหลัง')),
-                    const SizedBox(height: 8),
-                    _shortcut(
-                        Icons.people_outline,
-                        'เพื่อน',
-                        () => Navigator.of(context).push(MaterialPageRoute(
-                            builder: (_) => const FriendsScreen()))),
-                    const SizedBox(height: 8),
-                    _shortcut(Icons.checkroom_outlined, 'แต่งตัว', null),
-                    const SizedBox(height: 8),
-                    _shortcut(Icons.storefront_outlined, 'ร้านค้า', null),
-                  ])),
+                  child: SizedBox(
+                      height: math.max(56.0, height * (1 - _extent) - 88),
+                      child: SingleChildScrollView(
+                          child: Column(children: [
+                        _shortcut(Icons.emoji_events_outlined, 'อันดับ',
+                            () => _push(const LeaderboardScreen())),
+                        const SizedBox(height: 8),
+                        _shortcut(
+                            Icons.people_outline,
+                            'เพื่อน',
+                            () => Navigator.of(context).push(MaterialPageRoute(
+                                builder: (_) => const FriendsScreen()))),
+                        const SizedBox(height: 8),
+                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว', null),
+                        const SizedBox(height: 8),
+                        _shortcut(Icons.storefront_outlined, 'ร้านค้า',
+                            () => _push(const ShopScreen())),
+                        const SizedBox(height: 8),
+                        _shortcut(Icons.groups_outlined, 'คลับ',
+                            () => _push(const ClubScreen())),
+                      ])))),
               Positioned(
                   top: 88,
                   right: 16,

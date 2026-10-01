@@ -49,6 +49,9 @@ node src/db/migrate.js src/db/010_add_user_program_soft_delete.sql
 node src/db/migrate.js src/db/011_add_phase_progression_multiplier.sql
 node src/db/migrate.js src/db/012_add_beginner_week_progression.sql
 node src/db/migrate.js src/db/013_add_user_uid_and_friendships.sql
+node src/db/migrate.js src/db/014_create_clubs.sql
+node src/db/migrate.js src/db/015_create_avatar_items.sql
+node src/db/migrate.js src/db/016_create_shop.sql
 ```
 
 The migration runner accepts an explicit path relative to `backend/`; therefore the `src/db/` prefix is required for additive migrations.
@@ -95,6 +98,9 @@ All endpoints below are prefixed with `/api`. Except for health and authenticati
 | Running | `POST /running-sessions`, `GET /running-sessions/history`, `GET /running-sessions/:id`, `PATCH /running-sessions/:id/complete`, `PATCH /running-sessions/:id/abandon` |
 | RPE | `POST /rpe`, `GET /rpe/history`, `GET /rpe/risk-index` |
 | Friends | `GET /friends`, `GET /friends/lookup/:uid`, `GET/POST /friends/requests`, `PATCH /friends/requests/:friendshipId/accept`, `DELETE /friends/requests/:friendshipId`, `DELETE /friends/:friendshipId` |
+| Clubs | `GET/POST /clubs`, `GET /clubs/me`, `GET/PATCH/DELETE /clubs/:clubId`, `POST /clubs/:clubId/leave`, `POST /clubs/:clubId/transfer-leadership`, `PATCH /clubs/:clubId/members/:userId/role`, `DELETE /clubs/:clubId/members/:userId`, `GET /clubs/:clubId/permissions`, `PATCH /clubs/:clubId/permissions/:role`, `GET/POST /clubs/:clubId/join-requests`, `PATCH /clubs/:clubId/join-requests/:requestId/approve`, `DELETE /clubs/:clubId/join-requests/:requestId`, `POST /clubs/:clubId/invites`, `GET /clubs/me/join-requests`, `PATCH /clubs/me/join-requests/:requestId/accept`, `DELETE /clubs/me/join-requests/:requestId` |
+| Avatar | `GET /avatar/slots`, `GET/PUT /avatar/me`, `GET /avatar/inventory`, `GET /avatar/users/:uid` |
+| Shop | `GET /shop/items`, `GET /shop/items/:listingId`, `POST /shop/items/:listingId/purchase`, `GET /shop/purchases` |
 | Side quests | `GET /quests/side`, `POST /quests/running-sessions/:id/side-quests`, `PATCH /quests/side-quests/:id/progress`, `PATCH /quests/side-quests/:id/finish`, `GET /quests/side-quests/:id/album` |
 
 For registration OTP requests, provide `purpose: "register"`, `policyAccepted: true`, and a `policyVersion`. OTP endpoints are rate-limited. The canonical Side Quest endpoints are under `/api/quests`; the server currently also exposes compatibility aliases.
@@ -139,6 +145,16 @@ A friendship is one `friendships` row per pair of users, whichever side sent the
 If B adds A while A's request to B is still pending, the request is accepted immediately (`200`, `autoAccepted: true`). Declining, cancelling, and unfriending delete the row, so either user can send a new request later. The API returns `400` for adding yourself, `404` for an unknown or inactive UID, and `409` for a duplicate request or an existing friendship. Deleted accounts are hidden from friend lists and requests.
 
 Use `GET /api/friends/lookup/:uid` to show a profile preview before sending a request; `relationship.status` is `none`, `pending`, `accepted`, or `self`. The Postman collection folder **8. Friends** (**9. Friends** in `backend/testapi/`) covers the two-account flow. Set `accessToken` to account A, `friendAccessToken` to account B, and `friendUid` to B's UID, then run the requests in order. Request 3.1 Get Full Profile saves the signed-in user's UID to `myUid`. Detailed request and response tables are in [`backend/README.md`](backend/README.md).
+
+## Clubs, avatar, and shop
+
+**Clubs** (migration `014`). Any user who is not already in a club can create one and becomes its `leader`. A club holds at most 20 members, including the leader, and each user can belong to only one club. Ranks are `leader` > `sub_leader` > `member`. The leader always has every permission. For the other two ranks, the leader toggles `canApproveRequests`, `canInvite`, `canKick`, and `canEditInfo` with `PATCH /clubs/:clubId/permissions/:role`. By default, sub-leaders can approve, invite, and kick; members can do none of these. A kick only works on a lower rank. Only the leader can change ranks, transfer leadership, or disband the club. The leader can leave only after transferring leadership, unless they are the last member, in which case leaving disbands the club.
+
+A pending join is one `club_join_requests` row per (club, user). The `kind` is either `request` (the user asked to join) or `invite` (staff invited the user by UID). If the user requests to join while an invite is pending, they join immediately; the same happens when staff invite someone whose request is pending. Joining any club deletes that user's other pending rows. `member_count` is kept by a trigger and capped by a `CHECK`, so the 20-member limit holds under concurrent approvals. Search: `GET /clubs?q=&tag=&hasSlot=true`.
+
+**Avatar** (migration `015`). The slots are a lookup table (`avatar_slots`): `face`, `hair`, `beard`, `mustache`, `headwear`, `necklace`, `inner_top`, `outer_top`, `pants`, `socks`, `shoes`, `back`, and `aura`. Each slot has a default `layer_order` for the 2.5D renderer. `face`, `inner_top`, and `pants` are required. Items in `avatar_items` are catalog entries; renderer-specific data (extra layers, anchors, `hidesSlots`) goes in `render_data`. Composite foreign keys enforce that an equipped item fits its slot and is owned by the user. The first `GET /avatar/me` grants every `is_default` item and equips defaults into required slots. `PUT /avatar/me` saves only the slots that changed: `{ skinTone?, equipment: [{ slot, itemId | null, colorHex? }] }`. `colorHex` applies only to `is_tintable` items.
+
+**Shop** (migration `016`, requires the `btree_gist` extension). A `shop_listings` row sells one item for `price_coins` between `starts_at` and `ends_at`; an `ends_at` of `NULL` means the item is always on sale. Active listings for the same item cannot overlap. `GET /shop/items` returns only items currently on sale. It filters by `slot` and `rarity` (comma-separated or repeated), `q`, `minPrice`/`maxPrice`, `owned`, and `featured`, and sorts by `featured`, `newest`, `price_asc`, `price_desc`, or `ending_soon`. A purchase spends coins from `user_game_progress` in one transaction and records a `shop_purchases` row. Buying an owned item returns `409`, and too few coins returns `400` with `{ required, coinBalance }`. There is no player-facing API for editing the catalog or listings; manage those from the backoffice.
 
 ## Tests
 

@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const ApiError = require('../utils/ApiError');
 
 const LEVEL_ONE_EXP_TO_NEXT = 200;
 const EXP_STEP_PER_LEVEL = 10;
@@ -59,4 +60,27 @@ async function award(client, userId, { sourceType, sourceId, coins, exp }) {
   return { awarded: true, coins, exp, progress: toPayload(updatedRows[0]) };
 }
 
-module.exports = { getProgress, award };
+// The caller owns the transaction. Locking first serializes concurrent purchases per user,
+// so checks made after the lock (e.g. item ownership) see the previous purchase.
+async function lockProgress(client, userId) {
+  await ensureProgress(client, userId);
+  const { rows } = await client.query(
+    `SELECT coin_balance, level, exp, exp_to_next FROM user_game_progress WHERE user_id = $1 FOR UPDATE`, [userId]
+  );
+  return toPayload(rows[0]);
+}
+
+async function spendCoins(client, userId, coins) {
+  const { coinBalance } = await lockProgress(client, userId);
+  if (coinBalance < coins) {
+    throw new ApiError(400, 'เหรียญไม่พอ', { required: coins, coinBalance });
+  }
+  const { rows: updatedRows } = await client.query(
+    `UPDATE user_game_progress SET coin_balance = coin_balance - $2, updated_at = now() WHERE user_id = $1
+     RETURNING coin_balance, level, exp, exp_to_next`,
+    [userId, coins]
+  );
+  return toPayload(updatedRows[0]);
+}
+
+module.exports = { getProgress, award, lockProgress, spendCoins };
