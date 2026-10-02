@@ -5,6 +5,7 @@ class RunResult {
   final Duration duration;
   final String avgPace; // e.g. "6:30"
   final int calories;
+  final List<RunRoutePoint> routePoints;
 
   int? rpe; // 1-10
   int? stressLevel; // 1-10
@@ -16,9 +17,33 @@ class RunResult {
     required this.duration,
     required this.avgPace,
     required this.calories,
+    this.routePoints = const [],
     this.rpe,
     this.stressLevel,
     this.moodIndex,
     this.hasInjury,
   });
+}
+
+class RunRoutePoint {
+  final double latitude, longitude;
+  const RunRoutePoint(this.latitude, this.longitude);
+
+  static List<RunRoutePoint> parse(Object? value) {
+    if (value is! List) return const [];
+    final points = <RunRoutePoint>[];
+    for (final point in value.whereType<Map>()) {
+      final lat = double.tryParse('${point['lat'] ?? point['latitude']}');
+      final lng = double.tryParse('${point['lng'] ?? point['longitude']}');
+      if (lat != null &&
+          lng != null &&
+          lat.isFinite &&
+          lng.isFinite &&
+          lat.abs() <= 90 &&
+          lng.abs() <= 180) {
+        points.add(RunRoutePoint(lat, lng));
+      }
+    }
+    return List.unmodifiable(points);
+  }
 }

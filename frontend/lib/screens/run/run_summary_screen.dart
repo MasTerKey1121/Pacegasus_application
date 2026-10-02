@@ -6,6 +6,7 @@ import '../../providers/user_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
 import 'reward_screen.dart';
+import '../../widgets/run_route_map.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../providers/rpe_provider.dart';
 import '../../services/api_client.dart';
@@ -23,6 +24,9 @@ class RunSummaryScreen extends ConsumerStatefulWidget {
 class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   late RunResult result = widget.result;
   bool _isSubmitting = false;
+  bool _routeLoading = false;
+  bool _routeFailed = false;
+  bool _isTreadmill = false;
   final _painNoteController = TextEditingController();
 
   static const _apiMoods = [
@@ -37,55 +41,64 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   void initState() {
     super.initState();
 
-    WidgetsBinding.instance.addPostFrameCallback((_) async {
-      final setup = ref.read(runSetupProvider);
-      final sessionId = setup.sessionId;
-
-      // โหลดข้อมูลจริงจาก Backend
-      if (sessionId != null) {
-        try {
-          final detail = await ref
-              .read(runningSessionApiProvider)
-              .getDetail(sessionId: sessionId);
-          final data = detail['data'];
-          if (mounted && data is Map) {
-            // PostgreSQL returns snake_case while older API responses used
-            // camelCase. Accept both so this screen always shows the session
-            // the runner has just completed.
-            final distance = _asDouble(
-              data['distanceKm'] ?? data['distance_km'],
-              result.distanceKm,
-            );
-            final durationSeconds = _asInt(
-              data['durationSeconds'] ?? data['duration_seconds'],
-              result.duration.inSeconds,
-            );
-            setState(() {
-              result = RunResult(
-                distanceKm: distance,
-                duration: Duration(seconds: durationSeconds),
-                avgPace: _paceLabel(distance, durationSeconds),
-                calories: (distance * 62).round(),
-                rpe: result.rpe,
-                stressLevel: result.stressLevel,
-                moodIndex: result.moodIndex,
-                hasInjury: result.hasInjury,
-              );
-            });
-          }
-        } catch (error) {
-          debugPrint('Could not load completed running session: $error');
-        }
-      }
-
-      // อัปเดต Progress ของ Side Quest
-      for (final id in setup.sideQuestIds) {
-        await ref.read(questApiProvider).updateSideQuestProgress(
-              sideQuestId: id,
-              progressCount: 1,
-            );
-      }
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _loadSession();
     });
+  }
+
+  Future<void> _loadSession() async {
+    final setup = ref.read(runSetupProvider);
+    final sessionId = setup.sessionId;
+    setState(() {
+      _routeFailed = false;
+      _isTreadmill = setup.environment == 'treadmill';
+      _routeLoading = sessionId != null && result.routePoints.isEmpty;
+    });
+
+    // โหลดข้อมูลจริงจาก Backend
+    if (sessionId != null) {
+      try {
+        final detail = await ref
+            .read(runningSessionApiProvider)
+            .getDetail(sessionId: sessionId);
+        final data = detail['data'];
+        if (mounted && data is Map) {
+          // PostgreSQL returns snake_case while older API responses used
+          // camelCase. Accept both so this screen always shows the session
+          // the runner has just completed.
+          final distance = _asDouble(
+            data['distanceKm'] ?? data['distance_km'],
+            result.distanceKm,
+          );
+          final durationSeconds = _asInt(
+            data['durationSeconds'] ?? data['duration_seconds'],
+            result.duration.inSeconds,
+          );
+          final route =
+              RunRoutePoint.parse(data['routePoints'] ?? data['route_points']);
+          setState(() {
+            _isTreadmill =
+                (data['environment'] ?? setup.environment) == 'treadmill';
+            result = RunResult(
+              distanceKm: distance,
+              duration: Duration(seconds: durationSeconds),
+              avgPace: _paceLabel(distance, durationSeconds),
+              calories: (distance * 62).round(),
+              routePoints: route.isEmpty ? result.routePoints : route,
+              rpe: result.rpe,
+              stressLevel: result.stressLevel,
+              moodIndex: result.moodIndex,
+              hasInjury: result.hasInjury,
+            );
+          });
+        }
+      } catch (error) {
+        debugPrint('Could not load completed running session: $error');
+        if (mounted) setState(() => _routeFailed = true);
+      } finally {
+        if (mounted) setState(() => _routeLoading = false);
+      }
+    }
   }
 
   @override
@@ -123,18 +136,19 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
             padding: const EdgeInsets.fromLTRB(20, 20, 20, 20),
             child: Column(
               children: [
-                const Text('🏃', style: TextStyle(fontSize: 40)),
-                const SizedBox(height: 8),
-                Text('วิ่งเสร็จแล้ว!', style: AppText.heading(size: 20)),
-                const SizedBox(height: 4),
-                Text('บอกความรู้สึกหลังวิ่งให้เราหน่อย',
-                    style: AppText.body(
-                        size: 12.5, color: AppColors.textSecondary)),
                 Expanded(
                   child: SingleChildScrollView(
-                    padding: const EdgeInsets.only(top: 20),
+                    padding: const EdgeInsets.only(bottom: 20),
                     child: Column(
                       children: [
+                        RunRouteMap(
+                            key: ValueKey(result.routePoints),
+                            points: result.routePoints,
+                            loading: _routeLoading,
+                            loadFailed: _routeFailed,
+                            onRetry: _loadSession,
+                            treadmill: _isTreadmill),
+                        const SizedBox(height: 16),
                         Row(children: [
                           Expanded(
                               child: _StatBox(
@@ -214,8 +228,8 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 alignment: Alignment.center,
                                 decoration: BoxDecoration(
                                   color: active
-                                      ? AppColors.purple1.withOpacity(.25)
-                                      : Colors.white.withOpacity(.04),
+                                      ? AppColors.purple1.withValues(alpha: .25)
+                                      : Colors.white.withValues(alpha: .04),
                                   shape: BoxShape.circle,
                                   border: Border.all(
                                       color: active
@@ -238,23 +252,19 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         const SizedBox(height: 10),
                         Row(children: [
                           Expanded(
-                            child: GradientButton(
-                              label: 'ไม่มี',
-                              gradient: result.hasInjury == false
-                                  ? AppColors.greenGradient
-                                  : null,
-                              height: 46,
-                              onTap: () =>
-                                  setState(() => result.hasInjury = false),
-                            ),
+                            child: _InjuryChoice(
+                                label: 'ไม่มี',
+                                selected: result.hasInjury == false,
+                                onPressed: () =>
+                                    setState(() => result.hasInjury = false)),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
-                            child: OutlineButton(
-                                label: 'มีอาการ',
-                                onTap: () =>
-                                    setState(() => result.hasInjury = true)),
-                          ),
+                              child: _InjuryChoice(
+                                  label: 'มีอาการ',
+                                  selected: result.hasInjury == true,
+                                  onPressed: () =>
+                                      setState(() => result.hasInjury = true))),
                         ]),
                         if (result.hasInjury == true) ...[
                           const SizedBox(height: 12),
@@ -270,7 +280,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 color: AppColors.textTertiary,
                               ),
                               filled: true,
-                              fillColor: Colors.white.withOpacity(.05),
+                              fillColor: Colors.white.withValues(alpha: .05),
                               border: OutlineInputBorder(
                                 borderRadius: BorderRadius.circular(12),
                                 borderSide: BorderSide(color: AppColors.border),
@@ -318,19 +328,16 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                       .clamp(1, 1440)
                                       .toInt(),
                                   rpeScore: result.rpe!,
-                                  stressLevel: result.stressLevel!
-                                      .clamp(1, 10)
-                                      .toInt(),
+                                  stressLevel:
+                                      result.stressLevel!.clamp(1, 10).toInt(),
                                   mood: _apiMoods[
-                                    result.moodIndex!.clamp(0, 4).toInt()
-                                  ],
+                                      result.moodIndex!.clamp(0, 4).toInt()],
                                   hasPain: result.hasInjury!,
                                   painNote: painNote,
                                 );
-                            if (!mounted) return;
-                            ref
-                                .read(userProvider)
-                                .addRunStats(km: result.distanceKm, sessions: 1);
+                            if (!context.mounted) return;
+                            ref.read(userProvider).addRunStats(
+                                km: result.distanceKm, sessions: 1);
                             ref.read(missionProvider).setDone('run', true);
                             ref.read(runSetupProvider).reset();
                             Navigator.of(context).pushReplacement(
@@ -340,14 +347,14 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                               ),
                             );
                           } on ApiException catch (error) {
-                            if (mounted) {
+                            if (context.mounted) {
                               showAppToast(
                                 context,
                                 'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ: ${error.message}',
                               );
                             }
                           } catch (_) {
-                            if (mounted) {
+                            if (context.mounted) {
                               showAppToast(
                                 context,
                                 'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ กรุณาลองอีกครั้ง',
@@ -386,4 +393,32 @@ class _StatBox extends StatelessWidget {
       ),
     );
   }
+}
+
+class _InjuryChoice extends StatelessWidget {
+  final String label;
+  final bool selected;
+  final VoidCallback onPressed;
+  const _InjuryChoice(
+      {required this.label, required this.selected, required this.onPressed});
+  @override
+  Widget build(BuildContext context) => Semantics(
+      selected: selected,
+      button: true,
+      child: SizedBox(
+          height: 48,
+          child: OutlinedButton(
+              style: OutlinedButton.styleFrom(
+                  backgroundColor:
+                      selected ? const Color(0xFF268DDB) : AppColors.cardHi,
+                  foregroundColor: AppColors.textPrimary,
+                  side: BorderSide(
+                      color: selected
+                          ? const Color(0xFF64BEFF)
+                          : AppColors.border),
+                  shape: RoundedRectangleBorder(
+                      borderRadius: BorderRadius.circular(24))),
+              onPressed: onPressed,
+              child: Text(label,
+                  style: AppText.body(size: 13, weight: FontWeight.w600)))));
 }

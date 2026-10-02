@@ -5,6 +5,7 @@ import '../../app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
+import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
@@ -324,7 +325,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             () => Navigator.of(context).push(MaterialPageRoute(
                                 builder: (_) => const FriendsScreen()))),
                         const SizedBox(height: 8),
-                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว', null),
+                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว',
+                            () => _push(const ShopScreen(wardrobe: true))),
                         const SizedBox(height: 8),
                         _shortcut(Icons.storefront_outlined, 'ร้านค้า',
                             () => _push(const ShopScreen())),
@@ -430,11 +432,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('TODAY’S PLAN',
+                                Text('แผนวันนี้',
                                     style:
                                         AppText.body(size: 10, color: _accent)),
                                 const SizedBox(height: 8),
                                 Text(title, style: AppText.heading(size: 18)),
+                                if (quest != null &&
+                                    program.currentWeekErrorMessage == null)
+                                  Text(_dateLabel(quest),
+                                      style: AppText.body(
+                                          size: 12, color: _accent)),
                                 const SizedBox(height: 4),
                                 Text(hint,
                                     style: AppText.body(
@@ -469,18 +476,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               () => _push(const DailyMissionsScreen())),
                           _taskRow(
                               Icons.calendar_month_outlined,
-                              'แผนสัปดาห์นี้',
+                              'จัดตารางซ้อม',
                               'ดูและจัดการตารางซ้อม',
                               _schedule),
-                          if (ready && program.currentWeekErrorMessage == null)
-                            ...program.quests.map((item) => Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                      '${_dateLabel(item)} · ${_questLabel(item)}',
-                                      style: AppText.body(
-                                          size: 12,
-                                          color: AppColors.textSecondary)),
-                                )),
                         ],
                       )),
                     ]),
@@ -559,7 +557,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           trailing: Icon(icon, color: _accent, size: 21));
 
   String _dateLabel(Map<String, dynamic> quest) {
-    final date = DateTime.tryParse(quest['scheduled_date']?.toString() ?? '');
+    final date = trainingDate(quest['scheduled_date']);
     return date == null ? 'วันซ้อม' : '${date.day}/${date.month}';
   }
 

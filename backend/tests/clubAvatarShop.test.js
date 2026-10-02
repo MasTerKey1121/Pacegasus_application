@@ -70,6 +70,31 @@ test('kicking someone of equal rank is forbidden and rolls back', async (t) => {
   assert.ok(!statements.some((s) => s.startsWith('DELETE')));
 });
 
+for (const memberCount of [1, 4]) {
+  test(`leader leave requires transfer even with ${memberCount} member(s) and never deletes the club`, async (t) => {
+    const statements = mockClient(t, (sql) => {
+      if (sql.includes('FROM clubs WHERE id')) return [{ id: CLUB, member_count: memberCount }];
+      if (sql.includes('FROM club_members m')) return [{ role: 'leader' }];
+      return [];
+    });
+    await assert.rejects(clubService.leaveClub(ME, CLUB), { statusCode: 409 });
+    assert.equal(statements.at(-1), 'ROLLBACK');
+    assert.ok(!statements.some((sql) => sql.startsWith('DELETE')));
+  });
+}
+
+test('ordinary member leave removes only their membership', async (t) => {
+  const statements = mockClient(t, (sql) => {
+    if (sql.includes('FROM clubs WHERE id')) return [{ id: CLUB, member_count: 4 }];
+    if (sql.includes('FROM club_members m')) return [{ role: 'member' }];
+    return [];
+  });
+  assert.deepEqual(await clubService.leaveClub(ME, CLUB), { clubId: CLUB, action: 'left' });
+  assert.ok(statements.includes('DELETE FROM club_members'));
+  assert.ok(!statements.includes('DELETE FROM clubs'));
+  assert.equal(statements.at(-1), 'COMMIT');
+});
+
 test('a full club rejects join requests before inserting', async (t) => {
   const statements = mockClient(t, (sql) => {
     if (sql.includes('FROM clubs WHERE id')) return [{ id: CLUB, member_count: 20, max_members: 20 }];

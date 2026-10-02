@@ -23,6 +23,18 @@ class _Client extends ApiClient {
   final calls = <Uri>[];
   bool fail = false;
   bool populated = false;
+  Map<String, dynamic>? saved;
+  bool saveFail = false;
+  @override
+  Future<Map<String, dynamic>> put(String path,
+      {Map<String, dynamic>? body, bool auth = false}) async {
+    expect(path, '/api/avatar/me');
+    expect(auth, isTrue);
+    if (saveFail) throw ApiException(503, 'บันทึกไม่ได้');
+    saved = body;
+    return {'data': {}};
+  }
+
   @override
   Future<Map<String, dynamic>> get(String path, {bool auth = false}) async {
     expect(auth, isTrue);
@@ -31,6 +43,28 @@ class _Client extends ApiClient {
     if (path.contains('/progress')) {
       return {
         'data': {'coinBalance': 42}
+      };
+    }
+    if (path.contains('/inventory')) {
+      final slot = Uri.parse(path).queryParameters['slot']!;
+      return {
+        'data': {
+          'items': populated && slot == 'hair'
+              ? [
+                  {
+                    'equipped': false,
+                    'item': {
+                      'id': 'owned-hair',
+                      'slot': 'hair',
+                      'name': 'ผมของฉัน',
+                      'rarity': 'rare',
+                      'thumbnailUrl': ''
+                    }
+                  }
+                ]
+              : [],
+          'total': populated && slot == 'hair' ? 1 : 0
+        }
       };
     }
     final offset = int.parse(Uri.parse(path).queryParameters['offset'] ?? '0');
@@ -140,5 +174,65 @@ void main() {
     await tester.tap(find.text('ลองอีกครั้ง'));
     await tester.pumpAndSettle();
     expect(find.text('ไม่พบสินค้าที่ตรงกับตัวกรอง'), findsOneWidget);
+  });
+  testWidgets('filters share one row on a narrow phone', (tester) async {
+    await open(tester, _Client(), const ShopCategoryScreen(categoryIndex: 0));
+    final fields = find.byType(DropdownButtonFormField<String>);
+    expect(
+        tester.getTopLeft(fields.first).dy, tester.getTopLeft(fields.last).dy);
+    expect(tester.getTopLeft(fields.last).dx,
+        greaterThan(tester.getTopRight(fields.first).dx));
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'wardrobe reads owned inventory without prices and saves selected equipment; failed save keeps draft',
+      (tester) async {
+    final client = _Client()..populated = true;
+    await open(tester, client, const ShopScreen(wardrobe: true));
+    expect(find.text('แต่งตัว'), findsOneWidget);
+    expect(find.byIcon(Icons.toll), findsNothing);
+    expect(client.calls.every((call) => call.path == '/api/avatar/inventory'),
+        isTrue);
+    expect(find.text('ผมของฉัน'), findsOneWidget);
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    await tester.tap(find.text('ผมของฉัน'));
+    await tester.pumpAndSettle();
+    expect(find.text('✓ เลือกอยู่'), findsOneWidget);
+    client.saveFail = true;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(find.text('บันทึกไม่ได้'), findsOneWidget);
+    expect(find.text('✓ เลือกอยู่'), findsOneWidget);
+    client.saveFail = false;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(client.saved, {
+      'equipment': [
+        {'slot': 'hair', 'itemId': 'owned-hair'}
+      ]
+    });
+    expect(find.text('บันทึกการแต่งตัวแล้ว'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets(
+      'wardrobe category sorting and rarity query inventory, never price',
+      (tester) async {
+    final client = _Client();
+    await open(tester, client,
+        const ShopCategoryScreen(categoryIndex: 0, wardrobe: true));
+    await tester.tap(find.byType(DropdownButtonFormField<String>).first);
+    await tester.pumpAndSettle();
+    expect(find.text('ราคา: ต่ำ → สูง'), findsNothing);
+    await tester.tap(find.text('หายากมากก่อน').last);
+    await tester.pumpAndSettle();
+    expect(client.calls.last.path, '/api/avatar/inventory');
+    expect(client.calls.last.queryParameters['sort'], 'rarity_desc');
+    await tester.tap(find.byType(DropdownButtonFormField<String>).last);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ตำนาน').last);
+    await tester.pumpAndSettle();
+    expect(client.calls.last.queryParameters['rarity'], 'legendary');
+    expect(tester.takeException(), isNull);
   });
 }

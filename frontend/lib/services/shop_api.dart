@@ -9,6 +9,8 @@ class ShopItem {
   final String id, name, rarity, image, description;
   final int price;
   final bool owned;
+  final String? slot;
+  final bool equipped;
   const ShopItem(
       {required this.id,
       required this.name,
@@ -16,7 +18,9 @@ class ShopItem {
       required this.image,
       required this.description,
       required this.price,
-      required this.owned});
+      required this.owned,
+      this.slot,
+      this.equipped = false});
   factory ShopItem.fromJson(Map<String, dynamic> json) {
     final item = json['item'] as Map<String, dynamic>;
     return ShopItem(
@@ -39,6 +43,49 @@ class ShopPage {
 class ShopApi {
   final ApiClient client;
   ShopApi(this.client);
+  Future<ShopPage> inventory(String slots,
+      {String sort = 'newest',
+      String? rarity,
+      int offset = 0,
+      int limit = 30}) async {
+    final query = Uri(queryParameters: {
+      'slot': slots,
+      'sort': sort,
+      'offset': '$offset',
+      'limit': '$limit',
+      if (rarity != null) 'rarity': rarity,
+    }).query;
+    final response =
+        await client.get('/api/avatar/inventory?$query', auth: true);
+    final data = response['data'] as Map<String, dynamic>;
+    return ShopPage(
+        (data['items'] as List).map((entry) {
+          final item = entry['item'] as Map<String, dynamic>;
+          return ShopItem(
+              id: item['id'] as String,
+              name: item['name'] as String,
+              rarity: item['rarity'] as String,
+              image: item['thumbnailUrl'] as String? ?? '',
+              description: item['description'] as String? ?? '',
+              price: 0,
+              owned: true,
+              slot: item['slot'] as String,
+              equipped: entry['equipped'] == true);
+        }).toList(),
+        (data['total'] as num).toInt());
+  }
+
+  Future<void> saveOutfit(Map<String, ShopItem> changes) async {
+    await client.put('/api/avatar/me', auth: true, body: {
+      'equipment': changes.entries
+          .map((entry) => {
+                'slot': entry.key,
+                'itemId': entry.value.id,
+              })
+          .toList(),
+    });
+  }
+
   Future<ShopPage> list(String slots,
       {String sort = 'featured',
       String? rarity,

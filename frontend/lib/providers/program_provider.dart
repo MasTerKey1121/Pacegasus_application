@@ -5,6 +5,7 @@ import '../services/program_api.dart';
 import '../services/onboarding_api.dart';
 import '../services/api_client.dart';
 import '../models/training_models.dart';
+import '../models/training_date.dart';
 import 'auth_provider.dart';
 
 final programApiProvider = Provider<ProgramApi>(
@@ -254,13 +255,13 @@ class ProgramNotifier extends ChangeNotifier {
   }
 
   Map<String, dynamic>? get todayQuest {
-    final today = DateTime.now();
+    final today = trainingToday();
     final todayKey =
         '${today.year.toString().padLeft(4, '0')}-${today.month.toString().padLeft(2, '0')}-${today.day.toString().padLeft(2, '0')}';
 
     for (final quest in quests) {
-      final scheduledDate = quest['scheduled_date']?.toString() ?? '';
-      if (scheduledDate.startsWith(todayKey)) return quest;
+      final scheduledDate = trainingDateKey(quest['scheduled_date']);
+      if (scheduledDate == todayKey) return quest;
     }
     return null;
   }
@@ -308,6 +309,7 @@ class ProgramNotifier extends ChangeNotifier {
       // rule check therefore cannot leave a partially saved plan behind.
       await _api.addQuestsBatch(quests);
       _isScheduleSaved = true;
+      await loadCurrentWeek();
       isSavingSchedule = false;
       notifyListeners();
       return true;
@@ -345,6 +347,7 @@ class ProgramNotifier extends ChangeNotifier {
         quests: quests,
       );
       _isScheduleSaved = true;
+      await loadCurrentWeek();
       isSavingSchedule = false;
       notifyListeners();
       return true;
@@ -408,7 +411,7 @@ class ProgramNotifier extends ChangeNotifier {
     if (templateLevel != null && templateLevel.isNotEmpty) {
       selectedTemplateLevel = templateLevel;
     }
-    final startDate = DateTime.tryParse(data['startDate']?.toString() ?? '');
+    final startDate = trainingDate(data['startDate']);
     if (startDate != null) _programStartDate = startDate;
     final rawQuests = data['quests'] as List<dynamic>? ?? const [];
     quests = rawQuests

@@ -43,6 +43,7 @@ const updateAvatarSchema = Joi.object({
   .options({ abortEarly: false, stripUnknown: true });
 
 const inventoryFiltersSchema = Joi.object({
+  sort: Joi.string().valid('newest', 'rarity_asc', 'rarity_desc').default('newest'),
   slot: Joi.csvArray().items(slotCodeSchema).max(30).unique(),
   rarity: Joi.csvArray().items(raritySchema).unique(),
   ...paging(50),

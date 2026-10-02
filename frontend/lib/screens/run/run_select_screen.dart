@@ -108,12 +108,13 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Row(children: [
-                RoundIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).pop()),
+                RoundIconButton(
+                    icon: Icons.arrow_back,
+                    onTap: () => Navigator.of(context).pop()),
                 const SizedBox(width: 14),
                 Text('เลือกประเภทการวิ่ง', style: AppText.heading(size: 18)),
               ]),
               const SizedBox(height: 20),
-
               Expanded(
                 child: SingleChildScrollView(
                   child: Column(
@@ -125,71 +126,85 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         children: _environments.map((e) {
                           final active = setup.environment == e['key'];
                           return GestureDetector(
-                            onTap: () => ref
-                                .read(runSetupProvider)
-                                .selectEnvironment(
-                                  env: e['key']!,
-                                  mainQuestSessionType: sessionType,
-                                ),
+                            onTap: () =>
+                                ref.read(runSetupProvider).selectEnvironment(
+                                      env: e['key']!,
+                                      mainQuestSessionType: sessionType,
+                                    ),
                             child: Container(
                               width: 96,
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               decoration: BoxDecoration(
-                                color: active ? AppColors.purple2.withOpacity(.18) : AppColors.card,
-                                border: Border.all(color: active ? AppColors.purple2 : AppColors.border),
+                                color: active
+                                    ? AppColors.purple2.withOpacity(.18)
+                                    : AppColors.card,
+                                border: Border.all(
+                                    color: active
+                                        ? AppColors.purple2
+                                        : AppColors.border),
                                 borderRadius: BorderRadius.circular(16),
                               ),
                               child: Column(children: [
-                                Text(e['icon']!, style: const TextStyle(fontSize: 22)),
+                                Text(e['icon']!,
+                                    style: const TextStyle(fontSize: 22)),
                                 const SizedBox(height: 6),
-                                Text(e['label']!, style: AppText.body(size: 12)),
+                                Text(e['label']!,
+                                    style: AppText.body(size: 12)),
                               ]),
                             ),
                           );
                         }).toList(),
                       ),
-
                       const SizedBox(height: 20),
-                      if (setup.isLoadingQuests) const Center(child: CircularProgressIndicator())
+                      if (setup.isLoadingQuests)
+                        const Center(child: CircularProgressIndicator())
                       else if (setup.environment != null) ...[
-                        const SectionLabel(title: 'Side Quest'),
+                        const SectionLabel(title: 'Side Quest วันนี้'),
+                        Text(
+                          'ทุกภารกิจพร้อมให้ทำระหว่างวิ่ง ทำอันไหนสำเร็จ ก็รับรางวัลของอันนั้น ไม่จำเป็นต้องทำครบทุกอัน',
+                          style: AppText.body(
+                              size: 12, color: AppColors.textSecondary),
+                        ),
+                        const SizedBox(height: 12),
                         if (setup.sideQuests.isEmpty)
                           Text('ไม่มี side quest สำหรับตัวเลือกนี้',
-                              style: AppText.body(size: 12, color: AppColors.textSecondary))
+                              style: AppText.body(
+                                  size: 12, color: AppColors.textSecondary))
                         else
                           ...setup.sideQuests.map((q) {
-                            final selected = setup.selectedInstanceIds.contains(q.instanceId);
-                            return GestureDetector(
-                              onTap: () => ref.read(runSetupProvider).toggleSideQuest(q.instanceId),
-                              child: AppCard(
-                                borderColor: selected ? AppColors.purple2 : null,
-                                child: Row(children: [
-                                  Text(q.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment: CrossAxisAlignment.start,
-                                      children: [
-                                        Text(q.title, style: AppText.heading(size: 13.5)),
-                                        Text(q.description, style: AppText.body(size: 11.5, color: AppColors.textSecondary)),
-                                      ],
-                                    ),
+                            return AppCard(
+                              child: Row(children: [
+                                Text(q.icon ?? '🎯',
+                                    style: const TextStyle(fontSize: 20)),
+                                const SizedBox(width: 10),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(q.title,
+                                          style: AppText.heading(size: 13.5)),
+                                      Text(q.description,
+                                          style: AppText.body(
+                                              size: 11.5,
+                                              color: AppColors.textSecondary)),
+                                      Text('รางวัล ${q.coinReward} เหรียญ',
+                                          style: AppText.body(
+                                              size: 11,
+                                              color: AppColors.gold1)),
+                                    ],
                                   ),
-                                  Icon(
-                                    selected ? Icons.check_circle : Icons.radio_button_unchecked,
-                                    color: selected ? AppColors.purple2 : AppColors.textSecondary,
-                                  ),
-                                ]),
-                              ),
+                                ),
+                              ]),
                             );
                           }),
                       ],
-
                       const SectionLabel(title: 'Main Quest วันนี้'),
                       AppCard(
                         child: todayQuest == null
                             ? Text('วันนี้ไม่มีเควสในตารางฝึก',
-                                style: AppText.body(size: 12, color: AppColors.textSecondary))
+                                style: AppText.body(
+                                    size: 12, color: AppColors.textSecondary))
                             : Text(
                                 '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
                                 style: AppText.heading(size: 13.5),
@@ -199,7 +214,6 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                   ),
                 ),
               ),
-
               const SizedBox(height: 16),
               if (setup.errorMessage != null) ...[
                 Text(
@@ -212,7 +226,9 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
               GradientButton(
                 label: setup.isStarting ? 'กำลังเริ่ม...' : 'เริ่มต้นการวิ่ง',
                 loading: setup.isStarting,
-                onTap: setup.environment == null || setup.isStarting
+                onTap: setup.environment == null ||
+                        setup.isLoadingQuests ||
+                        setup.isStarting
                     ? null
                     : () async {
                         final ok = await ref
@@ -220,11 +236,13 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                             .startRun(mainQuestSessionType: sessionType);
                         if (ok && context.mounted) {
                           Navigator.of(context).pushReplacement(
-                            MaterialPageRoute(builder: (_) => const RunSessionScreen()),
+                            MaterialPageRoute(
+                                builder: (_) => const RunSessionScreen()),
                           );
                         } else if (context.mounted &&
                             ref.read(runSetupProvider).errorMessage == null) {
-                          showAppToast(context, 'เริ่ม Session ไม่สำเร็จ กรุณาลองใหม่');
+                          showAppToast(
+                              context, 'เริ่ม Session ไม่สำเร็จ กรุณาลองใหม่');
                         }
                       },
               ),

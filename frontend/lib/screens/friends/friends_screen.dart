@@ -4,6 +4,7 @@ import '../../app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/friend_api.dart';
+import '../../widgets/player_profile_dialog.dart';
 
 final friendApiProvider =
     Provider<FriendApi>((ref) => FriendApi(ref.watch(apiClientProvider)));
@@ -244,32 +245,37 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
           borderRadius: BorderRadius.circular(20),
           border: Border.all(color: AppColors.border)),
       child: Column(children: [
-        Row(children: [
-          ClipOval(
-              child: entry.avatarUrl == null || entry.avatarUrl!.isEmpty
-                  ? _avatar()
-                  : Image.network(entry.avatarUrl!,
-                      width: 48,
-                      height: 48,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => _avatar())),
-          const SizedBox(width: 14),
-          Expanded(
-              child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                Text(entry.name,
-                    style: AppText.heading(size: 16),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis),
-                Text('UID: ${entry.uid}',
-                    style:
-                        AppText.body(size: 12, color: AppColors.textSecondary)),
-              ])),
-          if (_tab == 0)
-            const Icon(Icons.check_circle_outline,
-                color: AppColors.purple2, size: 20),
-        ]),
+        InkWell(
+            onTap: () async {
+              await showPlayerProfile(context, entry.uid);
+              if (mounted) await _load();
+            },
+            child: Row(children: [
+              ClipOval(
+                  child: entry.avatarUrl == null || entry.avatarUrl!.isEmpty
+                      ? _avatar()
+                      : Image.network(entry.avatarUrl!,
+                          width: 48,
+                          height: 48,
+                          fit: BoxFit.cover,
+                          errorBuilder: (_, __, ___) => _avatar())),
+              const SizedBox(width: 14),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(entry.name,
+                        style: AppText.heading(size: 16),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis),
+                    Text('UID: ${entry.uid}',
+                        style: AppText.body(
+                            size: 12, color: AppColors.textSecondary)),
+                  ])),
+              if (_tab == 0)
+                const Icon(Icons.check_circle_outline,
+                    color: AppColors.purple2, size: 20),
+            ])),
         if (_tab != 0) ...[
           const SizedBox(height: 12),
           if (busy)

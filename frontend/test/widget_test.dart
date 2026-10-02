@@ -22,6 +22,42 @@ import 'package:pacegasus/services/auth_api.dart';
 import 'package:pacegasus/services/onboarding_api.dart';
 import 'package:pacegasus/services/program_api.dart';
 import 'package:pacegasus/services/wellness_api.dart';
+import 'package:pacegasus/models/training_date.dart';
+
+class _CalendarApi extends ProgramApi {
+  _CalendarApi() : super(ApiClient(baseUrl: 'http://localhost'));
+  @override
+  Future<Map<String, dynamic>> getCurrentWeek() async {
+    final today = trainingToday();
+    String legacyDate(int offset) =>
+        DateTime.utc(today.year, today.month, today.day)
+            .add(Duration(days: offset))
+            .subtract(const Duration(hours: 7))
+            .toIso8601String();
+    return {
+      'data': {
+        'startDate': legacyDate(0),
+        'scheduleSaved': true,
+        'quests': [
+          {
+            'scheduled_date': legacyDate(0),
+            'session_type': 'easy',
+            'planned_value': 5,
+            'unit': 'km',
+            'status': 'pending'
+          },
+          {
+            'scheduled_date': legacyDate(1),
+            'session_type': 'long_run',
+            'planned_value': 10,
+            'unit': 'km',
+            'status': 'pending'
+          },
+        ]
+      }
+    };
+  }
+}
 
 class _FontManifest extends Fake implements AssetManifest {
   @override
@@ -160,7 +196,7 @@ void main() {
 
   Future<void> home(WidgetTester tester,
       {bool checkedIn = false,
-      _Program? program,
+      ProgramNotifier? program,
       Size size = const Size(390, 844)}) async {
     tester.view.physicalSize = size;
     tester.view.devicePixelRatio = 1;
@@ -181,6 +217,24 @@ void main() {
           find.byKey(const Key('home-quest-sheet')))
       .controller!
       .size;
+
+  testWidgets(
+      'a saved today quest offers start and shows today plan separately from schedule management',
+      (tester) async {
+    final program = ProgramNotifier(_CalendarApi(), _OnboardingApi());
+    await program.restore();
+    await home(tester, checkedIn: true, program: program);
+    expect(find.text('เริ่มวิ่ง'), findsOneWidget);
+    await tester.drag(
+        find.byKey(const Key('home-sheet-handle')), const Offset(0, -600));
+    await tester.pumpAndSettle();
+    expect(find.text('แผนวันนี้'), findsOneWidget);
+    expect(find.text('Easy Run · 5 km'), findsOneWidget);
+    expect(find.text('แผนสัปดาห์นี้'), findsNothing);
+    expect(find.textContaining('Long Run · 10'), findsNothing);
+    expect(find.text('จัดตารางซ้อม'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final existing in [false, true]) {
     testWidgets('registration screen opens schedule (existing=$existing)',
@@ -320,7 +374,7 @@ void main() {
     program.scheduled = false;
     program.notifyListeners();
     await tester.pumpAndSettle();
-    expect(find.text('จัดตารางซ้อม'), findsOneWidget);
+    expect(find.text('จัดตารางซ้อม'), findsWidgets);
     program.scheduled = true;
     program.quest = null;
     program.notifyListeners();

@@ -16,8 +16,13 @@ class WellnessNotifier extends ChangeNotifier {
   WellnessEntry entry = WellnessEntry();
 
   bool completedToday = false;
+  bool hasLoadedToday = false;
+  bool isLoadingToday = false;
   bool isSaving = false;
+  int awardedCoins = 0;
   String? errorMessage;
+  int _accountVersion = 0;
+  Future<bool>? _todayRequest;
 
   void update(void Function(WellnessEntry e) mutate) {
     mutate(entry);
@@ -25,14 +30,25 @@ class WellnessNotifier extends ChangeNotifier {
   }
 
   void reset() {
+    _accountVersion++;
+    _todayRequest = null;
     entry = WellnessEntry();
     completedToday = false;
+    hasLoadedToday = false;
+    isLoadingToday = false;
+    isSaving = false;
+    awardedCoins = 0;
     errorMessage = null;
     notifyListeners();
   }
 
   Future<bool> submit() async {
     if (isSaving) return false;
+    if (!hasLoadedToday || isLoadingToday) {
+      errorMessage = 'กรุณาโหลดสถานะ Wellness ของวันนี้ก่อนบันทึก';
+      notifyListeners();
+      return false;
+    }
     if (!entry.isComplete) {
       errorMessage = 'กรุณาเลือกข้อมูล Daily Wellness ให้ครบทุกข้อ';
       notifyListeners();
@@ -40,6 +56,8 @@ class WellnessNotifier extends ChangeNotifier {
     }
 
     isSaving = true;
+    awardedCoins = 0;
+    final accountVersion = _accountVersion;
     errorMessage = null;
     notifyListeners();
 
@@ -47,15 +65,22 @@ class WellnessNotifier extends ChangeNotifier {
       if (completedToday) {
         await api.update(entry.toApiJson());
       } else {
-        await api.create(entry.toApiJson());
+        final response = await api.create(entry.toApiJson());
+        if (accountVersion != _accountVersion) return false;
+        final reward = response['data']?['record']?['reward'];
+        if (reward is Map && reward['awarded'] == true) {
+          awardedCoins = (reward['coins'] as num?)?.toInt() ?? 0;
+        }
       }
 
+      if (accountVersion != _accountVersion) return false;
       completedToday = true;
       isSaving = false;
       notifyListeners();
 
       return true;
     } catch (e) {
+      if (accountVersion != _accountVersion) return false;
       errorMessage = e.toString();
       isSaving = false;
       notifyListeners();
@@ -64,22 +89,46 @@ class WellnessNotifier extends ChangeNotifier {
     }
   }
 
-  Future<void> loadToday() async {
+  Future<bool> loadToday() => _todayRequest ??= _loadToday();
+
+  Future<bool> _loadToday() async {
+    final accountVersion = _accountVersion;
+    isLoadingToday = true;
+    errorMessage = null;
+    notifyListeners();
     try {
       final response = await api.getToday();
+      if (accountVersion != _accountVersion) return false;
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final status = data['status'] as String?;
       final record = data['record'] as Map<String, dynamic>?;
+      if (status != 'done' && status != 'not_done') {
+        throw const FormatException('Invalid wellness status');
+      }
 
       completedToday = status == 'done';
-      if (record != null) {
-        entry = WellnessEntry.fromRecord(record);
-      }
-      notifyListeners();
+      entry =
+          record == null ? WellnessEntry() : WellnessEntry.fromRecord(record);
+      hasLoadedToday = true;
+      return true;
     } catch (_) {
-      // เป็น informational เฉยๆ ตาม doc ของ 4.1 (ไม่ gate flow อื่น)
-      // ถ้าเช็คไม่สำเร็จ ปล่อยผ่าน ให้ user กดเช็คอินตามปกติ
+      if (accountVersion == _accountVersion) {
+        errorMessage = 'โหลดสถานะ Wellness ของวันนี้ไม่สำเร็จ กรุณาลองใหม่';
+      }
+      return false;
+    } finally {
+      if (accountVersion == _accountVersion) {
+        isLoadingToday = false;
+        _todayRequest = null;
+        notifyListeners();
+      }
     }
+  }
+
+  @override
+  void dispose() {
+    _accountVersion++;
+    super.dispose();
   }
 }
 

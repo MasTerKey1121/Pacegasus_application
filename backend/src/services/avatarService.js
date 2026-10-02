@@ -180,7 +180,7 @@ async function updateMyAvatar(userId, { skinTone, equipment = [] }) {
   return loadAvatar(db, userId);
 }
 
-async function listInventory(userId, { slot, rarity, limit, offset }) {
+async function listInventory(userId, { slot, rarity, limit, offset, sort = 'newest' }) {
   return withClient(async (client) => {
     await ensureAvatar(client, userId);
     const params = [userId];
@@ -195,6 +195,10 @@ async function listInventory(userId, { slot, rarity, limit, offset }) {
     }
     params.push(limit, offset);
 
+    const rarityOrder = `CASE i.rarity WHEN 'common' THEN 0 WHEN 'rare' THEN 1 WHEN 'epic' THEN 2 WHEN 'legendary' THEN 3 END`;
+    const order = sort === 'rarity_asc' ? `${rarityOrder}, ui.acquired_at DESC, i.id`
+      : sort === 'rarity_desc' ? `${rarityOrder} DESC, ui.acquired_at DESC, i.id`
+        : 'ui.acquired_at DESC, i.name, i.id';
     const { rows } = await client.query(
       `SELECT ${ITEM_COLUMNS}, ui.source, ui.acquired_at,
               (e.item_id IS NOT NULL) AS equipped, COUNT(*) OVER () AS total_count
@@ -202,7 +206,7 @@ async function listInventory(userId, { slot, rarity, limit, offset }) {
        JOIN avatar_items i ON i.id = ui.item_id
        LEFT JOIN user_avatar_equipment e ON e.user_id = ui.user_id AND e.item_id = ui.item_id
        WHERE ${where.join(' AND ')}
-       ORDER BY ui.acquired_at DESC, i.name
+       ORDER BY ${order}
        LIMIT $${params.length - 1} OFFSET $${params.length}`,
       params
     );

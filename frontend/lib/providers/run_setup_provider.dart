@@ -37,8 +37,9 @@ class RunSetupNotifier extends ChangeNotifier {
 
   List<SideQuest> sideQuests = [];
 
-  /// เปลี่ยนจากเลือกได้ตัวเดียว -> เลือกได้หลายตัว
-  Set<String> selectedInstanceIds = {};
+  /// ทุกภารกิจพร้อมให้ทำ โดยไม่ต้องเลือกก่อนเริ่มวิ่ง
+  Set<String> get selectedInstanceIds =>
+      sideQuests.map((quest) => quest.instanceId).toSet();
 
   List<String> sideQuestIds = [];
 
@@ -61,7 +62,8 @@ class RunSetupNotifier extends ChangeNotifier {
     required String? mainQuestSessionType,
   }) async {
     environment = env;
-    selectedInstanceIds = {};
+    sideQuests = [];
+    activeSideQuests = [];
     sideQuestIds = [];
     isLoadingQuests = true;
     errorMessage = null;
@@ -83,9 +85,6 @@ class RunSetupNotifier extends ChangeNotifier {
           .whereType<Map>()
           .map((q) => SideQuest.fromJson(Map<String, dynamic>.from(q)))
           .toList(growable: false);
-
-      // User explicitly chooses which optional side quests to start.
-      selectedInstanceIds = {};
     } catch (e) {
       errorMessage = e.toString();
       sideQuests = [];
@@ -98,7 +97,7 @@ class RunSetupNotifier extends ChangeNotifier {
   Future<bool> startRun({
     required String? mainQuestSessionType,
   }) async {
-    if (environment == null) return false;
+    if (environment == null || isLoadingQuests || isStarting) return false;
 
     isStarting = true;
     errorMessage = null;
@@ -136,26 +135,21 @@ class RunSetupNotifier extends ChangeNotifier {
 
         sideQuestIds = list.map((e) => e['id'].toString()).toList();
 
-        // จับคู่ id ที่ backend คืนมา กับ title/description ของ quest ที่เลือกไว้
-        // (สมมติว่าลำดับที่คืนมาตรงกับลำดับที่ส่งไป — ดูหมายเหตุเรื่อง order ด้านบน)
-        final selected = selectedInstanceIds.toList();
         activeSideQuests = List.generate(sideQuestIds.length, (i) {
-          final match = i < selected.length
-              ? sideQuests.firstWhere(
-                  (q) => q.instanceId == selected[i],
-                  orElse: () => SideQuest(
-                      instanceId: selected[i],
-                      title: 'ภารกิจ',
-                      description: '',
-                      coinReward: 0),
-                )
-              : null;
+          final match = sideQuests.firstWhere(
+            (q) => q.instanceId == sideQuestIds[i],
+            orElse: () => SideQuest(
+                instanceId: sideQuestIds[i],
+                title: 'ภารกิจ',
+                description: '',
+                coinReward: 0),
+          );
           return ActiveSideQuest(
             sideQuestId: sideQuestIds[i],
-            title: match?.title ?? 'ภารกิจ',
-            description: match?.description ?? '',
-            icon: match?.icon,
-            coinReward: match?.coinReward ?? 0,
+            title: match.title,
+            description: match.description,
+            icon: match.icon,
+            coinReward: match.coinReward,
           );
         });
       }
@@ -196,21 +190,11 @@ class RunSetupNotifier extends ChangeNotifier {
   void reset() {
     environment = null;
     sideQuests = [];
-    selectedInstanceIds = {};
     sideQuestIds = [];
     activeSideQuests = [];
     _completingIds.clear();
     sessionId = null;
     errorMessage = null;
-    notifyListeners();
-  }
-
-  void toggleSideQuest(String instanceId) {
-    if (selectedInstanceIds.contains(instanceId)) {
-      selectedInstanceIds.remove(instanceId);
-    } else {
-      selectedInstanceIds.add(instanceId);
-    }
     notifyListeners();
   }
 
