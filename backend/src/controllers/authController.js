@@ -207,12 +207,19 @@ const googleAuth = asyncHandler(async (req, res) => {
       policyAcceptedAt: new Date(),
       policyVersion: '2026-07', // หรือดึงมาจาก config
     });
-  } else if (!user.avatar_url && profile.avatarUrl) {
-    const { rows } = await db.query(
-      `UPDATE users SET avatar_url = $2, email_verified = TRUE WHERE id = $1 RETURNING *`,
-      [user.id, profile.avatarUrl]
-    );
-    user = rows[0];
+  } else {
+    if (user.status && user.status !== 'active') {
+      throw new ApiError(403, 'บัญชีนี้ไม่สามารถใช้งานได้');
+    }
+    // Google ยืนยันอีเมลแล้ว (ตรวจใน verifyGoogleIdToken) -> ยืนยันบัญชีเดิมที่ค้าง OTP ได้เลย
+    if (!user.email_verified || (!user.avatar_url && profile.avatarUrl)) {
+      const { rows } = await db.query(
+        `UPDATE users SET email_verified = TRUE, avatar_url = COALESCE(avatar_url, $2)
+         WHERE id = $1 RETURNING *`,
+        [user.id, profile.avatarUrl || null]
+      );
+      user = rows[0];
+    }
   }
 
   await linkProvider(user.id, 'google', profile.googleId);

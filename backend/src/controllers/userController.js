@@ -2,6 +2,8 @@ const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const gameProgressService = require('../services/gameProgressService');
+const profileService = require('../services/profileService');
+const { uidSchema } = require('../utils/friendValidators');
 
 // GET /api/users/me/full -> profile + all onboarding data, handy for the app's home screen
 const getFullProfile = asyncHandler(async (req, res) => {
@@ -98,4 +100,12 @@ const deleteUser = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getFullProfile, getGameProgress, deleteUser };
+// GET /api/users/profile/:uid — โปรไฟล์ผู้ใช้ใดก็ได้จาก UID (เพื่อน/คนอื่น/ตัวเอง)
+const getProfileByUid = asyncHandler(async (req, res) => {
+  const { value: uid, error } = uidSchema.validate(req.params.uid);
+  if (error) throw new ApiError(400, 'UID ไม่ถูกต้อง', error.details.map(({ message }) => message));
+  const profile = await profileService.getProfileByUid(req.user.id, uid);
+  res.status(200).json({ success: true, data: profile });
+});
+
+module.exports = { getProfileByUid, getFullProfile, getGameProgress, deleteUser };

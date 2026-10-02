@@ -989,6 +989,156 @@
             "description": "**DELETE /api/users/me**\n\nลบบัญชีผู้ใช้ปัจจุบันและข้อมูลทั้งหมดที่เกี่ยวข้อง (Soft delete / Hard delete ตามการตั้งค่า backend)\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"message\": \"ลบบัญชีผู้ใช้สำเร็จ\"\n}\n```"
           },
           "response": []
+        },
+        {
+          "name": "3.4 Get User Profile by UID (other user)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Has profile fields (uid, name, avatar, club, distance)', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.user).to.have.property('uid');",
+                  "  pm.expect(data.user).to.have.property('displayName');",
+                  "  pm.expect(data.user).to.not.have.property('email');",
+                  "  pm.expect(data.avatar.equipment).to.be.an('array');",
+                  "  pm.expect(data).to.have.property('club');",
+                  "  pm.expect(data.stats.totalDistanceKm).to.be.a('number');",
+                  "  pm.expect(['self', 'friend', 'none']).to.include(data.relationship);",
+                  "});",
+                  "pm.test('Returns the requested uid', function () {",
+                  "  pm.expect(pm.response.json().data.user.uid).to.eql(pm.collectionVariables.get('friendUid').trim().toUpperCase());",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile/{{friendUid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile",
+                "{{friendUid}}"
+              ]
+            },
+            "description": "**GET /api/users/profile/:uid**\n\nหน้า Profile ของผู้ใช้ใดก็ได้จาก UID (เพื่อน / คนอื่น / ตัวเอง) ไม่ต้องเป็นเพื่อนกัน\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 3 },\n    \"relationship\": \"none\",\n    \"avatar\": { \"skinTone\": \"#F1C27D\", \"equipment\": [ { \"slot\": \"body\", \"layerOrder\": 2, \"colorHex\": null, \"item\": { \"code\": \"...\", \"name\": \"...\" } } ], \"updatedAt\": null },\n    \"club\": { \"id\": \"...\", \"name\": \"Pace Club\", \"imageUrl\": null, \"memberCount\": 3, \"maxMembers\": 20, \"role\": \"member\" },\n    \"stats\": { \"totalDistanceKm\": 12.35, \"totalRuns\": 4 }\n  }\n}\n```\n\n- `relationship`: `self` | `friend` | `none`\n- `club` เป็น `null` ถ้าไม่มีคลับ\n- `stats.totalDistanceKm` นับเฉพาะ running session ที่ `completed`\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ หรือบัญชีไม่ active |\n\nตั้งค่า `friendUid` เป็น UID ของบัญชีอื่นก่อนยิง"
+          },
+          "response": []
+        },
+        {
+          "name": "3.5 Get My Own Profile by UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () { pm.response.to.have.status(200); });",
+                  "pm.test('Has profile fields (uid, name, avatar, club, distance)', function () {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.user).to.have.property('uid');",
+                  "  pm.expect(data.user).to.have.property('displayName');",
+                  "  pm.expect(data.user).to.not.have.property('email');",
+                  "  pm.expect(data.avatar.equipment).to.be.an('array');",
+                  "  pm.expect(data).to.have.property('club');",
+                  "  pm.expect(data.stats.totalDistanceKm).to.be.a('number');",
+                  "  pm.expect(['self', 'friend', 'none']).to.include(data.relationship);",
+                  "});",
+                  "pm.test('relationship is self', function () { pm.expect(pm.response.json().data.relationship).to.eql('self'); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile/{{myUid}}",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile",
+                "{{myUid}}"
+              ]
+            },
+            "description": "**GET /api/users/profile/:uid**\n\nหน้า Profile ของผู้ใช้ใดก็ได้จาก UID (เพื่อน / คนอื่น / ตัวเอง) ไม่ต้องเป็นเพื่อนกัน\n\nต้องแนบ `Authorization: Bearer {{accessToken}}`\n\n### Response 200 OK\n```json\n{\n  \"success\": true,\n  \"data\": {\n    \"user\": { \"uid\": \"LL4X6G2V23\", \"displayName\": \"Runner B\", \"avatarUrl\": null, \"level\": 3 },\n    \"relationship\": \"none\",\n    \"avatar\": { \"skinTone\": \"#F1C27D\", \"equipment\": [ { \"slot\": \"body\", \"layerOrder\": 2, \"colorHex\": null, \"item\": { \"code\": \"...\", \"name\": \"...\" } } ], \"updatedAt\": null },\n    \"club\": { \"id\": \"...\", \"name\": \"Pace Club\", \"imageUrl\": null, \"memberCount\": 3, \"maxMembers\": 20, \"role\": \"member\" },\n    \"stats\": { \"totalDistanceKm\": 12.35, \"totalRuns\": 4 }\n  }\n}\n```\n\n- `relationship`: `self` | `friend` | `none`\n- `club` เป็น `null` ถ้าไม่มีคลับ\n- `stats.totalDistanceKm` นับเฉพาะ running session ที่ `completed`\n\n### Error\n| Status | เงื่อนไข |\n|---|---|\n| 400 | UID ผิดรูปแบบ |\n| 404 | ไม่พบผู้ใช้จาก UID นี้ หรือบัญชีไม่ active |\n\nใช้ `myUid` ที่ auto-save จาก 3.1"
+          },
+          "response": []
+        },
+        {
+          "name": "3.6 Validation - Invalid UID",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () { pm.response.to.have.status(400); });"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/profile/BAD-UID",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "profile",
+                "BAD-UID"
+              ]
+            },
+            "description": "UID ผิดรูปแบบ (ต้องเป็นตัวอักษร/ตัวเลข 10 ตัว) -> 400"
+          },
+          "response": []
         }
       ]
     },

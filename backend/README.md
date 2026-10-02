@@ -30,6 +30,7 @@ cp .env.example .env
 | `DATABASE_URL` | connection string ของ PostgreSQL (local หรือ Supabase) |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | สุ่มสตริงยาวๆ ที่ไม่ซ้ำกัน (ใช้ `openssl rand -hex 32`) |
 | `SMTP_HOST/PORT/USER/PASS` | สำหรับส่งอีเมล OTP — ถ้าใช้ Gmail ต้องสร้าง [App Password](https://myaccount.google.com/apppasswords) |
+| `GOOGLE_CLIENT_IDS` | (ไม่บังคับ) client id เพิ่มเติม เช่น Android/iOS คั่นด้วย comma — idToken ต้องมี `email_verified = true` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Client ID (ประเภท Web) จาก Google Cloud Console — ใช้ตรวจสอบ idToken ที่ frontend ส่งมา |
 
 ## 2) สร้างฐานข้อมูล
@@ -202,6 +203,7 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 | Method | Path | คำอธิบาย |
 |---|---|---|
 | GET | `/users/me/full` | รวมข้อมูลผู้ใช้ + basic info + injury/chronic condition + goals + running history ในครั้งเดียว (เหมาะกับหน้า Home/Profile) — `data.user.uid` คือ UID สำหรับแชร์ให้เพื่อนแอด |
+| GET | `/users/profile/:uid` | – | หน้า Profile ของผู้ใช้ใดก็ได้จาก UID (เพื่อน/คนอื่น/ตัวเอง): `user` (uid, displayName, avatarUrl, level), `avatar` (skinTone + equipment ที่ใส่อยู่ เรียงตาม layerOrder), `club` (id, name, imageUrl, role, memberCount / `null` ถ้าไม่มีคลับ), `stats` (`totalDistanceKm` จาก session ที่ completed, `totalRuns`), `relationship` = `self`/`friend`/`none` — ไม่พบ UID = 404 |
 | GET | `/users/me/progress` | coin, level, exp ของผู้ใช้ |
 | DELETE | `/users/me` | ลบบัญชีผู้ใช้โดยผู้ใช้เอง (soft delete) |
 

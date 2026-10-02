@@ -7,6 +7,7 @@ const router = express.Router();
 router.use(requireAuth);
 router.get('/me/full', userController.getFullProfile);
 router.get('/me/progress', userController.getGameProgress);
+router.get('/profile/:uid', userController.getProfileByUid);
 router.delete('/me', userController.deleteUser);
 
 module.exports = router;
