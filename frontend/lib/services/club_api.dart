@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../providers/auth_provider.dart';
 import 'api_client.dart';
@@ -8,6 +10,12 @@ final clubApiProvider =
 class ClubApi {
   final ApiClient client;
   ClubApi(this.client);
+  Future<String> uploadImage(Uint8List bytes) async {
+    final response = await client.post('/api/clubs/images',
+        body: {'imageBase64': base64Encode(bytes)}, auth: true);
+    return response['data']['imageUrl'] as String;
+  }
+
   Future<Map<String, dynamic>?> mine() async =>
       (await client.get('/api/clubs/me', auth: true))['data']
           as Map<String, dynamic>?;

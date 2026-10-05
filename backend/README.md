@@ -922,6 +922,12 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 ## หมายเหตุด้านความปลอดภัย
 
+รูปโปรไฟล์ Club: `POST /api/clubs/images` (ต้อง login) รับ `{ "imageBase64": "..." }`
+และคืน `data.imageUrl` สำหรับส่งต่อใน create/update club รองรับ JPG, PNG, WebP ไม่เกิน 2 MB
+รูปถูกเก็บที่ `backend/uploads/club-images` และเปิดอ่านผ่าน `/api/club-images/`.
+เมื่อ deploy ให้เก็บโฟลเดอร์นี้บน persistent volume หรือกำหนด `CLUB_IMAGE_DIR` เป็นตำแหน่งถาวร
+และใช้โดเมน API ที่ผู้ใช้เข้าถึงได้สำหรับคำขออัปโหลด รูปเดิมที่เป็น URL ยังใช้ได้ตามปกติ
+
 - OTP และ refresh token ไม่เคยถูกเก็บเป็น plaintext — เก็บเป็น bcrypt hash (OTP) และ sha256 hash (refresh token)
 - `otp_ref` ไม่ใช่ secret (ไม่ hash) — ใช้เพื่อระบุ "คำขอรอบไหน" เท่านั้น ความปลอดภัยของ OTP ยังขึ้นอยู่กับตัวรหัส OTP 6 หลักที่ hash ไว้เป็นหลัก
 - Rate limit บน endpoint ขอ/ยืนยัน OTP กันการยิงสแปม

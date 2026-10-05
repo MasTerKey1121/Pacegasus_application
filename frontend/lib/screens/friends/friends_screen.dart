@@ -429,6 +429,10 @@ class _AddFriendSheetState extends ConsumerState<_AddFriendSheet> {
                         label: Text(
                             _sending ? 'กำลังส่งคำขอ…' : 'ส่งคำขอเป็นเพื่อน')),
                     const SizedBox(height: 12),
+                    OutlinedButton.icon(
+                        onPressed: null,
+                        icon: const Icon(Icons.qr_code_scanner),
+                        label: const Text('เพิ่มด้วย QR Code • เร็ว ๆ นี้')),
                   ])),
         ),
       );

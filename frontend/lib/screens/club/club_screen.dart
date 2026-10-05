@@ -1,8 +1,10 @@
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/club_api.dart';
+import '../../services/club_image_picker.dart';
 import '../../widgets/player_profile_dialog.dart';
 import '../../widgets/common.dart';
 
@@ -231,7 +233,10 @@ class ClubFormScreen extends ConsumerStatefulWidget {
 
 class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
   final _form = GlobalKey<FormState>();
-  late final TextEditingController _name, _description, _image;
+  late final TextEditingController _name, _description;
+  String? _imageUrl;
+  Uint8List? _selectedImage;
+  bool _picking = false;
   bool _busy = false;
   String? _failure;
   @override
@@ -240,28 +245,32 @@ class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
     _name = TextEditingController(text: widget.club?['name'] as String?);
     _description =
         TextEditingController(text: widget.club?['description'] as String?);
-    _image = TextEditingController(text: widget.club?['imageUrl'] as String?);
+    _imageUrl = widget.club?['imageUrl'] as String?;
   }
 
   @override
   void dispose() {
     _name.dispose();
     _description.dispose();
-    _image.dispose();
     super.dispose();
   }
 
   Future<void> _save() async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy || _picking || !_form.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _failure = null;
     });
     try {
+      if (_selectedImage != null) {
+        _imageUrl =
+            await ref.read(clubApiProvider).uploadImage(_selectedImage!);
+        _selectedImage = null;
+      }
       await ref.read(clubApiProvider).save({
         'name': _name.text.trim(),
         'description': _description.text.trim(),
-        'imageUrl': _image.text.trim().isEmpty ? null : _image.text.trim()
+        'imageUrl': _imageUrl,
       }, id: widget.club?['id'] as String?);
       if (mounted) Navigator.pop(context);
     } catch (e) {
@@ -274,9 +283,28 @@ class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
     }
   }
 
+  Future<void> _pickImage() async {
+    if (_busy || _picking) return;
+    setState(() {
+      _picking = true;
+      _failure = null;
+    });
+    try {
+      final bytes = await ref.read(clubImagePickerProvider).pick();
+      if (mounted && bytes != null) setState(() => _selectedImage = bytes);
+    } catch (e) {
+      if (mounted) {
+        setState(() => _failure =
+            e is ApiException ? e.message : 'เลือกรูปไม่สำเร็จ กรุณาลองใหม่');
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext _) => PopScope(
-      canPop: !_busy,
+      canPop: !_busy && !_picking,
       child: _page(
           widget.club == null ? 'สร้างคลับ' : 'แก้ไขข้อมูลคลับ',
           SingleChildScrollView(
@@ -286,7 +314,36 @@ class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
                   child: Column(
                       crossAxisAlignment: CrossAxisAlignment.stretch,
                       children: [
-                        Center(child: _crest(_image.text.trim(), size: 96)),
+                        Center(
+                            child: _selectedImage == null
+                                ? _crest(_imageUrl, size: 96)
+                                : ClipRRect(
+                                    borderRadius: BorderRadius.circular(16),
+                                    child: Image.memory(_selectedImage!,
+                                        width: 96,
+                                        height: 96,
+                                        fit: BoxFit.cover))),
+                        const SizedBox(height: 12),
+                        OutlinedButton.icon(
+                            onPressed: _busy || _picking ? null : _pickImage,
+                            icon:
+                                const Icon(Icons.add_photo_alternate_outlined),
+                            label: Text(_picking
+                                ? 'กำลังเลือกรูป…'
+                                : 'เลือกรูปโปรไฟล์คลับ')),
+                        Center(
+                            child: Text('JPG, PNG หรือ WebP · ไม่เกิน 2 MB',
+                                style: AppText.body(
+                                    size: 12, color: AppColors.textSecondary))),
+                        if (_selectedImage != null || _imageUrl != null)
+                          TextButton(
+                              onPressed: _busy || _picking
+                                  ? null
+                                  : () => setState(() {
+                                        _selectedImage = null;
+                                        _imageUrl = null;
+                                      }),
+                              child: const Text('นำรูปออก')),
                         const SizedBox(height: 24),
                         TextFormField(
                             controller: _name,
@@ -310,24 +367,6 @@ class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
                                 labelText: 'คำอธิบายและกติกาคลับ',
                                 border: OutlineInputBorder())),
                         const SizedBox(height: 16),
-                        TextFormField(
-                            controller: _image,
-                            enabled: !_busy,
-                            keyboardType: TextInputType.url,
-                            onChanged: (_) => setState(() {}),
-                            decoration: const InputDecoration(
-                                labelText: 'ลิงก์รูปตราคลับ (ไม่บังคับ)',
-                                border: OutlineInputBorder()),
-                            validator: (value) {
-                              if ((value ?? '').trim().isEmpty) return null;
-                              final uri = Uri.tryParse(value!.trim());
-                              return uri != null &&
-                                      ['http', 'https'].contains(uri.scheme) &&
-                                      uri.host.isNotEmpty &&
-                                      value.length <= 2048
-                                  ? null
-                                  : 'กรอกลิงก์รูป http หรือ https ให้ถูกต้อง';
-                            }),
                         const SizedBox(height: 20),
                         const ListTile(
                             contentPadding: EdgeInsets.zero,
@@ -339,7 +378,7 @@ class _ClubFormScreenState extends ConsumerState<ClubFormScreen> {
                         if (_failure != null) _empty(_failure!),
                         const SizedBox(height: 20),
                         FilledButton(
-                            onPressed: _busy ? null : _save,
+                            onPressed: _busy || _picking ? null : _save,
                             child: Padding(
                                 padding: const EdgeInsets.all(14),
                                 child: Text(_busy
@@ -782,6 +821,8 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
   final _form = GlobalKey<FormState>();
   late final TextEditingController _input;
   bool _busy = false;
+  bool _picking = false;
+  Uint8List? _selectedImage;
   String? _failure;
   String get _label => {
         'name': 'ชื่อคลับ',
@@ -801,13 +842,17 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
   }
 
   Future<void> _save() async {
-    if (_busy || !_form.currentState!.validate()) return;
+    if (_busy || _picking || !_form.currentState!.validate()) return;
     setState(() {
       _busy = true;
       _failure = null;
     });
-    final value = _input.text.trim();
     try {
+      if (_selectedImage != null) {
+        _input.text = await ref.read(clubApiProvider).uploadImage(_selectedImage!);
+        _selectedImage = null;
+      }
+      final value = _input.text.trim();
       await ref.read(clubApiProvider).save({
         widget.field: widget.field == 'imageUrl' && value.isEmpty ? null : value
       }, id: widget.club['id'] as String);
@@ -825,9 +870,26 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
     }
   }
 
+  Future<void> _pickImage() async {
+    if (_busy || _picking) return;
+    setState(() { _picking = true; _failure = null; });
+    try {
+      final bytes = await ref.read(clubImagePickerProvider).pick();
+      if (mounted && bytes != null) {
+        setState(() => _selectedImage = bytes);
+      }
+    } catch (e) {
+      if (mounted) {
+        setState(() => _failure = e is ApiException ? e.message : 'เลือกรูปไม่สำเร็จ กรุณาลองใหม่');
+      }
+    } finally {
+      if (mounted) setState(() => _picking = false);
+    }
+  }
+
   @override
   Widget build(BuildContext context) => PopScope(
-      canPop: !_busy,
+      canPop: !_busy && !_picking,
       child: AlertDialog(
           title: Text('แก้ไข$_label'),
           content: SingleChildScrollView(
@@ -835,41 +897,27 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
                   key: _form,
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     if (widget.field == 'imageUrl') ...[
-                      _crest(_input.text.trim(), size: 80),
-                      const SizedBox(height: 12)
-                    ],
-                    TextFormField(
+                      _selectedImage == null
+                        ? _crest(_input.text.trim(), size: 80)
+                        : ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.memory(_selectedImage!, width: 80, height: 80, fit: BoxFit.cover)),
+                      const SizedBox(height: 12),
+                      OutlinedButton.icon(onPressed: _busy || _picking ? null : _pickImage, icon: const Icon(Icons.add_photo_alternate_outlined), label: Text(_picking ? 'กำลังเลือกรูป…' : 'เลือกรูปโปรไฟล์คลับ')),
+                      Text('JPG, PNG หรือ WebP · ไม่เกิน 2 MB', style: AppText.body(size: 12, color: AppColors.textSecondary)),
+                      if (_selectedImage != null || _input.text.isNotEmpty)
+                        TextButton(onPressed: _busy || _picking ? null : () => setState(() { _selectedImage = null; _input.clear(); }), child: const Text('นำรูปออก')),
+                    ] else
+                      TextFormField(
                         controller: _input,
                         enabled: !_busy,
-                        maxLength: widget.field == 'name'
-                            ? 40
-                            : widget.field == 'description'
-                                ? 500
-                                : 2048,
+                        maxLength: widget.field == 'name' ? 40 : 500,
                         maxLines: widget.field == 'description' ? 4 : 1,
-                        keyboardType: widget.field == 'imageUrl'
-                            ? TextInputType.url
-                            : TextInputType.text,
-                        onChanged: widget.field == 'imageUrl'
-                            ? (_) => setState(() {})
-                            : null,
                         decoration: InputDecoration(
-                            labelText: widget.field == 'imageUrl'
-                                ? 'ลิงก์รูปตราคลับ'
-                                : _label,
+                            labelText: _label,
                             border: const OutlineInputBorder()),
                         validator: (text) {
                           final value = (text ?? '').trim();
                           if (widget.field == 'name' && value.length < 3) {
                             return 'ชื่อคลับต้องมี 3–40 ตัวอักษร';
-                          }
-                          if (widget.field == 'imageUrl' && value.isNotEmpty) {
-                            final uri = Uri.tryParse(value);
-                            if (uri == null ||
-                                !['http', 'https'].contains(uri.scheme) ||
-                                uri.host.isEmpty) {
-                              return 'กรอกลิงก์รูป http หรือ https ให้ถูกต้อง';
-                            }
                           }
                           return null;
                         }),
@@ -879,10 +927,10 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
                   ]))),
           actions: [
             TextButton(
-                onPressed: _busy ? null : () => Navigator.pop(context),
+                onPressed: _busy || _picking ? null : () => Navigator.pop(context),
                 child: const Text('ยกเลิก')),
             FilledButton(
-                onPressed: _busy ? null : _save,
+                onPressed: _busy || _picking ? null : _save,
                 child: Text(_busy ? 'กำลังบันทึก…' : 'บันทึก'))
           ]));
 }
