@@ -228,6 +228,7 @@ module.exports = {
   listSlots,
   getMyAvatar,
   getAvatarByUid,
+  loadAvatar,
   updateMyAvatar,
   listInventory,
 };
