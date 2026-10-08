@@ -4,7 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home/main_shell.dart';
+import 'screens/auth/auth_destination.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -44,7 +44,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(authProvider).status;
+    final auth = ref.watch(authProvider);
+    final status = auth.status;
 
     switch (status) {
       case AuthStatus.checking:
@@ -52,7 +53,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           body: Center(child: CircularProgressIndicator()),
         );
       case AuthStatus.authenticated:
-        return const MainShell();
+        return authenticatedDestination(context, auth.user!);
       case AuthStatus.unauthenticated:
         return const LoginScreen();
     }

@@ -198,14 +198,11 @@ const googleAuth = asyncHandler(async (req, res) => {
 
   let user = await findUserByEmail(profile.email);
   if (!user) {
-    // สมัครด้วย Google จะถือว่ายอมรับ policy ในขั้นตอนนั้น
+    // Google verifies identity; the app asks for policy consent separately.
     user = await createUser(profile.email, {
       emailVerified: profile.emailVerified,
       displayName: profile.displayName,
       avatarUrl: profile.avatarUrl,
-      policyAccepted: true,
-      policyAcceptedAt: new Date(),
-      policyVersion: '2026-07', // หรือดึงมาจาก config
     });
   } else {
     if (user.status && user.status !== 'active') {

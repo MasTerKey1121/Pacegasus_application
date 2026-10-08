@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import '../services/api_client.dart';
 import '../services/auth_api.dart';
+import '../services/google_sign_in_service.dart';
 
 enum AuthStatus { checking, authenticated, unauthenticated }
 
@@ -12,7 +13,8 @@ class AuthState {
 
   const AuthState({required this.status, this.accessToken, this.user});
 
-  AuthState copyWith({AuthStatus? status, String? accessToken, Map<String, dynamic>? user}) {
+  AuthState copyWith(
+      {AuthStatus? status, String? accessToken, Map<String, dynamic>? user}) {
     return AuthState(
       status: status ?? this.status,
       accessToken: accessToken ?? this.accessToken,
@@ -27,18 +29,27 @@ final _secureStorage = FlutterSecureStorage();
 const _refreshTokenKey = 'refresh_token';
 
 final apiClientProvider = Provider<ApiClient>((ref) => ApiClient());
-final authApiProvider = Provider<AuthApi>((ref) => AuthApi(ref.read(apiClientProvider)));
+final authApiProvider =
+    Provider<AuthApi>((ref) => AuthApi(ref.read(apiClientProvider)));
+final googleSignInServiceProvider =
+    Provider<GoogleSignInService>((ref) => GoogleSignInService());
 
 final authProvider = StateNotifierProvider<AuthNotifier, AuthState>((ref) {
-  final notifier = AuthNotifier(ref.read(authApiProvider), ref.read(apiClientProvider));
+  final notifier = AuthNotifier(
+      ref.read(authApiProvider), ref.read(apiClientProvider),
+      googleSignIn: ref.read(googleSignInServiceProvider));
   return notifier;
 });
 
 class AuthNotifier extends StateNotifier<AuthState> {
   final AuthApi _authApi;
   final ApiClient _apiClient;
+  final GoogleSignInService _googleSignIn;
 
-  AuthNotifier(this._authApi, this._apiClient) : super(AuthState.initial) {
+  AuthNotifier(this._authApi, this._apiClient,
+      {GoogleSignInService? googleSignIn})
+      : _googleSignIn = googleSignIn ?? GoogleSignInService(),
+        super(AuthState.initial) {
     // ผูก ApiClient เข้ากับ token ปัจจุบัน + ตัว silent-refresh
     _apiClient.getAccessToken = () => state.accessToken;
     _apiClient.onUnauthorized = _silentRefresh;
@@ -58,16 +69,26 @@ class AuthNotifier extends StateNotifier<AuthState> {
   }
 
   void updateUser(Map<String, dynamic> user) {
-  state = state.copyWith(user: user);
-}
-  /// ตอน verify OTP สำเร็จ (login หรือ register)
+    state = state.copyWith(user: user);
+  }
+
+  Future<bool> signInWithGoogle() async {
+    final idToken = await _googleSignIn.signIn();
+    if (idToken == null) return false;
+    final response = await _authApi.google(idToken: idToken);
+    await completeLogin(response['data'] as Map<String, dynamic>);
+    return true;
+  }
+
+  /// Save the session returned by either OTP or Google authentication.
   Future<void> completeLogin(Map<String, dynamic> verifyResponseData) async {
     final accessToken = verifyResponseData['accessToken'] as String;
     final refreshToken = verifyResponseData['refreshToken'] as String;
     final user = verifyResponseData['user'] as Map<String, dynamic>;
 
     await _secureStorage.write(key: _refreshTokenKey, value: refreshToken);
-    state = AuthState(status: AuthStatus.authenticated, accessToken: accessToken, user: user);
+    state = AuthState(
+        status: AuthStatus.authenticated, accessToken: accessToken, user: user);
   }
 
   /// เรียกตอนเจอ 401 กลางทาง หรือตอน init() แอป — ยืด session ถ้ายัง refresh ได้
@@ -82,7 +103,8 @@ class AuthNotifier extends StateNotifier<AuthState> {
       // ถ้า backend หมุน refreshToken ใหม่ให้ (rotation) ก็เก็บอันใหม่ทับ
       final newRefreshToken = data['refreshToken'] as String?;
       if (newRefreshToken != null) {
-        await _secureStorage.write(key: _refreshTokenKey, value: newRefreshToken);
+        await _secureStorage.write(
+            key: _refreshTokenKey, value: newRefreshToken);
       }
 
       Map<String, dynamic>? user = state.user;
@@ -92,7 +114,10 @@ class AuthNotifier extends StateNotifier<AuthState> {
         user = meRes['data']['user'] as Map<String, dynamic>;
       }
 
-      state = AuthState(status: AuthStatus.authenticated, accessToken: newAccessToken, user: user);
+      state = AuthState(
+          status: AuthStatus.authenticated,
+          accessToken: newAccessToken,
+          user: user);
       return true;
     } catch (_) {
       await _secureStorage.delete(key: _refreshTokenKey);
