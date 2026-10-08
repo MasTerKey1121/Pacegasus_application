@@ -1,3 +1,5 @@
+import 'package:flutter/foundation.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 import 'api_client.dart';
@@ -25,6 +27,14 @@ class GoogleSignInService {
 
   /// A canceled account picker leaves the current app session unchanged.
   Future<String?> signIn() async {
+    // Check before initialize(): the plugin has no Windows/Linux implementation.
+    if (kIsWeb ||
+        (defaultTargetPlatform != TargetPlatform.android &&
+            defaultTargetPlatform != TargetPlatform.iOS &&
+            defaultTargetPlatform != TargetPlatform.macOS)) {
+      throw ApiException(0,
+          'Google login ในแอปนี้รองรับ Android และ iOS กรุณาทดสอบบนมือถือหรือ Android emulator');
+    }
     try {
       await _initialize();
       if (!GoogleSignIn.instance.supportsAuthenticate()) {
@@ -44,6 +54,13 @@ class GoogleSignInService {
             0, 'ตั้งค่า Google login ไม่ถูกต้อง กรุณาติดต่อผู้ดูแล');
       }
       throw ApiException(0, 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองใหม่');
+    } on MissingPluginException {
+      throw ApiException(
+          0, 'ยังไม่ได้โหลดส่วน Google login กรุณาปิดแอปแล้วรันใหม่ทั้งแอป');
+    } on PlatformException catch (error) {
+      debugPrint('Google sign-in platform error: ${error.code}');
+      throw ApiException(0,
+          'เปิด Google login ไม่สำเร็จ (${error.code}) กรุณาปิดแอปแล้วรันใหม่');
     }
   }
 }

@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pacegasus/providers/auth_provider.dart';
@@ -21,6 +22,21 @@ void main() {
   // These unit tests exercise real loopback HTTP, not widget network stubs.
   setUpAll(() => HttpOverrides.global = null);
   setUp(() => FlutterSecureStorage.setMockInitialValues({}));
+
+  test(
+      'Windows reports unsupported Google login before initializing the plugin',
+      () async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    await expectLater(
+      GoogleSignInService().signIn(),
+      throwsA(isA<ApiException>().having(
+        (error) => error.message,
+        'message',
+        contains('Android emulator'),
+      )),
+    );
+  });
 
   Future<AuthNotifier> createAuth(
       {String? token = 'google-id-token', int status = 200}) async {

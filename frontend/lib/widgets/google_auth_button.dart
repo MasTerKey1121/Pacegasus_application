@@ -39,10 +39,13 @@ class _GoogleAuthButtonState extends ConsumerState<GoogleAuthButton> {
       );
     } on ApiException catch (error) {
       if (mounted) showAppToast(context, error.message);
-    } catch (_) {
+    } catch (error, stackTrace) {
+      // Report the error type and stack, never Google or app tokens.
+      debugPrint('Google login failed: ${error.runtimeType}');
+      debugPrintStack(stackTrace: stackTrace);
       if (mounted) {
         showAppToast(
-            context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ กรุณาลองใหม่อีกครั้ง');
+            context, 'เข้าสู่ระบบด้วย Google ไม่สำเร็จ กรุณาลองใหม่อีกครั้ง');
       }
     } finally {
       if (mounted) {
