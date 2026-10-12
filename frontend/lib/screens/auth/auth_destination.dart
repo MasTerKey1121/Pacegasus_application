@@ -9,10 +9,13 @@ Widget authenticatedDestination(
       ? const MainShell()
       : const OnboardingBasicScreen();
   if (user['policyAccepted'] == true) return next;
+  // Keep the navigator, because the Google button's route is removed before
+  // the user accepts the terms. Its BuildContext is no longer valid then.
+  final navigator = Navigator.of(context);
   return TermsConsentScreen(
     email: user['email'] as String,
     onAcceptedDirectly: () {
-      Navigator.of(context).pushAndRemoveUntil(
+      navigator.pushAndRemoveUntil(
         MaterialPageRoute(builder: (_) => next),
         (route) => false,
       );

@@ -17,7 +17,7 @@ class TermsConsentScreen extends ConsumerStatefulWidget {
   /// จำเป็นเฉพาะตอน register
   final String? displayName;
 
-  /// ถ้าไม่เป็น null = login-mode (user login ผ่าน OTP มาแล้ว มี accessToken)
+  /// ถ้าไม่เป็น null = ยืนยันตัวตนผ่าน Google หรือ OTP แล้ว มี accessToken
   /// กด "ยินยอม" แค่บันทึกการยอมรับ policy ไม่ต้องขอ OTP ใหม่
   final VoidCallback? onAcceptedDirectly;
 
@@ -47,7 +47,7 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
       final authApi = ref.read(authApiProvider);
 
       if (widget.onAcceptedDirectly != null) {
-        // Login-mode: ผ่าน OTP login มาแล้ว แค่บันทึกการยอมรับ policy
+        // ยืนยันตัวตนแล้ว: บันทึกการยอมรับ policy โดยไม่ขอ OTP อีก
         final res = await authApi.acceptPolicy(policyVersion: _policyVersion);
         final updatedUser = res['data']['user'] as Map<String, dynamic>;
         ref.read(authProvider.notifier).updateUser(updatedUser);
