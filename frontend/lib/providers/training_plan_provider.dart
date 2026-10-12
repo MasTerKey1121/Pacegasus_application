@@ -1,6 +1,7 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/training_models.dart';
+import '../models/training_date.dart';
 import 'auth_provider.dart';
 
 class _Boundaries {
@@ -80,7 +81,9 @@ class TrainingPlanNotifier extends ChangeNotifier {
     if (!_hasPhases) return const WeekCaps(easy: 3, long: 1);
     final phase = getPhase(weekIndex);
     if (phase == PlanPhase.race) return const WeekCaps(easy: 4);
-    if (phase == PlanPhase.taper) return const WeekCaps(easy: 2, long: 1, tempo: 1);
+    if (phase == PlanPhase.taper) {
+      return const WeekCaps(easy: 2, long: 1, tempo: 1);
+    }
     final quality = weekIndex % 2 == 0 ? SessionType.vo2max : SessionType.tempo;
     return WeekCaps(
       easy: 2,
@@ -246,7 +249,7 @@ class TrainingPlanNotifier extends ChangeNotifier {
       startDate.month,
       startDate.day,
     ).add(Duration(days: weekIndex * 7 + 6));
-    final today = DateTime.now();
+    final today = trainingToday();
     final todayDate = DateTime(today.year, today.month, today.day);
     return !weekEnd.isBefore(todayDate);
   }
@@ -272,11 +275,12 @@ class TrainingPlanNotifier extends ChangeNotifier {
     _savedWeekIndexes.clear();
     _lockedWeekIndexes.clear();
     for (final quest in quests) {
-      final date = DateTime.tryParse(quest['scheduled_date']?.toString() ?? '');
+      final date = trainingDate(quest['scheduled_date']);
       final type = _sessionTypeFromApiValue(quest['session_type']?.toString());
       if (date == null || type == null) continue;
 
-      final offsetDays = DateTime(date.year, date.month, date.day).difference(start).inDays;
+      final offsetDays =
+          DateTime(date.year, date.month, date.day).difference(start).inDays;
       if (offsetDays < 0) continue;
       final weekIndex = offsetDays ~/ 7;
       final dayIndex = offsetDays % 7;
@@ -290,7 +294,8 @@ class TrainingPlanNotifier extends ChangeNotifier {
     }
 
     var resumeWeek = 0;
-    while (resumeWeek < planWeeks - 1 && _savedWeekIndexes.contains(resumeWeek)) {
+    while (
+        resumeWeek < planWeeks - 1 && _savedWeekIndexes.contains(resumeWeek)) {
       resumeWeek++;
     }
     currentWeek = resumeWeek;
@@ -320,7 +325,8 @@ class TrainingPlanNotifier extends ChangeNotifier {
   }
 }
 
-final trainingPlanProvider = ChangeNotifierProvider<TrainingPlanNotifier>((ref) {
+final trainingPlanProvider =
+    ChangeNotifierProvider<TrainingPlanNotifier>((ref) {
   final notifier = TrainingPlanNotifier();
   ref.listen<AuthState>(authProvider, (previous, next) {
     if (previous?.user?['id'] != next.user?['id']) notifier.reset();

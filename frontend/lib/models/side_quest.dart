@@ -17,7 +17,10 @@ class SideQuest {
         instanceId: (json['instanceId'] ?? json['id'] ?? '').toString(),
         title: (json['title'] ?? json['name'] ?? '').toString(),
         description: (json['description'] ?? '').toString(),
-        coinReward: (json['coinReward'] ?? json['reward'] ?? 0) as int,
+        coinReward: (json['coinReward'] ??
+            json['coinRewardBase'] ??
+            json['reward'] ??
+            0) as int,
         icon: json['icon']?.toString(),
       );
 }

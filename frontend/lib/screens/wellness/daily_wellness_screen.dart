@@ -28,22 +28,34 @@ class DailyWellnessScreen extends ConsumerWidget {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(children: [
-                  RoundIconButton(icon: Icons.arrow_back, onTap: () => Navigator.of(context).pop()),
+                  RoundIconButton(
+                      icon: Icons.arrow_back,
+                      onTap: () => Navigator.of(context).pop()),
                   const SizedBox(width: 14),
-                  Text('Daily Wellness Check-in', style: AppText.heading(size: 17)),
+                  Text('Daily Wellness Check-in',
+                      style: AppText.heading(size: 17)),
                 ]),
                 const SizedBox(height: 18),
                 AppCard(
                   borderColor: AppColors.gold1.withValues(alpha: 0.35),
                   backgroundGradient: LinearGradient(
-                    colors: [AppColors.gold1.withValues(alpha: 0.12), AppColors.gold1.withValues(alpha: 0.02)],
+                    colors: [
+                      AppColors.gold1.withValues(alpha: 0.12),
+                      AppColors.gold1.withValues(alpha: 0.02)
+                    ],
                   ),
                   child: Row(
                     children: [
-                      Text('ทำครบรับ +10 🌙', style: AppText.heading(size: 13.5, color: AppColors.gold1)),
+                      Text(
+                          state.completedToday
+                              ? 'เช็กอินวันนี้แล้ว · แก้ไขข้อมูลได้'
+                              : 'ทำครบรับ +5 🌙',
+                          style: AppText.heading(
+                              size: 13.5, color: AppColors.gold1)),
                       const Spacer(),
                       Text('${today.day}/${today.month}/${today.year}',
-                          style: AppText.body(size: 12, color: AppColors.textSecondary)),
+                          style: AppText.body(
+                              size: 12, color: AppColors.textSecondary)),
                     ],
                   ),
                 ),
@@ -61,7 +73,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           minCaption: 'แย่มาก',
                           maxCaption: 'ดีมาก',
                           displayText: entry.sleepQuality == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.sleepQuality = v.round()),
+                          onChanged: (v) => notifier
+                              .update((e) => e.sleepQuality = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
@@ -73,7 +86,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           maxCaption: '12 ชม.',
                           valueFormatter: (v) => '${v.round()}h',
                           displayText: entry.sleepHours == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.sleepHours = v),
+                          onChanged: (v) =>
+                              notifier.update((e) => e.sleepHours = v),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
@@ -84,8 +98,10 @@ class DailyWellnessScreen extends ConsumerWidget {
                           divisions: _wellnessScoreDivisions,
                           minCaption: 'ไม่มี',
                           maxCaption: 'เมื่อยมาก',
-                          displayText: entry.muscleSoreness == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.muscleSoreness = v.round()),
+                          displayText:
+                              entry.muscleSoreness == null ? '—' : null,
+                          onChanged: (v) => notifier
+                              .update((e) => e.muscleSoreness = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
@@ -97,7 +113,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           minCaption: 'อ่อนแรง',
                           maxCaption: 'เต็มพลัง',
                           displayText: entry.energyLevel == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.energyLevel = v.round()),
+                          onChanged: (v) =>
+                              notifier.update((e) => e.energyLevel = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
@@ -109,7 +126,8 @@ class DailyWellnessScreen extends ConsumerWidget {
                           minCaption: 'ผ่อนคลาย',
                           maxCaption: 'เครียดมาก',
                           displayText: entry.stressLevel == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.stressLevel = v.round()),
+                          onChanged: (v) =>
+                              notifier.update((e) => e.stressLevel = v.round()),
                         ),
                         const SizedBox(height: 18),
                         LabeledSlider(
@@ -121,14 +139,19 @@ class DailyWellnessScreen extends ConsumerWidget {
                           minCaption: 'ไม่อยากทำเลย',
                           maxCaption: 'พร้อมมาก',
                           displayText: entry.motivation == null ? '—' : null,
-                          onChanged: (v) => notifier.update((e) => e.motivation = v.round()),
+                          onChanged: (v) =>
+                              notifier.update((e) => e.motivation = v.round()),
                         ),
                       ],
                     ),
                   ),
                 ),
                 GradientButton(
-                  label: state.isSaving ? 'กำลังบันทึก...' : 'บันทึก',
+                  label: state.isSaving
+                      ? 'กำลังบันทึก...'
+                      : state.completedToday
+                          ? 'บันทึกการแก้ไข'
+                          : 'บันทึก',
                   onTap: state.isSaving || !entry.isComplete
                       ? null
                       : () async {
@@ -137,10 +160,17 @@ class DailyWellnessScreen extends ConsumerWidget {
 
                           if (ok) {
                             ref.read(missionProvider).setDone('wellness', true);
-                            ref.read(userProvider).addReward(coin: 10);
+                            if (state.awardedCoins > 0) {
+                              ref
+                                  .read(userProvider)
+                                  .addReward(coin: state.awardedCoins);
+                            }
                             Navigator.of(context).pop();
                           } else {
-                            showAppToast(context, state.errorMessage ?? 'บันทึกไม่สำเร็จ กรุณาลองใหม่');
+                            showAppToast(
+                                context,
+                                state.errorMessage ??
+                                    'บันทึกไม่สำเร็จ กรุณาลองใหม่');
                           }
                         },
                 ),
