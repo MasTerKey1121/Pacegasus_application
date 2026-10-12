@@ -5,6 +5,7 @@ import 'app_theme.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/home/main_shell.dart';
+import 'navigation/home_route_observer.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ class PacegasusApp extends StatelessWidget {
       title: 'Pacegasus',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      navigatorObservers: [homeRouteObserver],
       home: const AuthGate(),
     );
   }

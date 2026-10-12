@@ -166,13 +166,19 @@ void main() {
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ProviderScope(overrides: [
-      authProvider.overrideWith((ref) => _Auth()),
-      programProvider.overrideWith((ref) => program ?? _Program()),
-      wellnessProvider.overrideWith((ref) =>
-          WellnessNotifier(WellnessApi(ApiClient(baseUrl: 'http://localhost')))
+    await tester.pumpWidget(ProviderScope(
+        overrides: [
+          authProvider.overrideWith((ref) => _Auth()),
+          programProvider.overrideWith((ref) => program ?? _Program()),
+          wellnessProvider.overrideWith((ref) => WellnessNotifier(
+              WellnessApi(ApiClient(baseUrl: 'http://localhost')))
             ..completedToday = checkedIn),
-    ], child: MaterialApp(theme: ThemeData.dark(), home: const HomeScreen())));
+        ],
+        child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: HomeScreen(
+              avatarRendererBuilder: (_) => const SizedBox(),
+            ))));
     await tester.pumpAndSettle();
   }
 

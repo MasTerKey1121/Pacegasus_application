@@ -25,7 +25,8 @@ const _accent = Color(0xFFC5A2FF);
 const _lime = Color(0xFFD6F5A6);
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.avatarRendererBuilder});
+  final WidgetBuilder? avatarRendererBuilder;
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
@@ -237,7 +238,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   child: SizedBox(
                       width: 230,
                       height: avatarHeight,
-                      child: const HomeAvatar()),
+                      child: HomeAvatar(
+                          rendererBuilder: widget.avatarRendererBuilder)),
                 ),
               )),
             ),
