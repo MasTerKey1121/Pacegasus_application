@@ -28,3 +28,13 @@ Normal app:
 
 The preview entrypoint is separate from the production app's authentication.
 Mobile runtime rendering and performance still need device testing.
+
+## Size and rotation
+
+The Home model viewport now targets twice its former width/height, capped to
+the available screen area on small devices. The avatar-only view uses more
+of the screen. This is a presentation change; the GLB geometry is unchanged.
+Drag left/right over the avatar to turn the camera through an unrestricted
+360 degrees. A tap still toggles the avatar-only view. Dragging changes only
+the camera orbit and does not recreate the viewer or restart its animation.
+The orbit returns to the front on a new Home entry.

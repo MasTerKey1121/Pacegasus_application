@@ -1,7 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:pacegasus/navigation/home_route_observer.dart';
 import 'package:pacegasus/screens/home/home_avatar.dart';
+import 'package:pacegasus/screens/home/avatar_renderer.dart';
 
 class _Probe extends StatefulWidget {
   const _Probe(this.onStart);
@@ -22,6 +24,38 @@ class _ProbeState extends State<_Probe> {
 }
 
 void main() {
+  testWidgets('drag rotates through 360 without triggering the parent tap',
+      (tester) async {
+    debugDefaultTargetPlatformOverride = TargetPlatform.windows;
+    addTearDown(() => debugDefaultTargetPlatformOverride = null);
+    var taps = 0;
+    await tester.pumpWidget(MaterialApp(
+        home: Scaffold(
+            body: Center(
+      child: GestureDetector(
+          onTap: () => taps++,
+          child: const SizedBox(width: 460, height: 600, child: HomeAvatar())),
+    ))));
+    final viewer = find.byType(AvatarRenderer);
+    expect(tester.widget<AvatarRenderer>(viewer).orbitDegrees, 0);
+    await tester.drag(
+        find.byKey(const Key('avatar-rotation')), const Offset(200, 0));
+    await tester.pump();
+    expect(
+        tester.widget<AvatarRenderer>(viewer).orbitDegrees, closeTo(220, .01));
+    expect(taps, 0);
+    // More than a full turn wraps the angle instead of clamping it.
+    await tester.drag(
+        find.byKey(const Key('avatar-rotation')), const Offset(-600, 0));
+    await tester.pump();
+    expect(
+        tester.widget<AvatarRenderer>(viewer).orbitDegrees, closeTo(280, .01));
+    await tester.tap(find.byKey(const Key('avatar-rotation')));
+    await tester.pump();
+    expect(taps, 1);
+    await tester.pumpWidget(const SizedBox());
+    debugDefaultTargetPlatformOverride = null;
+  });
   testWidgets('greets once per page entry, not rebuild or dialog',
       (tester) async {
     var starts = 0;

@@ -203,8 +203,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: SafeArea(child: LayoutBuilder(builder: (context, constraints) {
           final height = constraints.maxHeight;
           _minimum = (48 / height).clamp(.04, .16);
-          final avatarHeight = math.min(330.0, height * .48);
-          final avatarTop = math.max(205.0, height * .31);
+          final originalAvatarHeight = math.min(330.0, height * .48);
+          final avatarTop = math.min(160.0, height * .25);
+          final avatarHeight = math.min(originalAvatarHeight * 2,
+                  _avatarOnly ? height - 24 : height - avatarTop - 12) *
+              .9;
+          final avatarWidth = math.min(460.0, constraints.maxWidth - 24) * .9;
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
@@ -227,7 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
-              top: _avatarOnly ? (height - avatarHeight) / 2 : avatarTop,
+              top: (_avatarOnly ? (height - avatarHeight) / 2 : avatarTop) - 5,
               left: 0,
               right: 0,
               height: avatarHeight,
@@ -240,7 +244,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onTap: () => setState(() => _avatarOnly = !_avatarOnly),
                   borderRadius: BorderRadius.circular(100),
                   child: SizedBox(
-                      width: 230,
+                      width: avatarWidth,
                       height: avatarHeight,
                       child: HomeAvatar(
                           rendererBuilder: widget.avatarRendererBuilder)),

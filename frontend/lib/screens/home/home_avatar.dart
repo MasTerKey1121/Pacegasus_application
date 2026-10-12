@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/gestures.dart';
 import '../../navigation/home_route_observer.dart';
 import 'avatar_renderer.dart';
 
@@ -14,6 +15,7 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
   PageRoute<dynamic>? _route;
   bool _visible = true;
   int _entry = 0;
+  double _orbitDegrees = 0;
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -31,6 +33,7 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
   void didPopNext() => setState(() {
         _visible = true;
         _entry++;
+        _orbitDegrees = 0;
       });
   @override
   void dispose() {
@@ -40,24 +43,31 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
 
   @override
   Widget build(BuildContext context) => ExcludeSemantics(
+      child: GestureDetector(
+          key: const Key('avatar-rotation'),
+          behavior: HitTestBehavior.opaque,
+            dragStartBehavior: DragStartBehavior.down,
+          onHorizontalDragUpdate: (details) => setState(() {
+                _orbitDegrees = (_orbitDegrees - details.delta.dx * .7) % 360;
+              }),
           child: Stack(alignment: Alignment.center, children: [
-        Positioned(
-            bottom: 4,
-            width: 175,
-            height: 35,
-            child: DecoratedBox(
-                decoration: BoxDecoration(
-                    borderRadius: BorderRadius.circular(100),
-                    gradient: const LinearGradient(
-                        colors: [Color(0xFF9570AC), Color(0xFF352640)],
-                        begin: Alignment.topCenter,
-                        end: Alignment.bottomCenter)))),
-        if (_visible)
-          Positioned.fill(
-              child: IgnorePointer(
-                  child: KeyedSubtree(
-                      key: ValueKey(_entry),
-                      child: widget.rendererBuilder?.call(context) ??
-                          const AvatarRenderer()))),
-      ]));
+            Positioned(
+                bottom: 4,
+                width: 350,
+                height: 35,
+                child: DecoratedBox(
+                    decoration: BoxDecoration(
+                        borderRadius: BorderRadius.circular(100),
+                        gradient: const LinearGradient(
+                            colors: [Color(0xFF9570AC), Color(0xFF352640)],
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter)))),
+            if (_visible)
+              Positioned.fill(
+                  child: IgnorePointer(
+                      child: KeyedSubtree(
+                          key: ValueKey(_entry),
+                          child: widget.rendererBuilder?.call(context) ??
+                              AvatarRenderer(orbitDegrees: _orbitDegrees)))),
+          ])));
 }

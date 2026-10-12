@@ -17,7 +17,8 @@ class _Preview extends StatelessWidget {
         appBar: AppBar(title: const Text('Pacegasus · Avatar preview')),
         body: Center(
             child: Column(mainAxisSize: MainAxisSize.min, children: [
-          const SizedBox(width: 280, height: 380, child: HomeAvatar()),
+          Flexible(
+              child: SizedBox(width: 560, height: 760, child: HomeAvatar())),
           const SizedBox(height: 24),
           FilledButton(
               onPressed: () => Navigator.of(context).push(

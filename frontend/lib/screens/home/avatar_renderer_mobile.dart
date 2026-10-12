@@ -1,9 +1,26 @@
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
+import 'package:webview_flutter/webview_flutter.dart';
 
-class AvatarRenderer extends StatelessWidget {
-  const AvatarRenderer({super.key});
+class AvatarRenderer extends StatefulWidget {
+  const AvatarRenderer({super.key, this.orbitDegrees = 0});
+  final double orbitDegrees;
+  @override
+  State<AvatarRenderer> createState() => _AvatarRendererState();
+}
+
+class _AvatarRendererState extends State<AvatarRenderer> {
+  WebViewController? _controller;
+  @override
+  void didUpdateWidget(covariant AvatarRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.orbitDegrees != oldWidget.orbitDegrees) {
+      _controller?.runJavaScript(
+          "document.querySelector('model-viewer')?.setAttribute('camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');");
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
     if (defaultTargetPlatform != TargetPlatform.android &&
@@ -12,7 +29,7 @@ class AvatarRenderer extends StatelessWidget {
           child: Text('โมเดล 3D ใช้ได้บนมือถือและเว็บ',
               textAlign: TextAlign.center));
     }
-    return const ModelViewer(
+    return ModelViewer(
       src: 'assets/models/pacegasus_wave_male_v8.glb',
       alt: 'Pacegasus runner',
       backgroundColor: Colors.transparent,
@@ -20,7 +37,8 @@ class AvatarRenderer extends StatelessWidget {
       cameraControls: false,
       disableZoom: true,
       autoPlay: false,
-      cameraOrbit: '0deg 85deg 105%',
+      cameraOrbit: '${widget.orbitDegrees}deg 85deg 105%',
+      onWebViewCreated: (controller) => _controller = controller,
       shadowIntensity: 0.6,
       animationCrossfadeDuration: 150,
       debugLogging: false,

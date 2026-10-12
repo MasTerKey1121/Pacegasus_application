@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 class AvatarRenderer extends StatefulWidget {
-  const AvatarRenderer({super.key});
+  const AvatarRenderer({super.key, this.orbitDegrees = 0});
+  final double orbitDegrees;
   @override
   State<AvatarRenderer> createState() => _AvatarRendererState();
 }
@@ -40,7 +41,8 @@ class _AvatarRendererState extends State<AvatarRenderer> {
     element.style.pointerEvents = 'none';
     element.setAttribute(
         'src', 'assets/assets/models/pacegasus_wave_male_v8.glb');
-    element.setAttribute('camera-orbit', '0deg 85deg 105%');
+    element.setAttribute(
+        'camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');
     element.setAttribute('shadow-intensity', '0.6');
     element.setAttribute('animation-crossfade-duration', '150');
     _load = ((web.Event event) {
@@ -57,6 +59,15 @@ class _AvatarRendererState extends State<AvatarRenderer> {
     element.addEventListener('load', _load);
     element.addEventListener('finished', _finished);
     element.addEventListener('error', _error);
+  }
+
+  @override
+  void didUpdateWidget(covariant AvatarRenderer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.orbitDegrees != widget.orbitDegrees) {
+      _element?.setAttribute(
+          'camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');
+    }
   }
 
   @override

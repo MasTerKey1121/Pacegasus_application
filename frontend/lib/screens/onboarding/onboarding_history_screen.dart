@@ -251,6 +251,15 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                               // registration step.  Do not call API 5.1 here:
                               // the user registers the plan after Daily Wellness.
                               ref.read(programProvider).setOnboardingLevel(level);
+                              final user = ref.read(authProvider).user;
+                              if (user != null &&
+                                  responseData?['onboardingCompleted'] == true) {
+                                ref.read(authProvider.notifier).updateUser({
+                                  ...user,
+                                  'onboardingCompleted': true,
+                                  'onboardingStep': 4,
+                                });
+                              }
                             },
                           );
                           if (ok && context.mounted) {
