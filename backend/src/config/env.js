@@ -43,5 +43,9 @@ module.exports = {
 
   google: {
     clientId: process.env.GOOGLE_CLIENT_ID,
+    // Web/Android/iOS ใช้ client id คนละตัว — ใส่เพิ่มได้คั่นด้วย comma
+    clientIds: [process.env.GOOGLE_CLIENT_ID, ...(process.env.GOOGLE_CLIENT_IDS || '').split(',')]
+      .map((id) => (id || '').trim())
+      .filter(Boolean),
   },
 };

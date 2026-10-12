@@ -279,16 +279,14 @@ async function disbandClub(userId, clubId) {
   });
 }
 
-// หัวหน้าออกได้เมื่ออยู่คนเดียว (คลับถูกยุบ) ไม่อย่างนั้นต้องโอนตำแหน่งก่อน
+// หัวหน้าต้องโอนตำแหน่งก่อนเสมอ การออกต้องไม่ยุบคลับโดยอัตโนมัติ
 async function leaveClub(userId, clubId) {
   return withTransaction(async (client) => {
-    const club = await lockClub(client, clubId);
+    await lockClub(client, clubId);
     const membership = await requireMember(client, clubId, userId);
 
     if (membership.role === 'leader') {
-      if (club.member_count > 1) throw new ApiError(409, 'กรุณาโอนตำแหน่งหัวหน้าให้สมาชิกคนอื่นก่อนออกจากคลับ');
-      await client.query(`DELETE FROM clubs WHERE id = $1`, [clubId]);
-      return { clubId, action: 'disbanded' };
+      throw new ApiError(409, 'กรุณาโอนตำแหน่งหัวหน้าให้สมาชิกคนอื่นก่อนออกจากคลับ');
     }
 
     await client.query(`DELETE FROM club_members WHERE club_id = $1 AND user_id = $2`, [clubId, userId]);

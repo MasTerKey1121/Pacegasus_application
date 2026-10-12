@@ -2,8 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
+import '../../widgets/google_auth_button.dart';
 import 'terms_screen.dart';
-import '../onboarding/onboarding_basic_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
   const RegisterScreen({super.key});
@@ -15,6 +15,7 @@ class RegisterScreen extends ConsumerStatefulWidget {
 class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
+  bool _googleLoading = false;
 
   @override
   void dispose() {
@@ -57,11 +58,18 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
               children: [
                 PacegasusLogo(),
                 const SizedBox(height: 18),
-                Text('Pacegasus', style: AppText.heading(size: 26, color: AppColors.gold1, weight: FontWeight.w700)),
+                Text('Pacegasus',
+                    style: AppText.heading(
+                        size: 26,
+                        color: AppColors.gold1,
+                        weight: FontWeight.w700)),
                 const SizedBox(height: 6),
                 Text('สมัครสมาชิก', style: AppText.heading(size: 18)),
                 const SizedBox(height: 32),
-                AppTextField(label: 'ชื่อที่แสดง', hint: 'ชื่อของคุณ', controller: _nameController),
+                AppTextField(
+                    label: 'ชื่อที่แสดง',
+                    hint: 'ชื่อของคุณ',
+                    controller: _nameController),
                 const SizedBox(height: 16),
                 AppTextField(
                   label: 'Email',
@@ -72,36 +80,41 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 16),
                 GradientButton(
                   label: 'สมัครสมาชิก',
-                  onTap: _goToTerms,
+                  onTap: _googleLoading ? null : _goToTerms,
                 ),
                 const SizedBox(height: 22),
                 Row(children: [
                   Expanded(child: Divider(color: AppColors.border)),
                   Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 12),
-                    child: Text('หรือ', style: AppText.body(size: 12.5, color: AppColors.textTertiary)),
+                    child: Text('หรือ',
+                        style: AppText.body(
+                            size: 12.5, color: AppColors.textTertiary)),
                   ),
                   Expanded(child: Divider(color: AppColors.border)),
                 ]),
                 const SizedBox(height: 22),
-                OutlineButton(
+                GoogleAuthButton(
                   label: 'สมัครสมาชิกด้วย Google',
-                  onTap: () {
-                    // TODO: ยังไม่ต่อจริง — รอ google_sign_in + POST /api/auth/google
-                    Navigator.of(context).pushReplacement(
-                      MaterialPageRoute(builder: (_) => const OnboardingBasicScreen()),
-                    );
-                  },
+                  onLoadingChanged: (value) =>
+                      setState(() => _googleLoading = value),
                 ),
                 const SizedBox(height: 26),
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    Text('มีบัญชีแล้ว? ', style: AppText.body(size: 13, color: AppColors.textSecondary)),
+                    Text('มีบัญชีแล้ว? ',
+                        style: AppText.body(
+                            size: 13, color: AppColors.textSecondary)),
                     GestureDetector(
-                      onTap: () => Navigator.of(context).pop(),
+                      onTap: _googleLoading
+                          ? null
+                          : () => Navigator.of(context).pop(),
                       child: Text('เข้าสู่ระบบ',
-                          style: AppText.body(size: 13, color: AppColors.purple2, weight: FontWeight.w600)),
+                          style: AppText.body(
+                              size: 13,
+                              color: AppColors.purple2,
+                              weight: FontWeight.w600)),
                     ),
                   ],
                 ),

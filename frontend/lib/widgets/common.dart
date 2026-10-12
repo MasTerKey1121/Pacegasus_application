@@ -65,7 +65,9 @@ class GradientButton extends StatelessWidget {
                     label,
                     style: AppText.heading(
                       size: 15,
-                      color: showDisabledStyle ? AppColors.textTertiary : Colors.white,
+                      color: showDisabledStyle
+                          ? AppColors.textTertiary
+                          : Colors.white,
                     ),
                   ),
           ),
@@ -109,6 +111,7 @@ class OutlineButton extends StatelessWidget {
 
 /// Soft translucent card container, base building block for most sections.
 class AppCard extends StatelessWidget {
+  final VoidCallback? onTap;
   final Widget child;
   final EdgeInsets padding;
   final Color? borderColor;
@@ -116,6 +119,7 @@ class AppCard extends StatelessWidget {
 
   const AppCard({
     super.key,
+    this.onTap,
     required this.child,
     this.padding = const EdgeInsets.all(18),
     this.borderColor,
@@ -124,16 +128,18 @@ class AppCard extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      padding: padding,
-      decoration: BoxDecoration(
-        color: backgroundGradient == null ? AppColors.card : null,
-        gradient: backgroundGradient,
-        borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: borderColor ?? AppColors.border),
-      ),
-      child: child,
-    );
+    return GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: padding,
+          decoration: BoxDecoration(
+            color: backgroundGradient == null ? AppColors.card : null,
+            gradient: backgroundGradient,
+            borderRadius: BorderRadius.circular(20),
+            border: Border.all(color: borderColor ?? AppColors.border),
+          ),
+          child: child,
+        ));
   }
 }
 
@@ -436,9 +442,10 @@ class LabeledSlider extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final display = displayText ?? (valueFormatter != null
-        ? valueFormatter!(value)
-        : value.round().toString());
+    final display = displayText ??
+        (valueFormatter != null
+            ? valueFormatter!(value)
+            : value.round().toString());
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [

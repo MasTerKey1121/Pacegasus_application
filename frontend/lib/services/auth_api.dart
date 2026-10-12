@@ -4,6 +4,10 @@ class AuthApi {
   final ApiClient client;
   AuthApi(this.client);
 
+  Future<Map<String, dynamic>> google({required String idToken}) {
+    return client.post('/api/auth/google', body: {'idToken': idToken});
+  }
+
   Future<Map<String, dynamic>> requestOtp({
     required String email,
     required String purpose, // 'login' | 'register'
@@ -28,27 +32,31 @@ class AuthApi {
       'email': email,
       'otp': otp,
       'otpRef': otpRef,
-      if (displayName != null && displayName.isNotEmpty) 'displayName': displayName,
+      if (displayName != null && displayName.isNotEmpty)
+        'displayName': displayName,
     });
   }
 
   Future<Map<String, dynamic>> refresh({required String refreshToken}) {
-    return client.post('/api/auth/refresh', body: {'refreshToken': refreshToken});
+    return client
+        .post('/api/auth/refresh', body: {'refreshToken': refreshToken});
   }
 
   Future<Map<String, dynamic>> me() => client.get('/api/auth/me', auth: true);
 
   Future<void> logout({required String refreshToken}) {
-    return client.post('/api/auth/logout', body: {'refreshToken': refreshToken});
+    return client
+        .post('/api/auth/logout', body: {'refreshToken': refreshToken});
   }
 
   Future<Map<String, dynamic>> acceptPolicy({required String policyVersion}) {
-  return client.post(
-    '/api/auth/accept-policy',
-    body: {'policyVersion': policyVersion},
-    auth: true,
-  );
-}
+    return client.post(
+      '/api/auth/accept-policy',
+      body: {'policyVersion': policyVersion},
+      auth: true,
+    );
+  }
+
   // ⚠️ TODO: path นี้เดาจาก REST convention (DELETE /api/users/me) เพราะใน Postman
   // collection ที่ให้มายังไม่มี endpoint สำหรับลบบัญชี — ต้องขอ path/response จริงจากทีม backend
   // แล้วมาแก้ตรงนี้อีกที

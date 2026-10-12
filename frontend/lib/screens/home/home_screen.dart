@@ -5,6 +5,7 @@ import '../../app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
+import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
@@ -28,7 +29,8 @@ const _accent = Color(0xFFC5A2FF);
 const _lime = Color(0xFFD6F5A6);
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key});
+  const HomeScreen({super.key, this.avatarRendererBuilder});
+  final WidgetBuilder? avatarRendererBuilder;
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
@@ -201,8 +203,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: SafeArea(child: LayoutBuilder(builder: (context, constraints) {
           final height = constraints.maxHeight;
           _minimum = (48 / height).clamp(.04, .16);
-          final avatarHeight = math.min(330.0, height * .48);
-          final avatarTop = math.max(205.0, height * .31);
+          final originalAvatarHeight = math.min(330.0, height * .48);
+          final avatarTop = math.min(160.0, height * .25);
+          final avatarHeight = math.min(originalAvatarHeight * 2,
+                  _avatarOnly ? height - 24 : height - avatarTop - 12) *
+              .9;
+          final avatarWidth = math.min(460.0, constraints.maxWidth - 24) * .9;
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
@@ -225,7 +231,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
-              top: _avatarOnly ? (height - avatarHeight) / 2 : avatarTop,
+              top: (_avatarOnly ? (height - avatarHeight) / 2 : avatarTop) - 5,
               left: 0,
               right: 0,
               height: avatarHeight,
@@ -238,9 +244,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                   onTap: () => setState(() => _avatarOnly = !_avatarOnly),
                   borderRadius: BorderRadius.circular(100),
                   child: SizedBox(
-                      width: 230,
+                      width: avatarWidth,
                       height: avatarHeight,
-                      child: const HomeAvatar()),
+                      child: HomeAvatar(
+                          rendererBuilder: widget.avatarRendererBuilder)),
                 ),
               )),
             ),
@@ -324,7 +331,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             () => Navigator.of(context).push(MaterialPageRoute(
                                 builder: (_) => const FriendsScreen()))),
                         const SizedBox(height: 8),
-                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว', null),
+                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว',
+                            () => _push(const ShopScreen(wardrobe: true))),
                         const SizedBox(height: 8),
                         _shortcut(Icons.storefront_outlined, 'ร้านค้า',
                             () => _push(const ShopScreen())),
@@ -430,11 +438,16 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('TODAY’S PLAN',
+                                Text('แผนวันนี้',
                                     style:
                                         AppText.body(size: 10, color: _accent)),
                                 const SizedBox(height: 8),
                                 Text(title, style: AppText.heading(size: 18)),
+                                if (quest != null &&
+                                    program.currentWeekErrorMessage == null)
+                                  Text(_dateLabel(quest),
+                                      style: AppText.body(
+                                          size: 12, color: _accent)),
                                 const SizedBox(height: 4),
                                 Text(hint,
                                     style: AppText.body(
@@ -469,18 +482,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               () => _push(const DailyMissionsScreen())),
                           _taskRow(
                               Icons.calendar_month_outlined,
-                              'แผนสัปดาห์นี้',
+                              'จัดตารางซ้อม',
                               'ดูและจัดการตารางซ้อม',
                               _schedule),
-                          if (ready && program.currentWeekErrorMessage == null)
-                            ...program.quests.map((item) => Padding(
-                                  padding: const EdgeInsets.only(top: 8),
-                                  child: Text(
-                                      '${_dateLabel(item)} · ${_questLabel(item)}',
-                                      style: AppText.body(
-                                          size: 12,
-                                          color: AppColors.textSecondary)),
-                                )),
                         ],
                       )),
                     ]),
@@ -559,7 +563,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           trailing: Icon(icon, color: _accent, size: 21));
 
   String _dateLabel(Map<String, dynamic> quest) {
-    final date = DateTime.tryParse(quest['scheduled_date']?.toString() ?? '');
+    final date = trainingDate(quest['scheduled_date']);
     return date == null ? 'วันซ้อม' : '${date.day}/${date.month}';
   }
 

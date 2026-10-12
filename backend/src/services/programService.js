@@ -24,13 +24,13 @@ async function annotateTodayQuest(userId, quests) {
   return Promise.all(quests.map(async (quest) => {
     const questDateStr = toLocalDateStr(quest.scheduled_date);
     if (questDateStr !== todayStr || quest.status !== 'pending') {
-      return quest;
+      return { ...quest, scheduled_date: questDateStr };
     }
     const adjustment = await adaptiveEngineService.computeAdjustment(userId, {
       session_type: quest.session_type,
       planned_value: quest.planned_value,
     });
-    return { ...quest, adjustment };
+    return { ...quest, scheduled_date: questDateStr, adjustment };
   }));
 }
 
@@ -321,7 +321,7 @@ async function startProgram(userId, level, scheduleMode) {
       userProgramId: userProgram.id,
       programLevel: level,
       scheduleMode: userProgram.schedule_mode,
-      startDate: userProgram.start_date,
+      startDate: toLocalDateStr(userProgram.start_date),
       currentWeek: userProgram.current_week,
       status: userProgram.status,
     };
@@ -355,7 +355,7 @@ async function cancelCurrentProgram(userId) {
   return {
     userProgramId: program.id,
     programTemplateId: program.program_template_id,
-    startDate: program.start_date,
+    startDate: toLocalDateStr(program.start_date),
     scheduleMode: program.schedule_mode,
     status: program.status,
     deletedAt: program.deleted_at,
@@ -415,12 +415,12 @@ async function getCurrentWeek(userId) {
     userProgramId: program.id,
     programTemplateId: program.program_template_id,
     templateLevel: program.template_level,
-    startDate: program.start_date,
+    startDate: toLocalDateStr(program.start_date),
     scheduleMode: program.schedule_mode,
     scheduleSaved: scheduleRows[0].schedule_saved,
     weekNumber: Number(week_number) + 1, // แสดงเป็น 1-indexed ให้ user
-    weekStart: week_start,
-    weekEnd: week_end,
+    weekStart: toLocalDateStr(week_start),
+    weekEnd: toLocalDateStr(week_end),
     quests: annotatedQuests,
   };
 }
@@ -587,8 +587,8 @@ async function getQuestsInRange(userId, from, to) {
   return {
     userProgramId: program.id,
     scheduleMode: program.schedule_mode,
-    from: rangeFrom,
-    to: rangeTo,
+    from: toLocalDateStr(rangeFrom),
+    to: toLocalDateStr(rangeTo),
     quests: annotatedQuests,
   };
 }

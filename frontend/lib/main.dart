@@ -2,9 +2,10 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'app_theme.dart';
+import 'navigation/home_route_observer.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
-import 'screens/home/main_shell.dart';
+import 'screens/auth/auth_destination.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -21,6 +22,7 @@ class PacegasusApp extends StatelessWidget {
       title: 'Pacegasus',
       debugShowCheckedModeBanner: false,
       theme: buildAppTheme(),
+      navigatorObservers: [homeRouteObserver],
       home: const AuthGate(),
     );
   }
@@ -44,7 +46,8 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
-    final status = ref.watch(authProvider).status;
+    final auth = ref.watch(authProvider);
+    final status = auth.status;
 
     switch (status) {
       case AuthStatus.checking:
@@ -52,7 +55,7 @@ class _AuthGateState extends ConsumerState<AuthGate> {
           body: Center(child: CircularProgressIndicator()),
         );
       case AuthStatus.authenticated:
-        return const MainShell();
+        return authenticatedDestination(context, auth.user!);
       case AuthStatus.unauthenticated:
         return const LoginScreen();
     }

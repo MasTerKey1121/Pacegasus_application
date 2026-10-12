@@ -22,21 +22,31 @@ class MainShell extends ConsumerStatefulWidget {
 }
 
 class _MainShellState extends ConsumerState<MainShell> {
+  bool _isRestoringWellness = true;
+  bool _wellnessReady = false;
+
   @override
   void initState() {
     super.initState();
 
-    Future.microtask(() async {
-      await ref.read(programProvider).restore();
-      if (!mounted) return;
-      await ref.read(wellnessProvider).loadToday();
-      if (!mounted) return;
+    Future.microtask(_restoreHome);
+  }
 
-      if (ref.read(wellnessProvider).completedToday) {
-        ref.read(missionProvider).setDone('wellness', true);
-      }
-      await _offerRunResume();
+  Future<void> _restoreHome() async {
+    final programRestore = ref.read(programProvider).restore();
+    final loaded = await ref.read(wellnessProvider).loadToday();
+    if (!mounted) return;
+    if (loaded) {
+      ref
+          .read(missionProvider)
+          .setDone('wellness', ref.read(wellnessProvider).completedToday);
+    }
+    setState(() {
+      _isRestoringWellness = false;
+      _wellnessReady = loaded;
     });
+    await programRestore;
+    if (mounted && loaded) await _offerRunResume();
   }
 
   Future<void> _offerRunResume() async {
@@ -94,5 +104,27 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   @override
-  Widget build(BuildContext context) => const HomeScreen();
+  Widget build(BuildContext context) {
+    if (_wellnessReady) return const HomeScreen();
+    return Scaffold(
+      body: Center(
+        child: _isRestoringWellness
+            ? const CircularProgressIndicator()
+            : Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const Text('โหลดสถานะ Wellness ของวันนี้ไม่สำเร็จ'),
+                  const SizedBox(height: 12),
+                  TextButton(
+                    onPressed: () {
+                      setState(() => _isRestoringWellness = true);
+                      _restoreHome();
+                    },
+                    child: const Text('ลองใหม่'),
+                  ),
+                ],
+              ),
+      ),
+    );
+  }
 }

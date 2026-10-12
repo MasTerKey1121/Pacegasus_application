@@ -5,7 +5,8 @@ const morgan = require('morgan');
 const env = require('./config/env');
 const routes = require('./routes');
 const { notFound, errorHandler } = require('./middleware/errorHandler');
-const usageLogMiddleware = require('./middleware/usageLog'); 
+const usageLogMiddleware = require('./middleware/usageLog');
+const { imageDirectory } = require('./services/clubImageService');
 
 const app = express();
 
@@ -16,11 +17,19 @@ app.use(
     credentials: true,
   })
 );
+app.use('/api/clubs/images', express.json({ limit: '3mb' }));
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(morgan(env.nodeEnv === 'production' ? 'combined' : 'dev'));
 
-app.use(usageLogMiddleware); 
+app.use(usageLogMiddleware);
+app.use('/api/club-images', express.static(imageDirectory, {
+  dotfiles: 'deny',
+  index: false,
+  maxAge: '1y',
+  immutable: true,
+  setHeaders: (res) => res.setHeader('Cross-Origin-Resource-Policy', 'cross-origin'),
+}));
 
 app.use('/api', routes);
 

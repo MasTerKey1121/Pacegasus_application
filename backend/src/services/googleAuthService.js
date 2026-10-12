@@ -12,12 +12,15 @@ async function verifyGoogleIdToken(idToken) {
   try {
     const ticket = await client.verifyIdToken({
       idToken,
-      audience: env.google.clientId,
+      audience: env.google.clientIds,
     });
     const payload = ticket.getPayload();
 
     if (!payload || !payload.email) {
       throw new Error('Google token payload missing email');
+    }
+    if (!payload.email_verified) {
+      throw new Error('Google email is not verified');
     }
 
     return {
