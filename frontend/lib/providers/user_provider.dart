@@ -11,6 +11,11 @@ class UserData extends ChangeNotifier {
   int streak = 0;
   String goalLabel = 'วิ่ง 10K · Sub 1:40';
 
+  void setDisplayName(String name) {
+    username = name;
+    notifyListeners();
+  }
+
   void addReward({int coin = 0, int exp = 0}) {
     this.coin += coin;
     this.exp += exp;
