@@ -90,6 +90,7 @@ async function linkProvider(userId, provider, providerUserId = null) {
 }
 
 async function issueSession(user, req) {
+  if (user.status && user.status !== 'active') throw new ApiError(403, 'บัญชีนี้ถูกลบหรือระงับการใช้งานแล้ว');
   const accessToken = tokenService.signAccessToken(user);
   const refreshToken = await tokenService.issueRefreshToken(user.id, {
     deviceInfo: req.headers['user-agent'],
