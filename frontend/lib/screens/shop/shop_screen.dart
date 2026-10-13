@@ -188,9 +188,12 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       }
       if (!widget.wardrobe && mounted) {
         final available = pages.expand((page) => page.items).toList();
-        if (_product == null ||
+        if (_product != null &&
             !available.any((item) => item.id == _product!.id)) {
-          setState(() => _product = available.isEmpty ? null : available.first);
+          setState(() {
+            _product = null;
+            _tryOn = false;
+          });
         }
       }
       return pages;

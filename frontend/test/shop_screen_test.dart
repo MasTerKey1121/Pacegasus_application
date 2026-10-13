@@ -325,6 +325,15 @@ void main() {
     final client = _Client()..paidShirts = true;
     await open(tester, client, const ShopScreen());
     expect(find.text('30'), findsOneWidget);
+    expect(find.byType(HomeAvatar), findsNothing);
+    expect(find.byKey(const Key('shop-buy')), findsNothing);
+    expect(find.byKey(const Key('shop-preview-toggle')), findsNothing);
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('เสื้อวิ่งสีม่วง'));
+    await tester.tap(find.text('เสื้อวิ่งสีม่วง'));
+    await tester.pumpAndSettle();
     var avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
     expect(avatar.productAsset, 'assets/models/product_running_tee.glb');
     await tester.tap(find.byKey(const Key('shop-preview-toggle')));
@@ -341,6 +350,11 @@ void main() {
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ShopScreen)));
     expect(container.read(userProvider).coin, 10);
+    expect(find.byType(HomeAvatar), findsNothing);
+    expect(find.byKey(const Key('shop-buy')), findsNothing);
+    await tester.ensureVisible(find.text('เสื้อวิ่งสีน้ำตาล'));
+    await tester.tap(find.text('เสื้อวิ่งสีน้ำตาล'));
+    await tester.pumpAndSettle();
     expect(tester.widget<HomeAvatar>(find.byType(HomeAvatar)).productVariant,
         'shop_tee_brown');
     await tester.tap(find.byKey(const Key('shop-buy')));
