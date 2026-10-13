@@ -6,6 +6,7 @@ import '../providers/auth_provider.dart';
 import '../services/api_client.dart';
 import '../services/club_api.dart';
 import '../services/friend_api.dart';
+import '../services/player_profile_api.dart';
 import '../screens/home/home_avatar.dart';
 
 Future<bool?> showPlayerProfile(BuildContext context, String identifier) =>
@@ -15,7 +16,10 @@ Future<bool?> showPlayerProfile(BuildContext context, String identifier) =>
 
 class PlayerProfileDialog extends ConsumerStatefulWidget {
   final String identifier;
-  const PlayerProfileDialog({super.key, required this.identifier});
+  @visibleForTesting
+  final WidgetBuilder? avatarRendererBuilder;
+  const PlayerProfileDialog(
+      {super.key, required this.identifier, this.avatarRendererBuilder});
   @override
   ConsumerState<PlayerProfileDialog> createState() =>
       _PlayerProfileDialogState();
@@ -37,13 +41,13 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
   }
 
   Future<void> _load() async {
+    if (mounted) setState(() => _error = null);
     try {
-      final result = await ref.read(apiClientProvider).get(
-          '/api/users/${Uri.encodeComponent(widget.identifier)}/profile',
-          auth: true);
+      final result =
+          await ref.read(playerProfileApiProvider).load(widget.identifier);
       if (mounted) {
         setState(() {
-          _data = result['data'] as Map<String, dynamic>;
+          _data = result;
           _error = null;
         });
       }
@@ -142,10 +146,8 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                       if (_error != null) ...[
                         Text(_error!,
                             style: const TextStyle(color: AppColors.red2)),
-                        if (data == null)
-                          TextButton(
-                              onPressed: _load,
-                              child: const Text('ลองอีกครั้ง'))
+                        TextButton(
+                            onPressed: _load, child: const Text('ลองอีกครั้ง'))
                       ],
                       if (data != null) ...[
                         Row(children: [
@@ -208,7 +210,10 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                               ]))
                         ]),
                         const SizedBox(height: 12),
-                        const SizedBox(height: 220, child: HomeAvatar()),
+                        SizedBox(
+                            height: 220,
+                            child: HomeAvatar(
+                                rendererBuilder: widget.avatarRendererBuilder)),
                         Text('ตัวละครตัวอย่าง • ของที่สวมแสดงด้านล่าง',
                             style: AppText.body(
                                 size: 11, color: AppColors.textSecondary)),
@@ -315,6 +320,8 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                                 child: FilledButton(
                                     onPressed: _busy ||
                                             data['relationship']['status'] ==
+                                                'unavailable' ||
+                                            data['relationship']['status'] ==
                                                 'accepted' ||
                                             (data['relationship']['status'] ==
                                                     'pending' &&
@@ -330,16 +337,19 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                                             }),
                                     child: Text(data['relationship']
                                                 ['status'] ==
-                                            'accepted'
-                                        ? 'เป็นเพื่อนแล้ว'
+                                            'unavailable'
+                                        ? 'ตรวจสอบเพื่อนไม่สำเร็จ'
                                         : data['relationship']['status'] ==
-                                                'pending'
-                                            ? data['relationship']
-                                                        ['direction'] ==
-                                                    'incoming'
-                                                ? 'ตอบรับเพื่อน'
-                                                : 'ส่งคำขอแล้ว'
-                                            : 'เพิ่มเพื่อน'))),
+                                                'accepted'
+                                            ? 'เป็นเพื่อนแล้ว'
+                                            : data['relationship']['status'] ==
+                                                    'pending'
+                                                ? data['relationship']
+                                                            ['direction'] ==
+                                                        'incoming'
+                                                    ? 'ตอบรับเพื่อน'
+                                                    : 'ส่งคำขอแล้ว'
+                                                : 'เพิ่มเพื่อน'))),
                             const SizedBox(width: 8),
                             Expanded(
                                 child: PopupMenuButton<String>(

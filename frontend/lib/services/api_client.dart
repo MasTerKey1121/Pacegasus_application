@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 import 'dart:io';
+import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
@@ -54,6 +55,33 @@ class ApiClient {
           {Map<String, dynamic>? body, bool auth = false}) =>
       _request('DELETE', path, body: body, auth: auth);
 
+  Future<Map<String, dynamic>> upload(
+    String path, {
+    required Uint8List bytes,
+    required String filename,
+    required String mimeType,
+    String field = 'avatar',
+    bool auth = false,
+  }) async {
+    Future<http.Response> send() => _sendWithFallback((candidate) async {
+          // Multipart requests are single-use: rebuild for fallback and token retry.
+          final request =
+              http.MultipartRequest('PUT', Uri.parse('$candidate$path'));
+          final token = getAccessToken?.call();
+          if (auth && token != null && token.isNotEmpty) {
+            request.headers['Authorization'] = 'Bearer $token';
+          }
+          request.files.add(http.MultipartFile.fromBytes(field, bytes,
+              filename: filename, contentType: http.MediaType.parse(mimeType)));
+          return http.Response.fromStream(await request.send());
+        });
+    var response = await send();
+    if (response.statusCode == 401 && auth && onUnauthorized != null) {
+      if (await onUnauthorized!()) response = await send();
+    }
+    return _handle(response);
+  }
+
   Future<http.Response> _sendRaw(
     String method,
     String path,
@@ -69,6 +97,12 @@ class ApiClient {
     }
     final encodedBody = body != null ? jsonEncode(body) : null;
 
+    return _sendWithFallback((candidate) =>
+        _dispatch(method, Uri.parse('$candidate$path'), headers, encodedBody));
+  }
+
+  Future<http.Response> _sendWithFallback(
+      Future<http.Response> Function(String candidate) send) async {
     final candidates = <String>[
       if (_reachableBaseUrl != null) _reachableBaseUrl!,
       ..._baseUrls.where((url) => url != _reachableBaseUrl),
@@ -77,12 +111,7 @@ class ApiClient {
 
     for (final candidate in candidates) {
       try {
-        final response = await _dispatch(
-          method,
-          Uri.parse('$candidate$path'),
-          headers,
-          encodedBody,
-        ).timeout(_requestTimeout);
+        final response = await send(candidate).timeout(_requestTimeout);
         _reachableBaseUrl = candidate;
         return response;
       } on TimeoutException catch (error) {

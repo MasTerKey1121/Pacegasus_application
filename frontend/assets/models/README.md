@@ -38,3 +38,9 @@ Drag left/right over the avatar to turn the camera through an unrestricted
 360 degrees. A tap still toggles the avatar-only view. Dragging changes only
 the camera orbit and does not recreate the viewer or restart its animation.
 The orbit returns to the front on a new Home entry.
+
+Home dimensions are now shared through `AvatarLayout.home`, at 81% of the
+original enlarged viewport (two successive 10% reductions). Shop and wardrobe
+interpolate from their compact preview to exactly that Home viewport size as
+the item panel collapses from 60% to its minimum. Expanding the panel restores
+the compact preview; the same avatar state is retained during resizing.

@@ -2,6 +2,8 @@ const express = require('express');
 const userController = require('../controllers/userController');
 const { requireAuth } = require('../middleware/auth');
 const { uploadAvatar } = require('../middleware/uploadAvatar');
+const asyncHandler = require('../utils/asyncHandler');
+const ownProfile = require('../services/ownProfileService');
 
 const router = express.Router();
 

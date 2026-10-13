@@ -7,7 +7,7 @@ final leaderboardApiProvider =
 
 class RankingEntry {
   final String id, name;
-  final String? imageUrl;
+  final String? imageUrl, uid;
   final int? rank;
   final double distance;
   const RankingEntry(
@@ -15,13 +15,15 @@ class RankingEntry {
       required this.name,
       required this.rank,
       required this.distance,
-      this.imageUrl});
+      this.imageUrl,
+      this.uid});
   factory RankingEntry.fromJson(Map<String, dynamic> json) => RankingEntry(
       id: json['id'] as String,
       name: json['name'] as String,
       rank: (json['rank'] as num?)?.toInt(),
       distance: (json['distanceKm'] as num).toDouble(),
-      imageUrl: json['imageUrl'] as String?);
+      imageUrl: json['imageUrl'] as String?,
+      uid: json['uid'] as String?);
 }
 
 class RankingData {
