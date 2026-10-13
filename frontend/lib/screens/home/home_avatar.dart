@@ -46,22 +46,11 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
       child: GestureDetector(
           key: const Key('avatar-rotation'),
           behavior: HitTestBehavior.opaque,
-            dragStartBehavior: DragStartBehavior.down,
+          dragStartBehavior: DragStartBehavior.down,
           onHorizontalDragUpdate: (details) => setState(() {
                 _orbitDegrees = (_orbitDegrees - details.delta.dx * .7) % 360;
               }),
           child: Stack(alignment: Alignment.center, children: [
-            Positioned(
-                bottom: 4,
-                width: 350,
-                height: 35,
-                child: DecoratedBox(
-                    decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        gradient: const LinearGradient(
-                            colors: [Color(0xFF9570AC), Color(0xFF352640)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter)))),
             if (_visible)
               Positioned.fill(
                   child: IgnorePointer(
