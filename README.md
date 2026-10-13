@@ -19,7 +19,7 @@ The implementation currently in this repository is the Node.js/Express backend i
 
 - Node.js and Express 4
 - PostgreSQL via `pg` (compatible with Supabase PostgreSQL)
-- JWT, Google Auth Library, Nodemailer, Joi, Helmet, CORS, and rate limiting
+- JWT, Supabase Auth email OTP, Google Auth Library, Joi, Helmet, CORS, and rate limiting
 
 ## Quick start
 
@@ -28,11 +28,9 @@ Prerequisites: Node.js, npm, and a PostgreSQL database with the `pgcrypto` exten
 ```bash
 cd backend
 npm install
-Copy-Item .env.example .env       # PowerShell
-# cp .env.example .env            # macOS/Linux
 ```
 
-Update the values in `.env`, especially `DATABASE_URL`, both JWT secrets, SMTP credentials, and `GOOGLE_CLIENT_ID` if Google sign-in is used.
+Use `backend/.env.example` as a variable-name reference and set real values only in `backend/.env`; do not overwrite an existing `.env`. Configure `DATABASE_URL`, both JWT secrets, `SUPABASE_URL`, `SUPABASE_ANON_KEY`, and `GOOGLE_CLIENT_ID` if Google sign-in is used. For email OTP, enable Email authentication in Supabase, set both the **Confirm signup** and **Magic link / OTP** email templates to include `{{ .Token }}`, and set the Supabase Email OTP expiry to match `OTP_EXPIRES_MINUTES` (default 5 minutes). Configure a custom SMTP sender in Supabase Authentication settings before sending to testers who are not project team members; Supabase's default sender is restricted to team addresses.
 
 Create an empty database, then apply the base schema and each additive migration in order:
 
@@ -77,8 +75,8 @@ curl http://localhost:4000/api/health
 | `DATABASE_URL`, `DB_SSL` | PostgreSQL connection string and SSL toggle |
 | `JWT_ACCESS_SECRET`, `JWT_REFRESH_SECRET` | Separate secrets for access and refresh tokens |
 | `JWT_ACCESS_EXPIRES_IN`, `JWT_REFRESH_EXPIRES_IN` | Token lifetimes (defaults: 15m and 30d) |
-| `OTP_*` | OTP length, expiry, attempt limit, and resend cooldown |
-| `SMTP_*` | SMTP transport and sender information for email OTP |
+| `SUPABASE_URL`, `SUPABASE_ANON_KEY` | Supabase Auth project URL and publishable/anon key used to send and verify email OTP |
+| `OTP_*` | Local OTP request expiry, attempt limit, and resend cooldown; expiry must match Supabase Auth |
 | `GOOGLE_CLIENT_ID` | Google OAuth web-client ID for ID-token validation |
 
 Do not commit `.env` or real credentials.
@@ -179,7 +177,7 @@ backend/
     services/     domain and database operations
     utils/        validation and error helpers
   tests/          Node test files
-  .env.example   environment template
+  .env           local environment settings (not tracked)
 postman/          Postman workspace metadata
 test/             Postman API collection
 ```

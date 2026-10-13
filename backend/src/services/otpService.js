@@ -1,20 +1,10 @@
-const bcrypt = require('bcryptjs');
+const { randomBytes } = require('node:crypto');
 const db = require('../config/db');
 const env = require('../config/env');
 const ApiError = require('../utils/ApiError');
-const { sendOtpEmail } = require('./emailService');
+const supabaseOtpService = require('./supabaseOtpService');
 
-function generateOtpCode(length) {
-  const digits = '0123456789';
-  let code = '';
-  for (let i = 0; i < length; i += 1) {
-    code += digits[Math.floor(Math.random() * digits.length)];
-  }
-  return code;
-}
-
-// Generates a short reference code (e.g. "A1B2C3") shown to the user
-// alongside the OTP email, so they can confirm which request is which.
+// Local reference returned to the app; Supabase's email contains only the OTP.
 function generateOtpRef(length = 6) {
   const chars = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I to avoid confusion
   let ref = '';
@@ -25,7 +15,7 @@ function generateOtpRef(length = 6) {
 }
 
 /**
- * Creates a new OTP for the given email, stores its hash, and emails it.
+ * Requests a Supabase Auth OTP and tracks the request reference locally.
  * Enforces a resend cooldown to prevent spamming the mailbox.
  */
 async function requestOtp(email, purpose = 'login') {
@@ -49,29 +39,38 @@ async function requestOtp(email, purpose = 'login') {
     }
   }
 
-  const otp = generateOtpCode(env.otp.length);
   const otpRef = generateOtpRef();
-  const otpHash = await bcrypt.hash(otp, 10);
   const expiresAt = new Date(Date.now() + env.otp.expiresMinutes * 60 * 1000);
 
-  await db.query(
+  // Keep the legacy non-null otp_hash column populated; Supabase owns the actual code.
+  const { rows } = await db.query(
     `INSERT INTO otp_codes (email, otp_hash, otp_ref, purpose, max_attempts, expires_at)
-     VALUES ($1, $2, $3, $4, $5, $6)`,
-    [email, otpHash, otpRef, purpose, env.otp.maxAttempts, expiresAt]
+     VALUES ($1, $2, $3, $4, $5, $6)
+     RETURNING id`,
+    [email, randomBytes(32).toString('hex'), otpRef, purpose, env.otp.maxAttempts, expiresAt]
   );
 
-  await sendOtpEmail(email, otp, purpose, otpRef);
+  try {
+    await supabaseOtpService.sendOtp(email);
+  } catch (error) {
+    await db.query(`DELETE FROM otp_codes WHERE id = $1`, [rows[0].id]);
+    throw error;
+  }
+
+  await db.query(
+    `UPDATE otp_codes SET is_used = TRUE WHERE email = $1 AND id <> $2 AND is_used = FALSE`,
+    [email, rows[0].id]
+  );
 
   return { expiresAt, expiresInMinutes: env.otp.expiresMinutes, otpRef };
 }
 
 /**
- * Verifies the OTP for the given email + otpRef. Throws ApiError on failure.
- * Marks the code as used on success so it cannot be replayed.
+ * Checks the local request limits, then lets Supabase Auth verify the code.
  */
 async function verifyOtp(email, otp, otpRef) {
   const { rows } = await db.query(
-    `SELECT id, otp_hash, attempts, max_attempts, is_used, expires_at
+    `SELECT id, attempts, max_attempts, expires_at
      FROM otp_codes
      WHERE email = $1 AND otp_ref = $2 AND is_used = FALSE
      ORDER BY created_at DESC
@@ -93,11 +92,13 @@ async function verifyOtp(email, otp, otpRef) {
     throw new ApiError(429, 'กรอกรหัสผิดเกินจำนวนครั้งที่กำหนด กรุณาขอรหัสใหม่');
   }
 
-  const isMatch = await bcrypt.compare(otp, record.otp_hash);
-
-  if (!isMatch) {
-    await db.query(`UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1`, [record.id]);
-    throw new ApiError(400, 'รหัส OTP ไม่ถูกต้อง');
+  try {
+    await supabaseOtpService.verifyOtp(email, otp);
+  } catch (error) {
+    if (error.statusCode === 400) {
+      await db.query(`UPDATE otp_codes SET attempts = attempts + 1 WHERE id = $1`, [record.id]);
+    }
+    throw error;
   }
 
   await db.query(`UPDATE otp_codes SET is_used = TRUE WHERE id = $1`, [record.id]);
