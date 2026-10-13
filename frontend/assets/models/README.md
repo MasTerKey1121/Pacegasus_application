@@ -42,7 +42,7 @@ The orbit returns to the front on a new Home entry.
 Home dimensions are now shared through `AvatarLayout.home`, at 81% of the
 original enlarged viewport (two successive 10% reductions). Shop and wardrobe
 interpolate from their compact preview to exactly that Home viewport size as
-the item panel collapses from 60% to its minimum. Expanding the panel restores
+the item panel collapses from 50% to its minimum. Expanding the panel restores
 the compact preview; the same avatar state is retained during resizing.
 
 ## Starter wardrobe v9
@@ -65,7 +65,7 @@ migrations or direct production database writes were run for this change.
 Inventory thumbnails are bundled `asset:` images rendered from the actual
 Blender parts. Select an item to preview; save uses the authenticated avatar
 API, and Home reloads the saved outfit when returning from another page.
-The only new alternative shape/color in this set is the white tee. The other
+The free alternative color in this set is the white tee. The other
 slots each have their current starter item; arbitrary future catalog meshes,
 removing covered body parts, and new garment silhouettes need further assets
 and rendering support, not merely catalog rows.
@@ -82,3 +82,25 @@ Memory-only demo with real wardrobe UI and 3D material switching:
 Demo saves last only until reload. Production saves remain in the existing
 backend avatar equipment tables. Mobile device rendering still needs hardware
 testing; web rendering and the scoped API/UI tests were verified.
+
+## Paid shirt shop
+
+Purple (`shop_tee_purple`) costs 20 coins and brown (`shop_tee_brown`) costs
+1,000 coins. Both are purchasable, not free defaults. The same v9 GLB now
+contains all three material variants; only shirt fabric and seams change.
+`product_running_tee.glb` is a centered, standalone shirt without animations,
+used for the shop's default 360-degree product preview. The bottom-right
+button switches between the product and an avatar trying it on.
+
+After restarting/redeploying the backend, authenticated shop listing requests
+idempotently register these two listings through `runnerShopCatalog.js`.
+Purchase uses the existing transaction and locked server wallet: price is
+read from the listing, coins are deducted and ownership granted atomically.
+Already-owned items are excluded only for the authenticated buyer. Successful
+purchase shows a toast, refreshes the catalog and wardrobe, and reloads the
+server wallet used by Home. Purchases do not automatically equip the shirt.
+
+`flutter run -d chrome -t tool/shop_preview.dart` runs a clearly labelled
+memory-only demo (30 virtual coins), reset on reload. Its purchase checks and
+the transaction unit tests do not spend any live account coins. Production
+database/device validation still requires the deployed backend and a device.

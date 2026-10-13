@@ -2,6 +2,7 @@ const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const gameProgressService = require('./gameProgressService');
 const { ITEM_COLUMNS, toItem } = require('./avatarService');
+const { ensureRunnerShopCatalog } = require('./runnerShopCatalog');
 
 const ON_SALE = `l.is_active AND i.is_active
   AND l.starts_at <= now() AND (l.ends_at IS NULL OR l.ends_at > now())`;
@@ -46,6 +47,7 @@ function escapeLike(text) {
 }
 
 async function listItems(userId, filters) {
+  await ensureRunnerShopCatalog(db);
   const params = [userId];
   const where = [ON_SALE];
   const add = (value, condition) => {
@@ -58,7 +60,7 @@ async function listItems(userId, filters) {
   if (filters.q) add(`%${escapeLike(filters.q)}%`, 'i.name ILIKE ?');
   if (filters.minPrice !== undefined) add(filters.minPrice, 'l.price_coins >= ?');
   if (filters.maxPrice !== undefined) add(filters.maxPrice, 'l.price_coins <= ?');
-  if (filters.owned !== undefined) where.push(`ui.user_id IS ${filters.owned ? 'NOT ' : ''}NULL`);
+  where.push(`ui.user_id IS ${(filters.owned ?? false) ? 'NOT ' : ''}NULL`);
   if (filters.featured !== undefined) where.push(`l.is_featured = ${filters.featured}`);
   params.push(filters.limit, filters.offset);
 

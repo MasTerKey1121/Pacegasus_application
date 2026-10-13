@@ -7,6 +7,7 @@ import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
 import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
+import '../../providers/wallet_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
@@ -119,6 +120,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
+    final wallet = ref.watch(walletProvider);
     final displayName =
         ref.watch(authProvider).user?['displayName']?.toString().trim();
     final name = displayName == null || displayName.isEmpty
@@ -309,7 +311,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Icon(Icons.toll_outlined,
                               color: AppColors.gold2, size: 18),
                           const SizedBox(width: 6),
-                          Text('${user.coin}',
+                          Text(wallet.valueOrNull?.toString() ?? '—',
                               style: AppText.body(
                                   size: 13, color: AppColors.gold2)),
                         ])),

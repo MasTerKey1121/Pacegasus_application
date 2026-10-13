@@ -9,6 +9,7 @@ import 'package:google_fonts/google_fonts.dart';
 // ignore: implementation_imports
 import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/providers/auth_provider.dart';
+import 'package:pacegasus/providers/wallet_provider.dart';
 import 'package:pacegasus/providers/program_provider.dart';
 import 'package:pacegasus/providers/wellness_provider.dart';
 import 'package:pacegasus/screens/home/home_screen.dart';
@@ -204,6 +205,7 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(
         overrides: [
+          walletProvider.overrideWith((ref) async => 42),
           authProvider.overrideWith((ref) => _Auth()),
           programProvider.overrideWith((ref) => program ?? _Program()),
           wellnessProvider.overrideWith((ref) => WellnessNotifier(

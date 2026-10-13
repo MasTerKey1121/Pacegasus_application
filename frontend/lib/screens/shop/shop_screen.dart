@@ -5,6 +5,8 @@ import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/shop_api.dart';
 import '../../providers/avatar_provider.dart';
+import '../../providers/user_provider.dart';
+import '../../providers/wallet_provider.dart';
 import '../home/home_avatar.dart';
 import '../home/avatar_layout.dart';
 
@@ -61,6 +63,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
   int? _selected;
   bool _expanded = false;
   bool _saving = false;
+  bool _buying = false;
+  bool _tryOn = false;
+  ShopItem? _product;
   final Map<String, ShopItem> _changes = {};
   final Map<String, String> _equippedIds = {};
   final Map<String, ShopItem> _savedPreview = {};
@@ -76,6 +81,41 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         _changes[item.slot!] = item;
       }
     });
+  }
+
+  void _selectProduct(ShopItem item) {
+    if (_buying) return;
+    setState(() => _product = item);
+  }
+
+  Future<void> _buy() async {
+    final product = _product;
+    if (_buying || product == null || product.owned) return;
+    setState(() => _buying = true);
+    try {
+      final coins = await ref.read(shopApiProvider).purchase(product.id);
+      if (!mounted) return;
+      ref.read(userProvider).setCoinBalance(coins);
+      ref.invalidate(walletProvider);
+      ref.invalidate(avatarOutfitProvider);
+      setState(() {
+        _product = null;
+        _tryOn = false;
+        _reload();
+        _balance = Future.value(coins);
+      });
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('ซื้อแล้ว')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(_error(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _buying = false);
+    }
   }
 
   Future<void> _save() async {
@@ -146,6 +186,13 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           }
         }
       }
+      if (!widget.wardrobe && mounted) {
+        final available = pages.expand((page) => page.items).toList();
+        if (_product == null ||
+            !available.any((item) => item.id == _product!.id)) {
+          setState(() => _product = available.isEmpty ? null : available.first);
+        }
+      }
       return pages;
     });
     _balance = widget.wardrobe ? Future.value(0) : api.balance();
@@ -173,7 +220,13 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 categoryIndex: index,
                 wardrobe: widget.wardrobe,
                 selections: Map.of(_changes))));
-    if (mounted && item != null) _choose(item);
+    if (mounted && item != null) {
+      if (widget.wardrobe) {
+        _choose(item);
+      } else {
+        _selectProduct(item);
+      }
+    }
   }
 
   @override
@@ -209,9 +262,43 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 left: (constraints.maxWidth - avatarWidth) / 2,
                 width: avatarWidth,
                 height: avatarHeight,
-                child: HomeAvatar(
-                    rendererBuilder: widget.avatarRendererBuilder,
-                    outfitPreview: {..._savedPreview, ..._changes})),
+                child: widget.wardrobe || (_tryOn && _product != null)
+                    ? HomeAvatar(
+                        rendererBuilder: widget.avatarRendererBuilder,
+                        outfitPreview: widget.wardrobe
+                            ? {..._savedPreview, ..._changes}
+                            : {_product!.slot ?? 'inner_top': _product!})
+                    : _product?.renderData['productAsset'] is String
+                        ? HomeAvatar(
+                            rendererBuilder: widget.avatarRendererBuilder,
+                            productAsset:
+                                (_product!.renderData['productAsset'] as String)
+                                    .replaceFirst('asset:', ''),
+                            productVariant:
+                                _product!.renderData['variant'] as String?)
+                        : const Center(child: Text('เลือกสินค้าเพื่อดูโมเดล'))),
+            if (!widget.wardrobe && _product != null) ...[
+              Positioned(
+                  top: height * (1 - _sheetExtent) - 54,
+                  left: 80,
+                  right: 80,
+                  child: FilledButton(
+                      key: const Key('shop-buy'),
+                      onPressed: _buying ? null : _buy,
+                      child: Text(_buying
+                          ? 'กำลังซื้อ...'
+                          : 'ซื้อ · ${_product!.price} เหรียญ'))),
+              Positioned(
+                  top: height * (1 - _sheetExtent) - 54,
+                  right: 12,
+                  child: IconButton(
+                      key: const Key('shop-preview-toggle'),
+                      tooltip: _tryOn ? 'ดูสินค้าอย่างเดียว' : 'ดูอวตารลองใส่',
+                      onPressed: () => setState(() => _tryOn = !_tryOn),
+                      icon: Icon(
+                          _tryOn ? Icons.checkroom : Icons.person_outline,
+                          color: _accent))),
+            ],
             Positioned(
                 top: 8,
                 left: 12,
@@ -438,7 +525,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                                                                     : _equippedIds.containsKey(snapshot.data![i].items[j].slot)
                                                                         ? _equippedIds[snapshot.data![i].items[j].slot] == snapshot.data![i].items[j].id
                                                                         : snapshot.data![i].items[j].equipped,
-                                                                onSelect: () => _choose(snapshot.data![i].items[j]))))),
+                                                                onSelect: () => widget.wardrobe ? _choose(snapshot.data![i].items[j]) : _selectProduct(snapshot.data![i].items[j]))))),
                                         ])),
                                   const SizedBox(height: 24),
                                 ]));
@@ -658,9 +745,8 @@ class _ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: wardrobe
-          ? onSelect
-          : () => showModalBottomSheet<void>(
+      onTap: onSelect ??
+          () => showModalBottomSheet<void>(
               context: context,
               isScrollControlled: true,
               useSafeArea: true,

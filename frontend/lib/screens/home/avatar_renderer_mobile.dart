@@ -5,7 +5,14 @@ import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class AvatarRenderer extends StatefulWidget {
-  const AvatarRenderer({super.key, this.orbitDegrees = 0, this.variantName});
+  const AvatarRenderer(
+      {super.key,
+      this.orbitDegrees = 0,
+      this.variantName,
+      this.assetPath = 'assets/models/pacegasus_starter_v9.glb',
+      this.animated = true});
+  final String assetPath;
+  final bool animated;
   final double orbitDegrees;
   final String? variantName;
   @override
@@ -40,7 +47,7 @@ class _AvatarRendererState extends State<AvatarRenderer> {
               textAlign: TextAlign.center));
     }
     return ModelViewer(
-      src: 'assets/models/pacegasus_starter_v9.glb',
+      src: widget.assetPath,
       variantName: widget.variantName,
       alt: 'Pacegasus runner',
       backgroundColor: Colors.transparent,
@@ -51,11 +58,9 @@ class _AvatarRendererState extends State<AvatarRenderer> {
       cameraOrbit: '${widget.orbitDegrees}deg 85deg 105%',
       onWebViewCreated: (controller) => _controller = controller,
       javascriptChannels: {
-        JavascriptChannel(
-            'AvatarReady',
-            onMessageReceived: (_) {
-              if (mounted) _applyVariant();
-            }),
+        JavascriptChannel('AvatarReady', onMessageReceived: (_) {
+          if (mounted) _applyVariant();
+        }),
       },
       shadowIntensity: 0.6,
       animationCrossfadeDuration: 150,
@@ -67,6 +72,7 @@ class _AvatarRendererState extends State<AvatarRenderer> {
           if (started) return;
           started = true;
           window.AvatarReady?.postMessage('loaded');
+          if (!avatar.availableAnimations.includes('Wave_Greeting')) return;
           avatar.animationName = 'Wave_Greeting';
           await avatar.updateComplete;
           avatar.currentTime = 0;

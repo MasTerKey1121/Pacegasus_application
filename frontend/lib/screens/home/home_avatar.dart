@@ -8,7 +8,12 @@ import 'avatar_renderer.dart';
 
 class HomeAvatar extends ConsumerStatefulWidget {
   const HomeAvatar(
-      {super.key, this.rendererBuilder, this.outfitPreview = const {}});
+      {super.key,
+      this.rendererBuilder,
+      this.outfitPreview = const {},
+      this.productAsset,
+      this.productVariant});
+  final String? productAsset, productVariant;
   final Map<String, ShopItem> outfitPreview;
   @visibleForTesting
   final WidgetBuilder? rendererBuilder;
@@ -53,10 +58,12 @@ class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
   @override
   Widget build(BuildContext context) {
     // Test renderer injection avoids networking and platform-view setup.
-    final outfit = widget.rendererBuilder != null
+    final outfit = widget.rendererBuilder != null || widget.productAsset != null
         ? const AvatarOutfit({})
         : ref.watch(avatarOutfitProvider).valueOrNull ?? const AvatarOutfit({});
-    final variant = outfit.preview(widget.outfitPreview).variant;
+    final variant = widget.productAsset != null
+        ? widget.productVariant
+        : outfit.preview(widget.outfitPreview).variant;
     return ExcludeSemantics(
         child: GestureDetector(
             key: const Key('avatar-rotation'),
@@ -70,11 +77,15 @@ class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
                 Positioned.fill(
                     child: IgnorePointer(
                         child: KeyedSubtree(
-                            key: ValueKey(_entry),
+                            key: ValueKey(
+                                '$_entry:${widget.productAsset ?? 'avatar'}'),
                             child: widget.rendererBuilder?.call(context) ??
                                 AvatarRenderer(
                                     orbitDegrees: _orbitDegrees,
-                                    variantName: variant)))),
+                                    variantName: variant,
+                                    assetPath: widget.productAsset ??
+                                        'assets/models/pacegasus_starter_v9.glb',
+                                    animated: widget.productAsset == null)))),
             ])));
   }
 }

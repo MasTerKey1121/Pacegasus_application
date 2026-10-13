@@ -12,6 +12,7 @@ import 'package:pacegasus/screens/shop/shop_screen.dart';
 import 'package:pacegasus/screens/home/avatar_layout.dart';
 import 'package:pacegasus/screens/home/home_avatar.dart';
 import 'package:pacegasus/providers/avatar_provider.dart';
+import 'package:pacegasus/providers/user_provider.dart';
 
 class _Fonts extends Fake implements AssetManifest {
   @override
@@ -27,6 +28,41 @@ class _Client extends ApiClient {
   bool fail = false;
   bool populated = false;
   bool starterShirts = false;
+  bool paidShirts = false;
+  int coins = 30;
+  final purchased = <String>{};
+  final paidCodes = ['purple', 'brown'];
+  Map<String, dynamic> paidItem(String color) => {
+        'id': color == 'purple'
+            ? '20000000-0000-4000-8000-000000000001'
+            : '20000000-0000-4000-8000-000000000002',
+        'slot': 'inner_top',
+        'name': color == 'purple' ? 'เสื้อวิ่งสีม่วง' : 'เสื้อวิ่งสีน้ำตาล',
+        'code': 'shop_tee_$color',
+        'rarity': 'common',
+        'thumbnailUrl': '',
+        'renderData': {
+          'variant': 'shop_tee_$color',
+          'productAsset': 'asset:assets/models/product_running_tee.glb'
+        },
+      };
+  @override
+  Future<Map<String, dynamic>> post(String path,
+      {Map<String, dynamic>? body, bool auth = false}) async {
+    expect(auth, isTrue);
+    final color = path.contains('000000000001') ? 'purple' : 'brown';
+    final price = color == 'purple' ? 20 : 1000;
+    if (purchased.contains(color)) throw ApiException(409, 'มีแล้ว');
+    if (coins < price) throw ApiException(400, 'เหรียญไม่พอ');
+    coins -= price;
+    purchased.add(color);
+    return {
+      'data': {
+        'progress': {'coinBalance': coins}
+      }
+    };
+  }
+
   Map<String, dynamic>? saved;
   bool saveFail = false;
   @override
@@ -46,11 +82,20 @@ class _Client extends ApiClient {
     if (fail) throw ApiException(503, 'เซิร์ฟเวอร์ไม่พร้อม');
     if (path.contains('/progress')) {
       return {
-        'data': {'coinBalance': 42}
+        'data': {'coinBalance': paidShirts ? coins : 42}
       };
     }
     if (path.contains('/inventory')) {
       final slot = Uri.parse(path).queryParameters['slot']!;
+      if (paidShirts)
+        return {
+          'data': {
+            'items': purchased
+                .map((color) => {'item': paidItem(color), 'equipped': false})
+                .toList(),
+            'total': purchased.length
+          }
+        };
       if (starterShirts && slot == 'inner_top,outer_top') {
         return {
           'data': {
@@ -97,6 +142,28 @@ class _Client extends ApiClient {
                 ]
               : [],
           'total': populated && slot == 'hair' ? 1 : 0
+        }
+      };
+    }
+    if (paidShirts) {
+      expect(Uri.parse(path).queryParameters['owned'], 'false');
+      final colors =
+          Uri.parse(path).queryParameters['slot'] == 'inner_top,outer_top'
+              ? paidCodes.where((c) => !purchased.contains(c)).toList()
+              : <String>[];
+      return {
+        'data': {
+          'items': colors
+              .map((color) => {
+                    'listingId': color == 'purple'
+                        ? '30000000-0000-4000-8000-000000000001'
+                        : '30000000-0000-4000-8000-000000000002',
+                    'priceCoins': color == 'purple' ? 20 : 1000,
+                    'owned': false,
+                    'item': paidItem(color),
+                  })
+              .toList(),
+          'total': colors.length
         }
       };
     }
@@ -166,7 +233,8 @@ void main() {
       final frame = find.byKey(const Key('shop-avatar-frame'));
       final handle = find.byKey(const Key('shop-sheet-handle'));
       final compact = tester.getSize(frame);
-      final avatarState = tester.state(find.byType(HomeAvatar));
+      final avatarState =
+          wardrobe ? tester.state(find.byType(HomeAvatar)) : null;
       final target = AvatarLayout.home(const Size(320, 700));
       await tester.drag(handle, const Offset(0, 500));
       await tester.pumpAndSettle();
@@ -174,7 +242,8 @@ void main() {
       expect(expanded.width, closeTo(target.width, .1));
       expect(expanded.height, closeTo(target.height, .1));
       expect(expanded.height, greaterThan(compact.height));
-      expect(tester.state(find.byType(HomeAvatar)), same(avatarState));
+      if (wardrobe)
+        expect(tester.state(find.byType(HomeAvatar)), same(avatarState));
       await tester.tap(handle);
       await tester.pumpAndSettle();
       expect(tester.getSize(frame).height, closeTo(compact.height, .1));
@@ -248,6 +317,37 @@ void main() {
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
     expect(client.saved, isNull);
+  });
+
+  testWidgets(
+      'shop previews product, toggles try-on, buys once and updates real response balance',
+      (tester) async {
+    final client = _Client()..paidShirts = true;
+    await open(tester, client, const ShopScreen());
+    expect(find.text('30'), findsOneWidget);
+    var avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.productAsset, 'assets/models/product_running_tee.glb');
+    await tester.tap(find.byKey(const Key('shop-preview-toggle')));
+    await tester.pumpAndSettle();
+    avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.productAsset, isNull);
+    expect(avatar.outfitPreview['inner_top']!.renderData['variant'],
+        'shop_tee_purple');
+    await tester.tap(find.byKey(const Key('shop-buy')));
+    await tester.pumpAndSettle();
+    expect(find.text('ซื้อแล้ว'), findsOneWidget);
+    expect(find.text('10'), findsOneWidget);
+    expect(client.purchased, {'purple'});
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(ShopScreen)));
+    expect(container.read(userProvider).coin, 10);
+    expect(tester.widget<HomeAvatar>(find.byType(HomeAvatar)).productVariant,
+        'shop_tee_brown');
+    await tester.tap(find.byKey(const Key('shop-buy')));
+    await tester.pumpAndSettle();
+    expect(find.text('เหรียญไม่พอ'), findsOneWidget);
+    expect(client.coins, 10);
+    expect(client.purchased, {'purple'});
   });
 
   testWidgets('shop shows real balance, empty category and see-all navigation',

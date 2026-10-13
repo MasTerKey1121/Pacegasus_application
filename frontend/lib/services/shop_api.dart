@@ -51,6 +51,12 @@ class ShopPage {
 class ShopApi {
   final ApiClient client;
   ShopApi(this.client);
+  Future<int> purchase(String listingId) async {
+    final response =
+        await client.post('/api/shop/items/$listingId/purchase', auth: true);
+    return (response['data']['progress']['coinBalance'] as num).toInt();
+  }
+
   Future<ShopPage> inventory(String slots,
       {String sort = 'newest',
       String? rarity,
@@ -103,6 +109,7 @@ class ShopApi {
       int offset = 0,
       int limit = 30}) async {
     final query = Uri(queryParameters: {
+      'owned': 'false',
       'slot': slots,
       'sort': sort,
       'offset': '$offset',
