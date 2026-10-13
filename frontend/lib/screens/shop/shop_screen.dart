@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/shop_api.dart';
+import '../../providers/avatar_provider.dart';
 import '../home/home_avatar.dart';
 import '../home/avatar_layout.dart';
 
@@ -19,7 +20,6 @@ const _categories = <({String name, String? slots, IconData icon})>[
   (name: 'ของถือ', slots: null, icon: Icons.work_outline),
   (name: 'กางเกง', slots: 'pants', icon: Icons.accessibility_new),
   (name: 'รองเท้า', slots: 'shoes', icon: Icons.directions_run),
-  (name: 'แท่นยืน', slots: null, icon: Icons.layers_outlined),
 ];
 const _rarities = {
   'common': 'ทั่วไป',
@@ -55,26 +55,51 @@ class ShopScreen extends ConsumerStatefulWidget {
 
 class _ShopScreenState extends ConsumerState<ShopScreen> {
   final _sheet = DraggableScrollableController();
-  double _sheetExtent = .6;
+  double _sheetExtent = .5;
   late Future<List<ShopPage>> _catalog;
   late Future<int> _balance;
   int? _selected;
   bool _expanded = false;
   bool _saving = false;
   final Map<String, ShopItem> _changes = {};
+  final Map<String, String> _equippedIds = {};
+  final Map<String, ShopItem> _savedPreview = {};
 
   void _choose(ShopItem item) {
     if (_saving || item.slot == null) return;
-    setState(() => _changes[item.slot!] = item);
+    setState(() {
+      final equipped = _equippedIds[item.slot!] == item.id ||
+          (!_equippedIds.containsKey(item.slot!) && item.equipped);
+      if (equipped) {
+        _changes.remove(item.slot!);
+      } else {
+        _changes[item.slot!] = item;
+      }
+    });
   }
 
   Future<void> _save() async {
+    if (_saving || _changes.isEmpty) return;
     setState(() => _saving = true);
     try {
       await ref.read(shopApiProvider).saveOutfit(_changes);
       if (!mounted) return;
+      _savedPreview.addAll(_changes);
+      _equippedIds
+          .addAll(_changes.map((slot, item) => MapEntry(slot, item.id)));
+      _changes.clear();
+      ref.invalidate(avatarOutfitProvider);
+      var refreshed = false;
+      try {
+        await ref.read(avatarOutfitProvider.future);
+        refreshed = true;
+      } catch (_) {
+        // Save succeeded. Keep the visible draft if refreshing the outfit
+        // fails, instead of flashing back to the preceding shirt.
+      }
+      if (!mounted) return;
       setState(() {
-        _changes.clear();
+        if (refreshed) _savedPreview.clear();
         _reload();
       });
       ScaffoldMessenger.of(context)
@@ -111,7 +136,18 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         ? Future.value(const ShopPage([], 0))
         : widget.wardrobe
             ? api.inventory(c.slots!, limit: 8)
-            : api.list(c.slots!, limit: 8)));
+            : api.list(c.slots!, limit: 8))).then((pages) {
+      if (widget.wardrobe) {
+        for (final page in pages) {
+          for (final item in page.items) {
+            if (item.equipped && item.slot != null) {
+              _equippedIds[item.slot!] = item.id;
+            }
+          }
+        }
+      }
+      return pages;
+    });
     _balance = widget.wardrobe ? Future.value(0) : api.balance();
   }
 
@@ -149,9 +185,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
               ((widget.wardrobe ? 128 : 48) / height).clamp(.06, .4);
           final expandedAvatar = AvatarLayout.home(constraints.biggest);
           final expansion =
-              ((.6 - _sheetExtent) / (.6 - minimum)).clamp(0.0, 1.0);
+              ((.5 - _sheetExtent) / (.5 - minimum)).clamp(0.0, 1.0);
           final compactHeight =
-              math.max(80.0, math.min(310.0, height * .4 - 78));
+              math.max(80.0, math.min(310.0, height * .5 - 78));
           final compactWidth = math.max(0.0, constraints.maxWidth - 120);
           final avatarHeight = compactHeight +
               (expandedAvatar.height - compactHeight) * expansion;
@@ -173,8 +209,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 left: (constraints.maxWidth - avatarWidth) / 2,
                 width: avatarWidth,
                 height: avatarHeight,
-                child:
-                    HomeAvatar(rendererBuilder: widget.avatarRendererBuilder)),
+                child: HomeAvatar(
+                    rendererBuilder: widget.avatarRendererBuilder,
+                    outfitPreview: {..._savedPreview, ..._changes})),
             Positioned(
                 top: 8,
                 left: 12,
@@ -204,11 +241,10 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 },
                 child: DraggableScrollableSheet(
                   controller: _sheet,
-                  initialChildSize: .6,
+                  initialChildSize: .5,
                   minChildSize: minimum,
-                  maxChildSize: .88,
+                  maxChildSize: .5,
                   snap: true,
-                  snapSizes: const [.6],
                   builder: (context, scroll) => Material(
                       color: _panel,
                       borderRadius:
@@ -218,16 +254,13 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                         GestureDetector(
                             key: const Key('shop-sheet-handle'),
                             behavior: HitTestBehavior.opaque,
-                            onTap: () => _move(_sheet.size < .59
-                                ? .6
-                                : _sheet.size < .87
-                                    ? .88
-                                    : .6),
+                            onTap: () =>
+                                _move(_sheet.size < .49 ? .5 : minimum),
                             onVerticalDragUpdate: (d) => _sheet.jumpTo(
                                 (_sheet.size - d.delta.dy / height)
-                                    .clamp(minimum, .88)),
+                                    .clamp(minimum, .5)),
                             onVerticalDragEnd: (_) {
-                              final stops = [minimum, .6, .88]..sort((a, b) =>
+                              final stops = [minimum, .5]..sort((a, b) =>
                                   (a - _sheet.size)
                                       .abs()
                                       .compareTo((b - _sheet.size).abs()));
@@ -248,8 +281,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                                             decoration: BoxDecoration(
                                                 color: _accent,
                                                 borderRadius:
-                                                    BorderRadius.circular(
-                                                        4))))))),
+                                                    BorderRadius.circular(4))))))),
                         Expanded(
                             child:
                                 CustomScrollView(controller: scroll, slivers: [
@@ -371,8 +403,9 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                                                     : 'ยังไม่มีสินค้าในหมวดนี้')
                                           else
                                             SizedBox(
-                                                height:
-                                                    widget.wardrobe ? 172 : 194,
+                                                height: widget.wardrobe
+                                                    ? 149.6
+                                                    : 171.6,
                                                 child: ListView.separated(
                                                     scrollDirection:
                                                         Axis.horizontal,
@@ -381,19 +414,31 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                                                     separatorBuilder: (_, __) =>
                                                         const SizedBox(
                                                             width: 12),
-                                                    itemBuilder: (_, j) => SizedBox(
-                                                        width: 112,
-                                                        child: _ItemCard(snapshot.data![i].items[j],
-                                                            wardrobe:
-                                                                widget.wardrobe,
-                                                            selected: _changes[snapshot.data![i].items[j].slot]
-                                                                        ?.id ==
-                                                                    snapshot
-                                                                        .data![i]
-                                                                        .items[j]
-                                                                        .id ||
-                                                                (!_changes.containsKey(snapshot.data![i].items[j].slot) && snapshot.data![i].items[j].equipped),
-                                                            onSelect: () => _choose(snapshot.data![i].items[j]))))),
+                                                    itemBuilder: (_, j) =>
+                                                        SizedBox(
+                                                            width: 89.6,
+                                                            child: _ItemCard(
+                                                                snapshot
+                                                                    .data![i]
+                                                                    .items[j],
+                                                                wardrobe: widget
+                                                                    .wardrobe,
+                                                                selected: _changes.containsKey(snapshot
+                                                                        .data![
+                                                                            i]
+                                                                        .items[
+                                                                            j]
+                                                                        .slot)
+                                                                    ? _changes[snapshot.data![i].items[j].slot]
+                                                                            ?.id ==
+                                                                        snapshot
+                                                                            .data![i]
+                                                                            .items[j]
+                                                                            .id
+                                                                    : _equippedIds.containsKey(snapshot.data![i].items[j].slot)
+                                                                        ? _equippedIds[snapshot.data![i].items[j].slot] == snapshot.data![i].items[j].id
+                                                                        : snapshot.data![i].items[j].equipped,
+                                                                onSelect: () => _choose(snapshot.data![i].items[j]))))),
                                         ])),
                                   const SizedBox(height: 24),
                                 ]));
@@ -561,8 +606,8 @@ class _ShopCategoryScreenState extends ConsumerState<ShopCategoryScreen> {
                                       childCount: _items.length),
                                   gridDelegate:
                                       SliverGridDelegateWithMaxCrossAxisExtent(
-                                          maxCrossAxisExtent: 190,
-                                          mainAxisExtent: widget.wardrobe ? 218 : 250,
+                                          maxCrossAxisExtent: 152,
+                                          mainAxisExtent: widget.wardrobe ? 186.4 : 216.4,
                                           mainAxisSpacing: 16,
                                           crossAxisSpacing: 12))),
                         SliverToBoxAdapter(
@@ -643,6 +688,7 @@ class _ItemCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
             child: Container(
+                key: ValueKey('item-thumbnail-${item.id}'),
                 width: double.infinity,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -655,11 +701,16 @@ class _ItemCard extends StatelessWidget {
                 child: item.image.isEmpty
                     ? const Icon(Icons.image_not_supported_outlined,
                         color: AppColors.textTertiary)
-                    : Image.network(item.image,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.image_not_supported_outlined,
-                            color: AppColors.textTertiary)))),
+                    : item.image.startsWith('asset:')
+                        ? Image.asset(item.image.substring(6),
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.image_not_supported_outlined))
+                        : Image.network(item.image,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.image_not_supported_outlined,
+                                color: AppColors.textTertiary)))),
         const SizedBox(height: 8),
         Text(item.name,
             maxLines: 1,

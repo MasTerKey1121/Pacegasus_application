@@ -11,6 +11,7 @@ import 'package:pacegasus/services/shop_api.dart';
 import 'package:pacegasus/screens/shop/shop_screen.dart';
 import 'package:pacegasus/screens/home/avatar_layout.dart';
 import 'package:pacegasus/screens/home/home_avatar.dart';
+import 'package:pacegasus/providers/avatar_provider.dart';
 
 class _Fonts extends Fake implements AssetManifest {
   @override
@@ -25,6 +26,7 @@ class _Client extends ApiClient {
   final calls = <Uri>[];
   bool fail = false;
   bool populated = false;
+  bool starterShirts = false;
   Map<String, dynamic>? saved;
   bool saveFail = false;
   @override
@@ -49,6 +51,35 @@ class _Client extends ApiClient {
     }
     if (path.contains('/inventory')) {
       final slot = Uri.parse(path).queryParameters['slot']!;
+      if (starterShirts && slot == 'inner_top,outer_top') {
+        return {
+          'data': {
+            'items': [
+              for (final color in ['black', 'white'])
+                {
+                  'equipped':
+                      saved == null ? color == 'black' : color == 'white',
+                  'item': {
+                    'id': color == 'white'
+                        ? '10000000-0000-4000-8000-000000000004'
+                        : '10000000-0000-4000-8000-000000000003',
+                    'code': 'starter_tee_$color',
+                    'slot': 'inner_top',
+                    'name':
+                        color == 'white' ? 'เสื้อวิ่งสีขาว' : 'เสื้อวิ่งสีดำ',
+                    'rarity': 'common',
+                    'thumbnailUrl':
+                        'asset:assets/models/items/starter_tee_$color.png',
+                    'renderData': {
+                      'variant': color == 'white' ? 'starter_tee_white' : null
+                    },
+                  }
+                }
+            ],
+            'total': 2
+          }
+        };
+      }
       return {
         'data': {
           'items': populated && slot == 'hair'
@@ -112,7 +143,11 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(
-        overrides: [shopApiProvider.overrideWithValue(ShopApi(client))],
+        overrides: [
+          shopApiProvider.overrideWithValue(ShopApi(client)),
+          avatarOutfitProvider
+              .overrideWith((ref) async => const AvatarOutfit({}))
+        ],
         child: MaterialApp(
             theme: ThemeData.dark(),
             home: screen is ShopScreen
@@ -144,8 +179,76 @@ void main() {
       await tester.pumpAndSettle();
       expect(tester.getSize(frame).height, closeTo(compact.height, .1));
       expect(tester.takeException(), isNull);
+      final sheet = tester.widget<DraggableScrollableSheet>(
+          find.byType(DraggableScrollableSheet));
+      expect(sheet.maxChildSize, .5);
+      await tester.drag(handle, const Offset(0, -1000));
+      await tester.pumpAndSettle();
+      expect(sheet.controller!.size, closeTo(.5, .001));
+      expect(find.text('ถุงเท้า'), findsNothing);
+      expect(find.text('แท่นยืน'), findsNothing);
     });
   }
+
+  testWidgets(
+      'white shirt has a real thumbnail, previews immediately and failed save retains it',
+      (tester) async {
+    final client = _Client()..starterShirts = true;
+    await open(tester, client, const ShopScreen(wardrobe: true));
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    expect(find.text('เสื้อวิ่งสีขาว'), findsOneWidget);
+    expect(find.byType(Image), findsNWidgets(2));
+    await tester.tap(find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000004')));
+    await tester.pumpAndSettle();
+    final avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.outfitPreview['inner_top']!.renderData['variant'],
+        'starter_tee_white');
+    client.saveFail = true;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<HomeAvatar>(find.byType(HomeAvatar))
+            .outfitPreview['inner_top']!
+            .code,
+        'starter_tee_white');
+    client.saveFail = false;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(client.saved!['equipment'], [
+      {'slot': 'inner_top', 'itemId': '10000000-0000-4000-8000-000000000004'}
+    ]);
+  });
+
+  testWidgets('equipped item or returning to saved shirt leaves save disabled',
+      (tester) async {
+    final client = _Client()..starterShirts = true;
+    await open(tester, client, const ShopScreen(wardrobe: true));
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    final black = find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000003'));
+    final white = find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000004'));
+    expect(tester.getSize(black).width, closeTo(112 * .8, .01));
+    await tester.tap(black);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    await tester.tap(white);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull);
+    await tester.tap(black);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(client.saved, isNull);
+  });
 
   testWidgets('shop shows real balance, empty category and see-all navigation',
       (tester) async {
@@ -228,7 +331,7 @@ void main() {
     expect(find.text('ผมของฉัน'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
-    await tester.tap(find.text('ผมของฉัน'));
+    await tester.tap(find.byKey(const ValueKey('item-thumbnail-owned-hair')));
     await tester.pumpAndSettle();
     expect(find.text('✓ เลือกอยู่'), findsOneWidget);
     client.saveFail = true;

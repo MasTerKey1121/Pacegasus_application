@@ -1,13 +1,20 @@
 // Standalone visual smoke test; does not change authentication or app routes.
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:pacegasus/providers/avatar_provider.dart';
 import 'package:pacegasus/navigation/home_route_observer.dart';
 import 'package:pacegasus/screens/home/home_avatar.dart';
 
-void main() => runApp(MaterialApp(
-      theme: ThemeData.dark(),
-      navigatorObservers: [homeRouteObserver],
-      home: const _Preview(),
-    ));
+void main() => runApp(ProviderScope(
+        overrides: [
+          avatarOutfitProvider
+              .overrideWith((ref) async => const AvatarOutfit({})),
+        ],
+        child: MaterialApp(
+          theme: ThemeData.dark(),
+          navigatorObservers: [homeRouteObserver],
+          home: const _Preview(),
+        )));
 
 class _Preview extends StatelessWidget {
   const _Preview();

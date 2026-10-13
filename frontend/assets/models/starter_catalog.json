@@ -1,0 +1,93 @@
+[
+  {
+    "id": "10000000-0000-4000-8000-000000000001",
+    "code": "starter_hair",
+    "slot": "hair",
+    "name": "ผมสั้นนักวิ่ง",
+    "thumbnail": "asset:assets/models/items/starter_hair.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000002",
+    "code": "starter_face",
+    "slot": "face",
+    "name": "หน้ายิ้มเริ่มต้น",
+    "thumbnail": "asset:assets/models/items/starter_face.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000003",
+    "code": "starter_tee_black",
+    "slot": "inner_top",
+    "name": "เสื้อวิ่งสีดำ",
+    "thumbnail": "asset:assets/models/items/starter_tee_black.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000004",
+    "code": "starter_tee_white",
+    "slot": "inner_top",
+    "name": "เสื้อวิ่งสีขาว",
+    "thumbnail": "asset:assets/models/items/starter_tee_white.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": false,
+      "variant": "starter_tee_white"
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000005",
+    "code": "starter_shorts",
+    "slot": "pants",
+    "name": "กางเกงวิ่งเริ่มต้น",
+    "thumbnail": "asset:assets/models/items/starter_shorts.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000006",
+    "code": "starter_socks",
+    "slot": "socks",
+    "name": "ถุงเท้าสีขาว",
+    "thumbnail": "asset:assets/models/items/starter_socks.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  },
+  {
+    "id": "10000000-0000-4000-8000-000000000007",
+    "code": "starter_shoes",
+    "slot": "shoes",
+    "name": "รองเท้าวิ่งเริ่มต้น",
+    "thumbnail": "asset:assets/models/items/starter_shoes.png",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "starterEquipped": true,
+      "variant": null
+    }
+  }
+]
