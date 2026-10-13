@@ -179,6 +179,11 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 | Method | Path | คำอธิบาย |
 |---|---|---|
 | GET | `/users/me/full` | รวมข้อมูลผู้ใช้ + basic info + injury + goals + running history ในครั้งเดียว (เหมาะกับหน้า Home/Profile) |
+| GET | `/users/me` | ข้อมูลโปรไฟล์ของผู้ใช้ปัจจุบัน |
+| PATCH | `/users/me` | แก้ไขโปรไฟล์แบบ partial: `displayName`, `dateOfBirth`, `gender`, `heightCm`, `weightKg`, `timezone` (ส่งอย่างน้อย 1 field; field ของ basic info ต้องทำ onboarding step 1 ก่อน มิฉะนั้นได้ `409`) |
+| PUT | `/users/me/avatar` | เพิ่ม/เปลี่ยนรูปโปรไฟล์ — `multipart/form-data` field `avatar` (JPEG/PNG/WebP ไม่เกิน 5 MB) ไฟล์เก่าจะถูกลบ; รูปเข้าถึงได้ที่ `/uploads/avatars/<file>` |
+| DELETE | `/users/me/avatar` | ลบรูปโปรไฟล์ |
+| DELETE | `/users/me` | ลบบัญชี (soft delete: `status = deleted`, revoke refresh token ทั้งหมด, ล็อกอินอีกไม่ได้) |
 
 ---
 

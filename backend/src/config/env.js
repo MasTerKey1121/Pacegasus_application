@@ -12,6 +12,8 @@ function required(name, fallback = undefined) {
 module.exports = {
   port: parseInt(process.env.PORT || '4000', 10),
   nodeEnv: process.env.NODE_ENV || 'development',
+  // Public origin used to build absolute URLs for uploaded files (defaults to the request host)
+  publicBaseUrl: process.env.PUBLIC_BASE_URL,
   clientUrl: process.env.CLIENT_URL || '*',
 
   databaseUrl: required('DATABASE_URL'),

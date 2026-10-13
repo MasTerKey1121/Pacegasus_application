@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Pacegasus API",
-    "description": "# Pacegasus Backend API\n\nCollection สำหรับทดสอบ Pacegasus REST API ครอบคลุม 2 โมดูล:\n1. **Authentication** — Email OTP login/register, Google Sign-In, refresh, logout\n2. **Onboarding** — 4 ขั้นตอนเก็บข้อมูลผู้ใช้หลังสมัคร\n\n## วิธีใช้\n1. ตั้งค่า collection variable `baseUrl` ให้ตรงกับที่ backend รันอยู่ (default `http://localhost:4000`)\n2. รัน request ตามลำดับในโฟลเดอร์ **1. Authentication** ก่อน — request `Verify OTP (Register)` จะ auto-save `accessToken`/`refreshToken` ให้ request อื่นใช้ต่ออัตโนมัติผ่าน Test script\n3. เนื่องจาก OTP ถูกส่งไปทางอีเมลจริง (หรือดูค่าตรงจาก DB ตาราง `otp_codes` เวลา dev) ให้เปิดอีเมล/DB มาคัดลอกรหัส 6 หลักมาใส่ใน body ของ `Verify OTP` ก่อนกดส่ง\n4. หลังจากนั้น request ในโฟลเดอร์ **2. Onboarding** และ **3. Users** จะใช้ `{{accessToken}}` ที่ save ไว้อัตโนมัติผ่าน Authorization header\n\n## Response shape มาตรฐาน\nทุก endpoint ตอบกลับในรูปแบบเดียวกัน:\n```json\n{ \"success\": true, \"message\": \"...\", \"data\": { ... } }\n```\nและเมื่อ error:\n```json\n{ \"success\": false, \"message\": \"...\", \"details\": ... }\n```",
+    "description": "# Pacegasus Backend API\n\nCollection สำหรับทดสอบ Pacegasus REST API ครอบคลุม 2 โมดูล:\n1. **Authentication** — Email OTP login/register, Google Sign-In, refresh, logout\n2. **Onboarding** — 4 ขั้นตอนเก็บข้อมูลผู้ใช้หลังสมัคร\n\n## วิธีใช้\n1. ตั้งค่า collection variable `baseUrl` ให้ตรงกับที่ backend รันอยู่ (default `http://localhost:4000`)\n2. รัน request ตามลำดับในโฟลเดอร์ **1. Authentication** ก่อน — request `Verify OTP (Register)` จะ auto-save `accessToken`/`refreshToken` ให้ request อื่นใช้ต่ออัตโนมัติผ่าน Test script\n3. เนื่องจาก OTP ถูกส่งไปทางอีเมลจริง (หรือดูค่าตรงจาก DB ตาราง `otp_codes` เวลา dev) ให้เปิดอีเมล/DB มาคัดลอกรหัส 6 หลักมาใส่ใน body ของ `Verify OTP` ก่อนกดส่ง\n4. หลังจากนั้น request ในโฟลเดอร์ **2. Onboarding** และ **3. Users** จะใช้ `{{accessToken}}` ที่ save ไว้อัตโนมัติผ่าน Authorization header\n\n## Response shape มาตรฐาน\nทุก endpoint ตอบกลับในรูปแบบเดียวกัน:\n```json\n{ \"success\": true, \"message\": \"...\", \"data\": { ... } }\n```\nและเมื่อ error:\n```json\n{ \"success\": false, \"message\": \"...\", \"details\": ... }\n```\n\n## 3. Users (/me)\nRequest 3.2–3.8 ครอบคลุม get/update โปรไฟล์, เพิ่ม/เปลี่ยน/ลบรูปโปรไฟล์ และลบบัญชี ก่อนรัน 3.5 ให้เลือกไฟล์รูปในช่อง `avatar` ของ Body; รัน 3.8 เป็นลำดับสุดท้ายเสมอ",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -39,6 +39,11 @@
     },
     {
       "key": "userId",
+      "value": "",
+      "type": "string"
+    },
+    {
+      "key": "avatarUrl",
       "value": "",
       "type": "string"
     }
@@ -927,6 +932,386 @@
                   "    pm.expect(json.data).to.have.property('injury');",
                   "    pm.expect(json.data).to.have.property('goals');",
                   "    pm.expect(json.data).to.have.property('runningHistory');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.2 Get My Profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "**GET /api/users/me**\n\nคืนข้อมูลโปรไฟล์ของผู้ใช้ที่ login อยู่ (ต้องแนบ `Authorization: Bearer {{accessToken}}`)\n\n| Status | ความหมาย |\n|---|---|\n| 200 | สำเร็จ |\n| 401 | ไม่มี/หมดอายุ/ผิดรูปแบบ accessToken |\n| 404 | ไม่พบผู้ใช้ (หรือบัญชีถูกลบแล้ว) |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('Has user object', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.user).to.have.property('displayName');",
+                  "    pm.expect(json.data.user).to.have.property('avatarUrl');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.3 Update My Profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "**PATCH /api/users/me**\n\nแก้ไขโปรไฟล์แบบ partial ส่งอย่างน้อย 1 field จาก: `displayName`, `dateOfBirth`, `gender`, `heightCm`, `weightKg`, `timezone`\n\nfield ของ basic info (ทุกตัวยกเว้น `displayName`) ต้องทำ Onboarding Step 1 มาก่อน มิฉะนั้นได้ `409`\n\n| Status | ความหมาย |\n|---|---|\n| 200 | สำเร็จ คืน `data.user` ที่อัปเดตแล้ว |\n| 400 | body ว่างหรือ field ไม่ถูกต้อง |\n| 401 | token ไม่ถูกต้อง |\n| 409 | ยังไม่มี basic info |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"displayName\": \"Pacegasus Tester\",\n  \"heightCm\": 175,\n  \"weightKg\": 68.5\n}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('displayName updated', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.success).to.eql(true);",
+                  "    pm.expect(json.data.user.displayName).to.eql('Pacegasus Tester');",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.4 Update My Profile - Invalid (empty body)",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "ส่ง body ว่าง ต้องได้ `400` (ต้องมีอย่างน้อย 1 field)",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "raw",
+              "raw": "{}",
+              "options": {
+                "raw": {
+                  "language": "json"
+                }
+              }
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('success is false', function () {",
+                  "    pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.5 Upload / Replace Avatar",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me",
+                "avatar"
+              ]
+            },
+            "description": "**PUT /api/users/me/avatar** (`multipart/form-data`)\n\nเลือกไฟล์ในช่อง `avatar` (Body > form-data > คลิกเลือกไฟล์) รองรับ JPEG / PNG / WebP ขนาดไม่เกิน 5 MB อัปโหลดซ้ำจะแทนที่รูปเดิมและลบไฟล์เก่า\n\nรูปเข้าถึงได้ที่ `data.user.avatarUrl` (`/uploads/avatars/<file>`)\n\n| Status | ความหมาย |\n|---|---|\n| 200 | สำเร็จ |\n| 400 | ไม่ได้แนบไฟล์ / ชนิดไฟล์ไม่รองรับ / ใหญ่เกิน 5 MB |\n| 401 | token ไม่ถูกต้อง |",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "avatar",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('avatarUrl is set', function () {",
+                  "    const json = pm.response.json();",
+                  "    pm.expect(json.data.user.avatarUrl).to.be.a('string').and.include('/uploads/avatars/');",
+                  "    pm.collectionVariables.set('avatarUrl', json.data.user.avatarUrl);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.6 Upload Avatar - Invalid (no file)",
+          "request": {
+            "method": "PUT",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me",
+                "avatar"
+              ]
+            },
+            "description": "ไม่แนบไฟล์ใน field `avatar` ต้องได้ `400`",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            },
+            "body": {
+              "mode": "formdata",
+              "formdata": []
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 400', function () {",
+                  "    pm.response.to.have.status(400);",
+                  "});",
+                  "",
+                  "pm.test('success is false', function () {",
+                  "    pm.expect(pm.response.json().success).to.eql(false);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.7 Delete Avatar",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me/avatar",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me",
+                "avatar"
+              ]
+            },
+            "description": "**DELETE /api/users/me/avatar**\n\nลบรูปโปรไฟล์ (ตั้ง `avatarUrl = null` และลบไฟล์ในเครื่องเซิร์ฟเวอร์) เรียกซ้ำได้ ไม่ error",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('avatarUrl is null', function () {",
+                  "    pm.expect(pm.response.json().data.user.avatarUrl).to.eql(null);",
+                  "});"
+                ]
+              }
+            }
+          ]
+        },
+        {
+          "name": "3.8 Delete My Account",
+          "request": {
+            "method": "DELETE",
+            "header": [],
+            "url": {
+              "raw": "{{baseUrl}}/api/users/me",
+              "host": [
+                "{{baseUrl}}"
+              ],
+              "path": [
+                "api",
+                "users",
+                "me"
+              ]
+            },
+            "description": "**DELETE /api/users/me**\n\n⚠️ ลบบัญชีของผู้ใช้ที่ login อยู่ (soft delete: `status = deleted`, revoke refresh token ทั้งหมด, login อีกไม่ได้) — **รันเป็น request สุดท้ายเท่านั้น** เพราะ token เดิมจะใช้งานต่อไม่ได้\n\nหลังลบ `GET /api/users/me` จะได้ `404`",
+            "auth": {
+              "type": "bearer",
+              "bearer": [
+                {
+                  "key": "token",
+                  "value": "{{accessToken}}",
+                  "type": "string"
+                }
+              ]
+            }
+          },
+          "response": [],
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('Status code is 200', function () {",
+                  "    pm.response.to.have.status(200);",
+                  "});",
+                  "",
+                  "pm.test('success is true', function () {",
+                  "    pm.expect(pm.response.json().success).to.eql(true);",
                   "});"
                 ]
               }

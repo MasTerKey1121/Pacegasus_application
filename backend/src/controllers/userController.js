@@ -1,6 +1,9 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
+const env = require('../config/env');
+const userService = require('../services/userService');
+const { updateProfileSchema } = require('../utils/validators');
 
 // GET /api/users/me/full -> profile + all onboarding data, handy for the app's home screen
 const getFullProfile = asyncHandler(async (req, res) => {
@@ -47,4 +50,40 @@ const getFullProfile = asyncHandler(async (req, res) => {
   });
 });
 
-module.exports = { getFullProfile };
+// GET /api/users/me
+const getMe = asyncHandler(async (req, res) => {
+  const user = await userService.getProfile(req.user.id);
+  res.status(200).json({ success: true, data: { user } });
+});
+
+// PATCH /api/users/me -> partial update of display name and basic info
+const updateMe = asyncHandler(async (req, res) => {
+  const { value, error } = updateProfileSchema.validate(req.body, { abortEarly: false });
+  if (error) throw new ApiError(400, 'ข้อมูลไม่ถูกต้อง', error.details.map((d) => d.message));
+
+  const user = await userService.updateProfile(req.user.id, value);
+  res.status(200).json({ success: true, message: 'อัปเดตโปรไฟล์สำเร็จ', data: { user } });
+});
+
+// PUT /api/users/me/avatar (multipart/form-data, field "avatar") -> add or replace the profile picture
+const uploadAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, 'กรุณาแนบไฟล์รูปใน field "avatar"');
+
+  const baseUrl = (env.publicBaseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const user = await userService.setAvatar(req.user.id, `${baseUrl}${userService.AVATAR_URL_PREFIX}${req.file.filename}`);
+  res.status(200).json({ success: true, message: 'อัปโหลดรูปโปรไฟล์สำเร็จ', data: { user } });
+});
+
+// DELETE /api/users/me/avatar
+const deleteAvatar = asyncHandler(async (req, res) => {
+  const user = await userService.deleteAvatar(req.user.id);
+  res.status(200).json({ success: true, message: 'ลบรูปโปรไฟล์สำเร็จ', data: { user } });
+});
+
+// DELETE /api/users/me -> delete the account (soft delete)
+const deleteMe = asyncHandler(async (req, res) => {
+  await userService.deleteAccount(req.user.id);
+  res.status(200).json({ success: true, message: 'ลบบัญชีผู้ใช้สำเร็จ' });
+});
+
+module.exports = { getFullProfile, getMe, updateMe, uploadAvatar, deleteAvatar, deleteMe };
