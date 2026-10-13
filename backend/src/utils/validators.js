@@ -115,7 +115,17 @@ const step4Schema = Joi.object({
   longestDistanceKm: Joi.number().min(0).max(500).allow(null),
 });
 
+const updateProfileSchema = Joi.object({
+  displayName: Joi.string().trim().min(1).max(150),
+  dateOfBirth: Joi.date().iso().max('now'),
+  gender: Joi.string().valid('male', 'female', 'other', 'prefer_not_to_say'),
+  heightCm: Joi.number().min(80).max(250),
+  weightKg: Joi.number().min(20).max(300),
+  timezone: Joi.string().max(64),
+}).min(1);
+
 module.exports = {
+  updateProfileSchema,
   requestOtpSchema,
   verifyOtpSchema,
   googleAuthSchema,
