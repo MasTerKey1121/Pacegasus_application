@@ -22,6 +22,7 @@ import '../training/training_schedule_screen.dart';
 import '../wellness/daily_wellness_screen.dart';
 import 'daily_missions_screen.dart';
 import 'home_avatar.dart';
+import 'avatar_layout.dart';
 
 const _background = Color(0xFF110E20);
 const _panel = Color(0xFF201A32);
@@ -203,12 +204,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         body: SafeArea(child: LayoutBuilder(builder: (context, constraints) {
           final height = constraints.maxHeight;
           _minimum = (48 / height).clamp(.04, .16);
-          final originalAvatarHeight = math.min(330.0, height * .48);
-          final avatarTop = math.min(160.0, height * .25);
-          final avatarHeight = math.min(originalAvatarHeight * 2,
-                  _avatarOnly ? height - 24 : height - avatarTop - 12) *
-              .9;
-          final avatarWidth = math.min(460.0, constraints.maxWidth - 24) * .9;
+          final avatar =
+              AvatarLayout.home(constraints.biggest, avatarOnly: _avatarOnly);
+          final avatarHeight = avatar.height;
+          final avatarWidth = avatar.width;
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
@@ -231,7 +230,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
-              top: (_avatarOnly ? (height - avatarHeight) / 2 : avatarTop) - 5,
+              top: _avatarOnly ? (height - avatarHeight) / 2 - 5 : avatar.top,
               left: 0,
               right: 0,
               height: avatarHeight,

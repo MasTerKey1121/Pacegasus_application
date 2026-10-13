@@ -9,6 +9,8 @@ import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/services/api_client.dart';
 import 'package:pacegasus/services/shop_api.dart';
 import 'package:pacegasus/screens/shop/shop_screen.dart';
+import 'package:pacegasus/screens/home/avatar_layout.dart';
+import 'package:pacegasus/screens/home/home_avatar.dart';
 
 class _Fonts extends Fake implements AssetManifest {
   @override
@@ -111,8 +113,38 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(
         overrides: [shopApiProvider.overrideWithValue(ShopApi(client))],
-        child: MaterialApp(theme: ThemeData.dark(), home: screen)));
+        child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: screen is ShopScreen
+                ? ShopScreen(
+                    wardrobe: screen.wardrobe,
+                    avatarRendererBuilder: (_) => const SizedBox())
+                : screen)));
     await tester.pumpAndSettle();
+  }
+
+  for (final wardrobe in [false, true]) {
+    testWidgets(
+        'collapsed panel expands avatar to Home size (wardrobe=$wardrobe)',
+        (tester) async {
+      await open(tester, _Client(), ShopScreen(wardrobe: wardrobe));
+      final frame = find.byKey(const Key('shop-avatar-frame'));
+      final handle = find.byKey(const Key('shop-sheet-handle'));
+      final compact = tester.getSize(frame);
+      final avatarState = tester.state(find.byType(HomeAvatar));
+      final target = AvatarLayout.home(const Size(320, 700));
+      await tester.drag(handle, const Offset(0, 500));
+      await tester.pumpAndSettle();
+      final expanded = tester.getSize(frame);
+      expect(expanded.width, closeTo(target.width, .1));
+      expect(expanded.height, closeTo(target.height, .1));
+      expect(expanded.height, greaterThan(compact.height));
+      expect(tester.state(find.byType(HomeAvatar)), same(avatarState));
+      await tester.tap(handle);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(frame).height, closeTo(compact.height, .1));
+      expect(tester.takeException(), isNull);
+    });
   }
 
   testWidgets('shop shows real balance, empty category and see-all navigation',
