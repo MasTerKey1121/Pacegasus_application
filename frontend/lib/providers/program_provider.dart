@@ -31,6 +31,7 @@ class ProgramNotifier extends ChangeNotifier {
   bool _isScheduleSaved = false;
   DateTime? _programStartDate;
   bool _hasRestored = false;
+  String? _userProgramId;
 
   /// API 5.1 must only be called after the user explicitly registers a plan.
   bool get isRegistered => _isRegistered;
@@ -76,6 +77,7 @@ class ProgramNotifier extends ChangeNotifier {
     _isScheduleSaved = false;
     _programStartDate = null;
     _hasRestored = false;
+    _userProgramId = null;
     notifyListeners();
   }
 
@@ -100,6 +102,7 @@ class ProgramNotifier extends ChangeNotifier {
       if (error.statusCode == 404) {
         _isRegistered = false;
         _isScheduleSaved = false;
+        _userProgramId = null;
         _programStartDate = null;
         quests = const [];
       } else {
@@ -241,6 +244,7 @@ class ProgramNotifier extends ChangeNotifier {
       selectedTemplateLevel = null;
       _isRegistered = false;
       _isScheduleSaved = false;
+      _userProgramId = null;
       _programStartDate = null;
       currentWeekErrorMessage = null;
       isLoading = false;
@@ -406,7 +410,9 @@ class ProgramNotifier extends ChangeNotifier {
 
   void _setQuests(Map<String, dynamic> response) {
     final data = response['data'] as Map<String, dynamic>? ?? const {};
-    _isScheduleSaved = data['scheduleSaved'] == true;
+    final programId = data['userProgramId']?.toString();
+    final wasSaved = programId == _userProgramId && _isScheduleSaved;
+    _userProgramId = programId;
     final templateLevel = data['templateLevel']?.toString();
     if (templateLevel != null && templateLevel.isNotEmpty) {
       selectedTemplateLevel = templateLevel;
@@ -418,6 +424,10 @@ class ProgramNotifier extends ChangeNotifier {
         .whereType<Map>()
         .map((quest) => Map<String, dynamic>.from(quest))
         .toList(growable: false);
+    // Older API responses omit scheduleSaved. Existing quests or a successful
+    // write still establish that this program has a saved schedule.
+    _isScheduleSaved =
+        data['scheduleSaved'] as bool? ?? (quests.isNotEmpty || wasSaved);
   }
 
   String _sessionTypeValue(SessionType type) => switch (type) {
