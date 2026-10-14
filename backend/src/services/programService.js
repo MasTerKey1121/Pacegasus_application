@@ -564,8 +564,8 @@ async function getQuestsInRange(userId, from, to) {
   if (!rangeFrom || !rangeTo) {
     const { rows: weekRows } = await db.query(
       `SELECT
-         ($1::date + FLOOR((CURRENT_DATE - $1::date) / 7) * 7)::date AS week_start,
-         ($1::date + FLOOR((CURRENT_DATE - $1::date) / 7) * 7 + 6)::date AS week_end`,
+         ($1::date + FLOOR((CURRENT_DATE - $1::date) / 7)::integer * 7)::date AS week_start,
+         ($1::date + FLOOR((CURRENT_DATE - $1::date) / 7)::integer * 7 + 6)::date AS week_end`,
       [program.start_date]
     );
     rangeFrom = rangeFrom || weekRows[0].week_start;

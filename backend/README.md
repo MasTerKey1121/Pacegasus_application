@@ -20,16 +20,15 @@ Database schema ถูกออกแบบใหม่ทั้งหมด (fr
 
 ```bash
 npm install
-cp .env.example .env
 ```
 
-แก้ไขค่าใน `.env`:
+ใช้ `.env.example` ดูรายชื่อตัวแปร แล้วตั้งค่าจริงใน `.env` (ไม่เพิ่มไฟล์นี้เข้า Git และไม่เขียน key จริงลง `.env.example`):
 
 | ตัวแปร | คำอธิบาย |
 |---|---|
 | `DATABASE_URL` | connection string ของ PostgreSQL (local หรือ Supabase) |
 | `JWT_ACCESS_SECRET` / `JWT_REFRESH_SECRET` | สุ่มสตริงยาวๆ ที่ไม่ซ้ำกัน (ใช้ `openssl rand -hex 32`) |
-| `SMTP_HOST/PORT/USER/PASS` | สำหรับส่งอีเมล OTP — ถ้าใช้ Gmail ต้องสร้าง [App Password](https://myaccount.google.com/apppasswords) |
+| `SUPABASE_URL` / `SUPABASE_ANON_KEY` | Supabase Auth สำหรับส่งและตรวจ Email OTP; เปิด Email provider และตั้งอีเมลเทมเพลตให้มี `{{ .Token }}` |
 | `GOOGLE_CLIENT_IDS` | (ไม่บังคับ) client id เพิ่มเติม เช่น Android/iOS คั่นด้วย comma — idToken ต้องมี `email_verified = true` |
 | `GOOGLE_CLIENT_ID` | OAuth 2.0 Client ID (ประเภท Web) จาก Google Cloud Console — ใช้ตรวจสอบ idToken ที่ frontend ส่งมา |
 
@@ -112,7 +111,7 @@ Base URL: `http://localhost:4000/api`
 
 #### POST `/auth/otp/request`
 
-ขอรหัส OTP ใหม่ ระบบจะสร้างรหัสอ้างอิง (`otpRef`) คู่กับ OTP ทุกครั้งที่ขอ เพื่อให้ frontend ใช้แยกแยะว่ากำลังยืนยันคำขอรอบไหน (กรณีขอ OTP ซ้ำหลายครั้งติดกัน)
+ขอรหัส OTP ใหม่ ระบบจะให้ Supabase Auth สร้างและส่งรหัส 6 หลัก พร้อมสร้างรหัสอ้างอิง (`otpRef`) ในฐานข้อมูลของแอปเพื่อให้ frontend ใช้แยกแยะคำขอแต่ละรอบ รหัสอ้างอิงนี้ไม่ได้อยู่ในอีเมลของ Supabase
 
 **Request body**
 
@@ -135,7 +134,7 @@ Base URL: `http://localhost:4000/api`
 }
 ```
 
-Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใน state) เพื่อส่งกลับไปพร้อมกับ OTP ตอนเรียก `/auth/otp/verify` — และอาจแสดง `otpRef` ให้ผู้ใช้เห็นบนหน้ากรอก OTP เพื่อให้เทียบกับรหัสอ้างอิงในอีเมลได้
+Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใน state) เพื่อส่งกลับไปพร้อมกับ OTP ตอนเรียก `/auth/otp/verify`
 
 **Error responses**
 
@@ -150,7 +149,7 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 #### POST `/auth/otp/verify`
 
-ยืนยัน OTP ต้องส่งทั้ง `otp` และ `otpRef` (ที่ได้จากการเรียก `/auth/otp/request` ล่าสุด) คู่กัน ระบบจะตรวจว่า `otpRef` ตรงกับ record ที่ยังไม่หมดอายุ/ยังไม่ถูกใช้ ก่อนเช็ครหัส OTP
+ยืนยัน OTP ต้องส่งทั้ง `otp` และ `otpRef` (ที่ได้จากการเรียก `/auth/otp/request` ล่าสุด) คู่กัน ระบบจะตรวจว่า `otpRef` ตรงกับคำขอที่ยังไม่หมดอายุ/ยังไม่ถูกใช้ แล้วให้ Supabase Auth ตรวจรหัส OTP
 
 **Request body**
 
@@ -928,14 +927,8 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 
 ## หมายเหตุด้านความปลอดภัย
 
-รูปโปรไฟล์ Club: `POST /api/clubs/images` (ต้อง login) รับ `{ "imageBase64": "..." }`
-และคืน `data.imageUrl` สำหรับส่งต่อใน create/update club รองรับ JPG, PNG, WebP ไม่เกิน 2 MB
-รูปถูกเก็บที่ `backend/uploads/club-images` และเปิดอ่านผ่าน `/api/club-images/`.
-เมื่อ deploy ให้เก็บโฟลเดอร์นี้บน persistent volume หรือกำหนด `CLUB_IMAGE_DIR` เป็นตำแหน่งถาวร
-และใช้โดเมน API ที่ผู้ใช้เข้าถึงได้สำหรับคำขออัปโหลด รูปเดิมที่เป็น URL ยังใช้ได้ตามปกติ
-
-- OTP และ refresh token ไม่เคยถูกเก็บเป็น plaintext — เก็บเป็น bcrypt hash (OTP) และ sha256 hash (refresh token)
-- `otp_ref` ไม่ใช่ secret (ไม่ hash) — ใช้เพื่อระบุ "คำขอรอบไหน" เท่านั้น ความปลอดภัยของ OTP ยังขึ้นอยู่กับตัวรหัส OTP 6 หลักที่ hash ไว้เป็นหลัก
+- OTP ถูกสร้างและตรวจโดย Supabase Auth; แอปเก็บเฉพาะข้อมูลคำขอและ `otp_ref` ในตารางเดิม ส่วน refresh token เก็บเป็น sha256 hash
+- `otp_ref` ไม่ใช่ secret (ไม่ hash) — ใช้เพื่อระบุ "คำขอรอบไหน" เท่านั้น
 - Rate limit บน endpoint ขอ/ยืนยัน OTP กันการยิงสแปม
 - Access token อายุสั้น (`15m` default) + refresh token หมุนทุกครั้งที่ใช้ (rotation) เพื่อลดความเสี่ยงจาก token รั่วไหล
 - Onboarding, Wellness Check-in, Main Quest (Program), Side Quest และ Friends routes ทุกตัวถูกป้องกันด้วย JWT middleware (`requireAuth`)
