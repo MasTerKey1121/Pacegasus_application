@@ -18,6 +18,10 @@ module.exports = {
 
   databaseUrl: required('DATABASE_URL'),
   dbSsl: process.env.DB_SSL === 'true',
+  supabase: {
+    url: process.env.SUPABASE_URL,
+    anonKey: process.env.SUPABASE_ANON_KEY,
+  },
 
   jwt: {
     accessSecret: required('JWT_ACCESS_SECRET'),
@@ -27,20 +31,9 @@ module.exports = {
   },
 
   otp: {
-    length: parseInt(process.env.OTP_LENGTH || '6', 10),
     expiresMinutes: parseInt(process.env.OTP_EXPIRES_MINUTES || '5', 10),
     maxAttempts: parseInt(process.env.OTP_MAX_ATTEMPTS || '5', 10),
     resendCooldownSeconds: parseInt(process.env.OTP_RESEND_COOLDOWN_SECONDS || '60', 10),
-  },
-
-  smtp: {
-    host: process.env.SMTP_HOST,
-    port: parseInt(process.env.SMTP_PORT || '587', 10),
-    secure: process.env.SMTP_SECURE === 'true',
-    user: process.env.SMTP_USER,
-    pass: process.env.SMTP_PASS,
-    fromName: process.env.SMTP_FROM_NAME || 'Pacegasus',
-    fromEmail: process.env.SMTP_FROM_EMAIL,
   },
 
   google: {
