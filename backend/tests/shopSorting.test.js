@@ -11,6 +11,7 @@ test('shop sorting validates and orders before pagination with a stable tie brea
     const { value, error } = shopItemFiltersSchema.validate({ sort, slot: 'inner_top,outer_top', rarity: 'epic', offset: 30 });
     assert.equal(error, undefined);
     db.query = async (sql, params) => {
+      if (!sql.includes('COUNT(*) OVER')) return { rows: [] };
       assert.deepEqual(params.slice(1), [['inner_top', 'outer_top'], ['epic'], 30, 30]);
       assert.match(sql, /ORDER BY [\s\S]+, l.id\s+LIMIT/);
       if (sort.startsWith('rarity')) {

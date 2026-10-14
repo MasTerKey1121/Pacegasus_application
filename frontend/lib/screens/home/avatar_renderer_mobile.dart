@@ -1,20 +1,37 @@
 import 'package:flutter/foundation.dart';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:model_viewer_plus/model_viewer_plus.dart';
 import 'package:webview_flutter/webview_flutter.dart';
 
 class AvatarRenderer extends StatefulWidget {
-  const AvatarRenderer({super.key, this.orbitDegrees = 0});
+  const AvatarRenderer(
+      {super.key,
+      this.orbitDegrees = 0,
+      this.variantName,
+      this.assetPath = 'assets/models/pacegasus_starter_v9.glb',
+      this.animated = true});
+  final String assetPath;
+  final bool animated;
   final double orbitDegrees;
+  final String? variantName;
   @override
   State<AvatarRenderer> createState() => _AvatarRendererState();
 }
 
 class _AvatarRendererState extends State<AvatarRenderer> {
   WebViewController? _controller;
+  void _applyVariant() {
+    _controller?.runJavaScript(
+        "(() => { const model = document.querySelector('model-viewer'); if (model) model.variantName = ${jsonEncode(widget.variantName)}; })();");
+  }
+
   @override
   void didUpdateWidget(covariant AvatarRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (widget.variantName != oldWidget.variantName) {
+      _applyVariant();
+    }
     if (widget.orbitDegrees != oldWidget.orbitDegrees) {
       _controller?.runJavaScript(
           "document.querySelector('model-viewer')?.setAttribute('camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');");
@@ -30,7 +47,8 @@ class _AvatarRendererState extends State<AvatarRenderer> {
               textAlign: TextAlign.center));
     }
     return ModelViewer(
-      src: 'assets/models/pacegasus_wave_male_v8.glb',
+      src: widget.assetPath,
+      variantName: widget.variantName,
       alt: 'Pacegasus runner',
       backgroundColor: Colors.transparent,
       ar: false,
@@ -39,6 +57,11 @@ class _AvatarRendererState extends State<AvatarRenderer> {
       autoPlay: false,
       cameraOrbit: '${widget.orbitDegrees}deg 85deg 105%',
       onWebViewCreated: (controller) => _controller = controller,
+      javascriptChannels: {
+        JavascriptChannel('AvatarReady', onMessageReceived: (_) {
+          if (mounted) _applyVariant();
+        }),
+      },
       shadowIntensity: 0.6,
       animationCrossfadeDuration: 150,
       debugLogging: false,
@@ -48,6 +71,8 @@ class _AvatarRendererState extends State<AvatarRenderer> {
         async function greet() {
           if (started) return;
           started = true;
+          window.AvatarReady?.postMessage('loaded');
+          if (!avatar.availableAnimations.includes('Wave_Greeting')) return;
           avatar.animationName = 'Wave_Greeting';
           await avatar.updateComplete;
           avatar.currentTime = 0;

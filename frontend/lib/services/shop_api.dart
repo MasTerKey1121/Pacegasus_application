@@ -11,6 +11,8 @@ class ShopItem {
   final bool owned;
   final String? slot;
   final bool equipped;
+  final String? code;
+  final Map<String, dynamic> renderData;
   const ShopItem(
       {required this.id,
       required this.name,
@@ -20,7 +22,9 @@ class ShopItem {
       required this.price,
       required this.owned,
       this.slot,
-      this.equipped = false});
+      this.equipped = false,
+      this.code,
+      this.renderData = const {}});
   factory ShopItem.fromJson(Map<String, dynamic> json) {
     final item = json['item'] as Map<String, dynamic>;
     return ShopItem(
@@ -30,7 +34,11 @@ class ShopItem {
         image: item['thumbnailUrl'] as String? ?? '',
         description: item['description'] as String? ?? '',
         price: (json['priceCoins'] as num).toInt(),
-        owned: json['owned'] == true);
+        owned: json['owned'] == true,
+        slot: item['slot'] as String?,
+        code: item['code'] as String?,
+        renderData:
+            Map<String, dynamic>.from(item['renderData'] as Map? ?? {}));
   }
 }
 
@@ -43,6 +51,12 @@ class ShopPage {
 class ShopApi {
   final ApiClient client;
   ShopApi(this.client);
+  Future<int> purchase(String listingId) async {
+    final response =
+        await client.post('/api/shop/items/$listingId/purchase', auth: true);
+    return (response['data']['progress']['coinBalance'] as num).toInt();
+  }
+
   Future<ShopPage> inventory(String slots,
       {String sort = 'newest',
       String? rarity,
@@ -70,7 +84,10 @@ class ShopApi {
               price: 0,
               owned: true,
               slot: item['slot'] as String,
-              equipped: entry['equipped'] == true);
+              equipped: entry['equipped'] == true,
+              code: item['code'] as String?,
+              renderData:
+                  Map<String, dynamic>.from(item['renderData'] as Map? ?? {}));
         }).toList(),
         (data['total'] as num).toInt());
   }
@@ -92,6 +109,7 @@ class ShopApi {
       int offset = 0,
       int limit = 30}) async {
     final query = Uri(queryParameters: {
+      'owned': 'false',
       'slot': slots,
       'sort': sort,
       'offset': '$offset',

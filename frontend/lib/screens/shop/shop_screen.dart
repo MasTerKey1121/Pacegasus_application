@@ -4,7 +4,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/shop_api.dart';
+import '../../providers/avatar_provider.dart';
+import '../../providers/user_provider.dart';
+import '../../providers/wallet_provider.dart';
 import '../home/home_avatar.dart';
+import '../home/avatar_layout.dart';
 
 const _bg = Color(0xFF110E20);
 const _panel = Color(0xFF201A32);
@@ -18,7 +22,6 @@ const _categories = <({String name, String? slots, IconData icon})>[
   (name: 'ของถือ', slots: null, icon: Icons.work_outline),
   (name: 'กางเกง', slots: 'pants', icon: Icons.accessibility_new),
   (name: 'รองเท้า', slots: 'shoes', icon: Icons.directions_run),
-  (name: 'แท่นยืน', slots: null, icon: Icons.layers_outlined),
 ];
 const _rarities = {
   'common': 'ทั่วไป',
@@ -44,32 +47,99 @@ String _error(Object error) => error is ApiException
 
 class ShopScreen extends ConsumerStatefulWidget {
   final bool wardrobe;
-  const ShopScreen({super.key, this.wardrobe = false});
+  const ShopScreen(
+      {super.key, this.wardrobe = false, this.avatarRendererBuilder});
+  @visibleForTesting
+  final WidgetBuilder? avatarRendererBuilder;
   @override
   ConsumerState<ShopScreen> createState() => _ShopScreenState();
 }
 
 class _ShopScreenState extends ConsumerState<ShopScreen> {
   final _sheet = DraggableScrollableController();
+  double _sheetExtent = .5;
   late Future<List<ShopPage>> _catalog;
   late Future<int> _balance;
   int? _selected;
   bool _expanded = false;
   bool _saving = false;
+  bool _buying = false;
+  bool _tryOn = false;
+  ShopItem? _product;
   final Map<String, ShopItem> _changes = {};
+  final Map<String, String> _equippedIds = {};
+  final Map<String, ShopItem> _savedPreview = {};
 
   void _choose(ShopItem item) {
     if (_saving || item.slot == null) return;
-    setState(() => _changes[item.slot!] = item);
+    setState(() {
+      final equipped = _equippedIds[item.slot!] == item.id ||
+          (!_equippedIds.containsKey(item.slot!) && item.equipped);
+      if (equipped) {
+        _changes.remove(item.slot!);
+      } else {
+        _changes[item.slot!] = item;
+      }
+    });
+  }
+
+  void _selectProduct(ShopItem item) {
+    if (_buying) return;
+    setState(() => _product = item);
+  }
+
+  Future<void> _buy() async {
+    final product = _product;
+    if (_buying || product == null || product.owned) return;
+    setState(() => _buying = true);
+    try {
+      final coins = await ref.read(shopApiProvider).purchase(product.id);
+      if (!mounted) return;
+      ref.read(userProvider).setCoinBalance(coins);
+      ref.invalidate(walletProvider);
+      ref.invalidate(avatarOutfitProvider);
+      setState(() {
+        _product = null;
+        _tryOn = false;
+        _reload();
+        _balance = Future.value(coins);
+      });
+      ScaffoldMessenger.of(context)
+        ..removeCurrentSnackBar()
+        ..showSnackBar(const SnackBar(content: Text('ซื้อแล้ว')));
+    } catch (error) {
+      if (mounted) {
+        ScaffoldMessenger.of(context)
+          ..removeCurrentSnackBar()
+          ..showSnackBar(SnackBar(content: Text(_error(error))));
+      }
+    } finally {
+      if (mounted) setState(() => _buying = false);
+    }
   }
 
   Future<void> _save() async {
+    if (_saving || _changes.isEmpty) return;
     setState(() => _saving = true);
     try {
       await ref.read(shopApiProvider).saveOutfit(_changes);
       if (!mounted) return;
+      _savedPreview.addAll(_changes);
+      _equippedIds
+          .addAll(_changes.map((slot, item) => MapEntry(slot, item.id)));
+      _changes.clear();
+      ref.invalidate(avatarOutfitProvider);
+      var refreshed = false;
+      try {
+        await ref.read(avatarOutfitProvider.future);
+        refreshed = true;
+      } catch (_) {
+        // Save succeeded. Keep the visible draft if refreshing the outfit
+        // fails, instead of flashing back to the preceding shirt.
+      }
+      if (!mounted) return;
       setState(() {
-        _changes.clear();
+        if (refreshed) _savedPreview.clear();
         _reload();
       });
       ScaffoldMessenger.of(context)
@@ -106,7 +176,28 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
         ? Future.value(const ShopPage([], 0))
         : widget.wardrobe
             ? api.inventory(c.slots!, limit: 8)
-            : api.list(c.slots!, limit: 8)));
+            : api.list(c.slots!, limit: 8))).then((pages) {
+      if (widget.wardrobe) {
+        for (final page in pages) {
+          for (final item in page.items) {
+            if (item.equipped && item.slot != null) {
+              _equippedIds[item.slot!] = item.id;
+            }
+          }
+        }
+      }
+      if (!widget.wardrobe && mounted) {
+        final available = pages.expand((page) => page.items).toList();
+        if (_product != null &&
+            !available.any((item) => item.id == _product!.id)) {
+          setState(() {
+            _product = null;
+            _tryOn = false;
+          });
+        }
+      }
+      return pages;
+    });
     _balance = widget.wardrobe ? Future.value(0) : api.balance();
   }
 
@@ -132,7 +223,13 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                 categoryIndex: index,
                 wardrobe: widget.wardrobe,
                 selections: Map.of(_changes))));
-    if (mounted && item != null) _choose(item);
+    if (mounted && item != null) {
+      if (widget.wardrobe) {
+        _choose(item);
+      } else {
+        _selectProduct(item);
+      }
+    }
   }
 
   @override
@@ -142,6 +239,16 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
           final height = constraints.maxHeight;
           final minimum =
               ((widget.wardrobe ? 128 : 48) / height).clamp(.06, .4);
+          final expandedAvatar = AvatarLayout.home(constraints.biggest);
+          final expansion =
+              ((.5 - _sheetExtent) / (.5 - minimum)).clamp(0.0, 1.0);
+          final compactHeight =
+              math.max(80.0, math.min(310.0, height * .5 - 78));
+          final compactWidth = math.max(0.0, constraints.maxWidth - 120);
+          final avatarHeight = compactHeight +
+              (expandedAvatar.height - compactHeight) * expansion;
+          final avatarWidth =
+              compactWidth + (expandedAvatar.width - compactWidth) * expansion;
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
@@ -153,11 +260,48 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                                 radius: .9,
                                 colors: [Color(0xFF49345C), _bg]))))),
             Positioned(
+                key: const Key('shop-avatar-frame'),
                 top: 72,
-                left: 60,
-                right: 60,
-                height: math.max(80.0, math.min(310.0, height * .4 - 78)),
-                child: const HomeAvatar()),
+                left: (constraints.maxWidth - avatarWidth) / 2,
+                width: avatarWidth,
+                height: avatarHeight,
+                child: widget.wardrobe || (_tryOn && _product != null)
+                    ? HomeAvatar(
+                        rendererBuilder: widget.avatarRendererBuilder,
+                        outfitPreview: widget.wardrobe
+                            ? {..._savedPreview, ..._changes}
+                            : {_product!.slot ?? 'inner_top': _product!})
+                    : _product?.renderData['productAsset'] is String
+                        ? HomeAvatar(
+                            rendererBuilder: widget.avatarRendererBuilder,
+                            productAsset:
+                                (_product!.renderData['productAsset'] as String)
+                                    .replaceFirst('asset:', ''),
+                            productVariant:
+                                _product!.renderData['variant'] as String?)
+                        : const Center(child: Text('เลือกสินค้าเพื่อดูโมเดล'))),
+            if (!widget.wardrobe && _product != null) ...[
+              Positioned(
+                  top: height * (1 - _sheetExtent) - 54,
+                  left: 80,
+                  right: 80,
+                  child: FilledButton(
+                      key: const Key('shop-buy'),
+                      onPressed: _buying ? null : _buy,
+                      child: Text(_buying
+                          ? 'กำลังซื้อ...'
+                          : 'ซื้อ · ${_product!.price} เหรียญ'))),
+              Positioned(
+                  top: height * (1 - _sheetExtent) - 54,
+                  right: 12,
+                  child: IconButton(
+                      key: const Key('shop-preview-toggle'),
+                      tooltip: _tryOn ? 'ดูสินค้าอย่างเดียว' : 'ดูอวตารลองใส่',
+                      onPressed: () => setState(() => _tryOn = !_tryOn),
+                      icon: Icon(
+                          _tryOn ? Icons.checkroom : Icons.person_outline,
+                          color: _accent))),
+            ],
             Positioned(
                 top: 8,
                 left: 12,
@@ -178,225 +322,243 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                             style: AppText.heading(
                                 size: 16, color: AppColors.gold2))),
                 ])),
-            DraggableScrollableSheet(
-              controller: _sheet,
-              initialChildSize: .6,
-              minChildSize: minimum,
-              maxChildSize: .88,
-              snap: true,
-              snapSizes: const [.6],
-              builder: (context, scroll) => Material(
-                  color: _panel,
-                  borderRadius:
-                      const BorderRadius.vertical(top: Radius.circular(28)),
-                  clipBehavior: Clip.antiAlias,
-                  child: Column(children: [
-                    GestureDetector(
-                        behavior: HitTestBehavior.opaque,
-                        onTap: () => _move(_sheet.size < .59
-                            ? .6
-                            : _sheet.size < .87
-                                ? .88
-                                : .6),
-                        onVerticalDragUpdate: (d) => _sheet.jumpTo(
-                            (_sheet.size - d.delta.dy / height)
-                                .clamp(minimum, .88)),
-                        onVerticalDragEnd: (_) {
-                          final stops = [minimum, .6, .88]..sort((a, b) =>
-                              (a - _sheet.size)
-                                  .abs()
-                                  .compareTo((b - _sheet.size).abs()));
-                          _move(stops.first);
-                        },
-                        child: Semantics(
-                            button: true,
-                            label: widget.wardrobe
-                                ? 'ย่อหรือขยายคลังแต่งตัว'
-                                : 'ย่อหรือขยายร้านค้า',
-                            child: SizedBox(
-                                height: 48,
-                                width: double.infinity,
-                                child: Center(
-                                    child: Container(
-                                        width: 36,
-                                        height: 4,
+            NotificationListener<DraggableScrollableNotification>(
+                onNotification: (notification) {
+                  if ((_sheetExtent - notification.extent).abs() > .0001) {
+                    setState(() => _sheetExtent = notification.extent);
+                  }
+                  return true;
+                },
+                child: DraggableScrollableSheet(
+                  controller: _sheet,
+                  initialChildSize: .5,
+                  minChildSize: minimum,
+                  maxChildSize: .5,
+                  snap: true,
+                  builder: (context, scroll) => Material(
+                      color: _panel,
+                      borderRadius:
+                          const BorderRadius.vertical(top: Radius.circular(28)),
+                      clipBehavior: Clip.antiAlias,
+                      child: Column(children: [
+                        GestureDetector(
+                            key: const Key('shop-sheet-handle'),
+                            behavior: HitTestBehavior.opaque,
+                            onTap: () =>
+                                _move(_sheet.size < .49 ? .5 : minimum),
+                            onVerticalDragUpdate: (d) => _sheet.jumpTo(
+                                (_sheet.size - d.delta.dy / height)
+                                    .clamp(minimum, .5)),
+                            onVerticalDragEnd: (_) {
+                              final stops = [minimum, .5]..sort((a, b) =>
+                                  (a - _sheet.size)
+                                      .abs()
+                                      .compareTo((b - _sheet.size).abs()));
+                              _move(stops.first);
+                            },
+                            child: Semantics(
+                                button: true,
+                                label: widget.wardrobe
+                                    ? 'ย่อหรือขยายคลังแต่งตัว'
+                                    : 'ย่อหรือขยายร้านค้า',
+                                child: SizedBox(
+                                    height: 48,
+                                    width: double.infinity,
+                                    child: Center(
+                                        child: Container(
+                                            width: 36,
+                                            height: 4,
+                                            decoration: BoxDecoration(
+                                                color: _accent,
+                                                borderRadius:
+                                                    BorderRadius.circular(4))))))),
+                        Expanded(
+                            child:
+                                CustomScrollView(controller: scroll, slivers: [
+                          SliverToBoxAdapter(
+                              child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                      horizontal: 12),
+                                  child: Row(children: [
+                                    Expanded(
+                                        child: SingleChildScrollView(
+                                            scrollDirection: Axis.horizontal,
+                                            child: Row(children: [
+                                              _tab('ทั้งหมด', null),
+                                              for (var i = 0;
+                                                  i < _categories.length;
+                                                  i++)
+                                                _tab(_categories[i].name, i),
+                                            ]))),
+                                    IconButton(
+                                        tooltip: 'หมวดหมู่ทั้งหมด',
+                                        onPressed: () => setState(
+                                            () => _expanded = !_expanded),
+                                        icon: Icon(
+                                            _expanded
+                                                ? Icons.expand_less
+                                                : Icons.chevron_right,
+                                            color: _accent)),
+                                  ]))),
+                          if (widget.wardrobe)
+                            SliverToBoxAdapter(
+                                child: Padding(
+                                    padding:
+                                        const EdgeInsets.fromLTRB(24, 8, 24, 0),
+                                    child: Text(
+                                        'ไอเทมของคุณ • เลือกแล้วกดบันทึก',
+                                        style: AppText.body(
+                                            size: 12, color: _accent)))),
+                          if (_expanded)
+                            SliverPadding(
+                                padding: const EdgeInsets.all(16),
+                                sliver: SliverGrid(
+                                    gridDelegate:
+                                        const SliverGridDelegateWithFixedCrossAxisCount(
+                                            crossAxisCount: 3,
+                                            mainAxisSpacing: 8,
+                                            crossAxisSpacing: 8,
+                                            mainAxisExtent: 82),
+                                    delegate: SliverChildBuilderDelegate(
+                                        (_, i) => OutlinedButton(
+                                            style: OutlinedButton.styleFrom(
+                                                backgroundColor: _selected == i
+                                                    ? const Color(0xFF493460)
+                                                    : null),
+                                            onPressed: () => setState(() {
+                                                  _selected = i;
+                                                  _expanded = false;
+                                                }),
+                                            child: Column(
+                                                mainAxisAlignment:
+                                                    MainAxisAlignment.center,
+                                                children: [
+                                                  Icon(_categories[i].icon,
+                                                      color: _accent),
+                                                  const SizedBox(height: 6),
+                                                  Text(_categories[i].name,
+                                                      style: const TextStyle(
+                                                          color: _accent)),
+                                                ])),
+                                        childCount: _categories.length))),
+                          FutureBuilder<List<ShopPage>>(
+                              future: _catalog,
+                              builder: (_, snapshot) {
+                                if (snapshot.hasError) {
+                                  return SliverToBoxAdapter(
+                                      child: _Notice(_error(snapshot.error!),
+                                          retry: () => setState(_reload)));
+                                }
+                                if (!snapshot.hasData) {
+                                  return const SliverToBoxAdapter(
+                                      child: Padding(
+                                          padding: EdgeInsets.all(40),
+                                          child: Center(
+                                              child:
+                                                  CircularProgressIndicator())));
+                                }
+                                final indices = _selected == null
+                                    ? List.generate(
+                                        _categories.length, (i) => i)
+                                    : [_selected!];
+                                return SliverList(
+                                    delegate: SliverChildListDelegate([
+                                  for (final i in indices)
+                                    Container(
+                                        margin: const EdgeInsets.fromLTRB(
+                                            16, 12, 16, 0),
+                                        padding: const EdgeInsets.fromLTRB(
+                                            12, 4, 12, 12),
                                         decoration: BoxDecoration(
-                                            color: _accent,
+                                            color: _bg.withValues(alpha: .5),
                                             borderRadius:
-                                                BorderRadius.circular(4))))))),
-                    Expanded(
-                        child: CustomScrollView(controller: scroll, slivers: [
-                      SliverToBoxAdapter(
-                          child: Padding(
-                              padding:
-                                  const EdgeInsets.symmetric(horizontal: 12),
-                              child: Row(children: [
-                                Expanded(
-                                    child: SingleChildScrollView(
-                                        scrollDirection: Axis.horizontal,
-                                        child: Row(children: [
-                                          _tab('ทั้งหมด', null),
-                                          for (var i = 0;
-                                              i < _categories.length;
-                                              i++)
-                                            _tab(_categories[i].name, i),
-                                        ]))),
-                                IconButton(
-                                    tooltip: 'หมวดหมู่ทั้งหมด',
-                                    onPressed: () =>
-                                        setState(() => _expanded = !_expanded),
-                                    icon: Icon(
-                                        _expanded
-                                            ? Icons.expand_less
-                                            : Icons.chevron_right,
-                                        color: _accent)),
-                              ]))),
-                      if (widget.wardrobe)
-                        SliverToBoxAdapter(
-                            child: Padding(
-                                padding:
-                                    const EdgeInsets.fromLTRB(24, 8, 24, 0),
-                                child: Text('ไอเทมของคุณ • เลือกแล้วกดบันทึก',
-                                    style: AppText.body(
-                                        size: 12, color: _accent)))),
-                      if (_expanded)
-                        SliverPadding(
-                            padding: const EdgeInsets.all(16),
-                            sliver: SliverGrid(
-                                gridDelegate:
-                                    const SliverGridDelegateWithFixedCrossAxisCount(
-                                        crossAxisCount: 3,
-                                        mainAxisSpacing: 8,
-                                        crossAxisSpacing: 8,
-                                        mainAxisExtent: 82),
-                                delegate: SliverChildBuilderDelegate(
-                                    (_, i) => OutlinedButton(
-                                        style: OutlinedButton.styleFrom(
-                                            backgroundColor: _selected == i
-                                                ? const Color(0xFF493460)
-                                                : null),
-                                        onPressed: () => setState(() {
-                                              _selected = i;
-                                              _expanded = false;
-                                            }),
-                                        child: Column(
-                                            mainAxisAlignment:
-                                                MainAxisAlignment.center,
-                                            children: [
-                                              Icon(_categories[i].icon,
-                                                  color: _accent),
-                                              const SizedBox(height: 6),
-                                              Text(_categories[i].name,
-                                                  style: const TextStyle(
-                                                      color: _accent)),
-                                            ])),
-                                    childCount: _categories.length))),
-                      FutureBuilder<List<ShopPage>>(
-                          future: _catalog,
-                          builder: (_, snapshot) {
-                            if (snapshot.hasError) {
-                              return SliverToBoxAdapter(
-                                  child: _Notice(_error(snapshot.error!),
-                                      retry: () => setState(_reload)));
-                            }
-                            if (!snapshot.hasData) {
-                              return const SliverToBoxAdapter(
-                                  child: Padding(
-                                      padding: EdgeInsets.all(40),
-                                      child: Center(
-                                          child: CircularProgressIndicator())));
-                            }
-                            final indices = _selected == null
-                                ? List.generate(_categories.length, (i) => i)
-                                : [_selected!];
-                            return SliverList(
-                                delegate: SliverChildListDelegate([
-                              for (final i in indices)
-                                Container(
-                                    margin: const EdgeInsets.fromLTRB(
-                                        16, 12, 16, 0),
-                                    padding: const EdgeInsets.fromLTRB(
-                                        12, 4, 12, 12),
-                                    decoration: BoxDecoration(
-                                        color: _bg.withValues(alpha: .5),
-                                        borderRadius:
-                                            BorderRadius.circular(18)),
-                                    child: Column(children: [
-                                      Row(children: [
-                                        Expanded(
-                                            child: Text(_categories[i].name,
-                                                style:
-                                                    AppText.heading(size: 16))),
-                                        TextButton(
-                                            onPressed: () => _all(i),
-                                            child: const Text('ดูทั้งหมด ›',
-                                                style:
-                                                    TextStyle(color: _accent))),
-                                      ]),
-                                      if (snapshot.data![i].items.isEmpty)
-                                        _Notice(_categories[i].slots == null
-                                            ? 'หมวดนี้ยังไม่พร้อมใช้งาน'
-                                            : widget.wardrobe
-                                                ? 'ยังไม่มีไอเทมในหมวดนี้'
-                                                : 'ยังไม่มีสินค้าในหมวดนี้')
-                                      else
-                                        SizedBox(
-                                            height: widget.wardrobe ? 172 : 194,
-                                            child: ListView.separated(
-                                                scrollDirection:
-                                                    Axis.horizontal,
-                                                itemCount: snapshot
-                                                    .data![i].items.length,
-                                                separatorBuilder: (_, __) =>
-                                                    const SizedBox(width: 12),
-                                                itemBuilder: (_, j) => SizedBox(
-                                                    width: 112,
-                                                    child: _ItemCard(snapshot.data![i].items[j],
-                                                        wardrobe:
-                                                            widget.wardrobe,
-                                                        selected: _changes[snapshot.data![i].items[j].slot]
-                                                                    ?.id ==
+                                                BorderRadius.circular(18)),
+                                        child: Column(children: [
+                                          Row(children: [
+                                            Expanded(
+                                                child: Text(_categories[i].name,
+                                                    style: AppText.heading(
+                                                        size: 16))),
+                                            TextButton(
+                                                onPressed: () => _all(i),
+                                                child: const Text('ดูทั้งหมด ›',
+                                                    style: TextStyle(
+                                                        color: _accent))),
+                                          ]),
+                                          if (snapshot.data![i].items.isEmpty)
+                                            _Notice(_categories[i].slots == null
+                                                ? 'หมวดนี้ยังไม่พร้อมใช้งาน'
+                                                : widget.wardrobe
+                                                    ? 'ยังไม่มีไอเทมในหมวดนี้'
+                                                    : 'ยังไม่มีสินค้าในหมวดนี้')
+                                          else
+                                            SizedBox(
+                                                height: widget.wardrobe
+                                                    ? 149.6
+                                                    : 171.6,
+                                                child: ListView.separated(
+                                                    scrollDirection:
+                                                        Axis.horizontal,
+                                                    itemCount: snapshot
+                                                        .data![i].items.length,
+                                                    separatorBuilder: (_, __) =>
+                                                        const SizedBox(
+                                                            width: 12),
+                                                    itemBuilder: (_, j) =>
+                                                        SizedBox(
+                                                            width: 89.6,
+                                                            child: _ItemCard(
                                                                 snapshot
                                                                     .data![i]
-                                                                    .items[j]
-                                                                    .id ||
-                                                            (!_changes.containsKey(snapshot.data![i].items[j].slot) &&
-                                                                snapshot
-                                                                    .data![i]
-                                                                    .items[j]
-                                                                    .equipped),
-                                                        onSelect: () =>
-                                                            _choose(snapshot.data![i].items[j]))))),
-                                    ])),
-                              const SizedBox(height: 24),
-                            ]));
-                          }),
-                    ])),
-                    if (widget.wardrobe)
-                      Padding(
-                          padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
-                          child: SizedBox(
-                              width: double.infinity,
-                              child: FilledButton.icon(
-                                  onPressed: _saving || _changes.isEmpty
-                                      ? null
-                                      : _save,
-                                  icon: _saving
-                                      ? const SizedBox(
-                                          width: 18,
-                                          height: 18,
-                                          child: CircularProgressIndicator(
-                                              strokeWidth: 2))
-                                      : const Icon(Icons.check),
-                                  label: Text(_saving
-                                      ? 'กำลังบันทึก...'
-                                      : 'บันทึกการแต่งตัว'),
-                                  style: FilledButton.styleFrom(
-                                      backgroundColor: _accent,
-                                      foregroundColor: _bg,
-                                      minimumSize: const Size(0, 48))))),
-                  ])),
-            ),
+                                                                    .items[j],
+                                                                wardrobe: widget
+                                                                    .wardrobe,
+                                                                selected: _changes.containsKey(snapshot
+                                                                        .data![
+                                                                            i]
+                                                                        .items[
+                                                                            j]
+                                                                        .slot)
+                                                                    ? _changes[snapshot.data![i].items[j].slot]
+                                                                            ?.id ==
+                                                                        snapshot
+                                                                            .data![i]
+                                                                            .items[j]
+                                                                            .id
+                                                                    : _equippedIds.containsKey(snapshot.data![i].items[j].slot)
+                                                                        ? _equippedIds[snapshot.data![i].items[j].slot] == snapshot.data![i].items[j].id
+                                                                        : snapshot.data![i].items[j].equipped,
+                                                                onSelect: () => widget.wardrobe ? _choose(snapshot.data![i].items[j]) : _selectProduct(snapshot.data![i].items[j]))))),
+                                        ])),
+                                  const SizedBox(height: 24),
+                                ]));
+                              }),
+                        ])),
+                        if (widget.wardrobe)
+                          Padding(
+                              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+                              child: SizedBox(
+                                  width: double.infinity,
+                                  child: FilledButton.icon(
+                                      onPressed: _saving || _changes.isEmpty
+                                          ? null
+                                          : _save,
+                                      icon: _saving
+                                          ? const SizedBox(
+                                              width: 18,
+                                              height: 18,
+                                              child: CircularProgressIndicator(
+                                                  strokeWidth: 2))
+                                          : const Icon(Icons.check),
+                                      label: Text(_saving
+                                          ? 'กำลังบันทึก...'
+                                          : 'บันทึกการแต่งตัว'),
+                                      style: FilledButton.styleFrom(
+                                          backgroundColor: _accent,
+                                          foregroundColor: _bg,
+                                          minimumSize: const Size(0, 48))))),
+                      ])),
+                )),
           ]);
         })),
       );
@@ -534,8 +696,8 @@ class _ShopCategoryScreenState extends ConsumerState<ShopCategoryScreen> {
                                       childCount: _items.length),
                                   gridDelegate:
                                       SliverGridDelegateWithMaxCrossAxisExtent(
-                                          maxCrossAxisExtent: 190,
-                                          mainAxisExtent: widget.wardrobe ? 218 : 250,
+                                          maxCrossAxisExtent: 152,
+                                          mainAxisExtent: widget.wardrobe ? 186.4 : 216.4,
                                           mainAxisSpacing: 16,
                                           crossAxisSpacing: 12))),
                         SliverToBoxAdapter(
@@ -586,9 +748,8 @@ class _ItemCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) => InkWell(
       borderRadius: BorderRadius.circular(16),
-      onTap: wardrobe
-          ? onSelect
-          : () => showModalBottomSheet<void>(
+      onTap: onSelect ??
+          () => showModalBottomSheet<void>(
               context: context,
               isScrollControlled: true,
               useSafeArea: true,
@@ -616,6 +777,7 @@ class _ItemCard extends StatelessWidget {
       child: Column(crossAxisAlignment: CrossAxisAlignment.start, children: [
         Expanded(
             child: Container(
+                key: ValueKey('item-thumbnail-${item.id}'),
                 width: double.infinity,
                 clipBehavior: Clip.antiAlias,
                 decoration: BoxDecoration(
@@ -628,11 +790,16 @@ class _ItemCard extends StatelessWidget {
                 child: item.image.isEmpty
                     ? const Icon(Icons.image_not_supported_outlined,
                         color: AppColors.textTertiary)
-                    : Image.network(item.image,
-                        fit: BoxFit.contain,
-                        errorBuilder: (_, __, ___) => const Icon(
-                            Icons.image_not_supported_outlined,
-                            color: AppColors.textTertiary)))),
+                    : item.image.startsWith('asset:')
+                        ? Image.asset(item.image.substring(6),
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) =>
+                                const Icon(Icons.image_not_supported_outlined))
+                        : Image.network(item.image,
+                            fit: BoxFit.contain,
+                            errorBuilder: (_, __, ___) => const Icon(
+                                Icons.image_not_supported_outlined,
+                                color: AppColors.textTertiary)))),
         const SizedBox(height: 8),
         Text(item.name,
             maxLines: 1,

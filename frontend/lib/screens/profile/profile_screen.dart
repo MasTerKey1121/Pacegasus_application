@@ -6,6 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/own_profile_api.dart';
+import '../../services/profile_image_picker.dart';
 import '../../widgets/common.dart';
 import '../home/home_avatar.dart';
 
@@ -18,6 +19,7 @@ class ProfileScreen extends ConsumerStatefulWidget {
 class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Map<String, dynamic>? _data;
   bool _loading = true;
+  bool _uploading = false;
   String? _error;
   @override
   void initState() {
@@ -26,6 +28,7 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _load() async {
+    if (_uploading) return;
     setState(() {
       _loading = true;
       _error = null;
@@ -50,6 +53,10 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
         builder: (_) => _EditProfile(
             field: field, value: _data!['user'][field] as String? ?? ''));
     if (updated == null || !mounted) return;
+    _applyUser(updated);
+  }
+
+  void _applyUser(Map<String, dynamic> updated) {
     setState(() => _data!['user'] = updated);
     final account = ref.read(authProvider).user;
     if (account != null) {
@@ -57,6 +64,29 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
     }
     final user = ref.read(userProvider);
     user.setDisplayName(updated['displayName'] as String);
+  }
+
+  Future<void> _changeAvatar() async {
+    if (_uploading || _loading || _data == null) return;
+    setState(() => _uploading = true);
+    try {
+      final image = await ref.read(profileImagePickerProvider).pick();
+      if (image == null || !mounted) return;
+      final updated = await ref.read(ownProfileApiProvider).uploadAvatar(image);
+      if (!mounted) return;
+      _applyUser(updated);
+      showAppToast(context, 'บันทึกรูปโปรไฟล์แล้ว');
+    } catch (e) {
+      if (mounted) {
+        showAppToast(
+            context,
+            e is ApiException
+                ? e.message
+                : 'บันทึกรูปไม่สำเร็จ กรุณาลองอีกครั้ง');
+      }
+    } finally {
+      if (mounted) setState(() => _uploading = false);
+    }
   }
 
   @override
@@ -83,23 +113,55 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                       Row(
                           crossAxisAlignment: CrossAxisAlignment.center,
                           children: [
-                            CircleAvatar(
-                                radius: 36,
-                                backgroundColor: AppColors.cardHi,
-                                child: ClipOval(
-                                    child: user?['avatarUrl'] == null
-                                        ? const Icon(Icons.person_outline,
-                                            size: 42, color: AppColors.purple2)
-                                        : Image.network(
-                                            user!['avatarUrl'] as String,
-                                            width: 72,
-                                            height: 72,
-                                            fit: BoxFit.cover,
-                                            errorBuilder: (_, __, ___) =>
-                                                const Icon(Icons.person_outline,
-                                                    size: 42,
-                                                    color:
-                                                        AppColors.purple2)))),
+                            Stack(children: [
+                              Semantics(
+                                  button: true,
+                                  label: 'เปลี่ยนรูปโปรไฟล์',
+                                  child: InkWell(
+                                      key: const Key('change-profile-avatar'),
+                                      onTap: _data == null || _loading || _uploading
+                                          ? null
+                                          : _changeAvatar,
+                                      customBorder: const CircleBorder(),
+                                      child: CircleAvatar(
+                                          radius: 36,
+                                          backgroundColor: AppColors.cardHi,
+                                          child: ClipOval(
+                                              child: user?['avatarUrl'] == null
+                                                  ? const Icon(
+                                                      Icons.person_outline,
+                                                      size: 42,
+                                                      color: AppColors.purple2)
+                                                  : Image.network(
+                                                      user!['avatarUrl']
+                                                          as String,
+                                                      width: 72,
+                                                      height: 72,
+                                                      fit: BoxFit.cover,
+                                                      errorBuilder: (_, __, ___) =>
+                                                          const Icon(Icons.person_outline,
+                                                              size: 42,
+                                                              color: AppColors
+                                                                  .purple2)))))),
+                              Positioned(
+                                right: 0,
+                                bottom: 0,
+                                child: IgnorePointer(
+                                    child: CircleAvatar(
+                                  radius: 13,
+                                  backgroundColor: AppColors.purple2,
+                                  child: _uploading
+                                      ? const SizedBox(
+                                          width: 14,
+                                          height: 14,
+                                          child: CircularProgressIndicator(
+                                              strokeWidth: 2,
+                                              color: Colors.white))
+                                      : const Icon(Icons.camera_alt,
+                                          size: 16, color: Colors.white),
+                                )),
+                              ),
+                            ]),
                             const SizedBox(width: 16),
                             Expanded(
                                 child: Column(
@@ -117,7 +179,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                                             style: AppText.heading(size: 22))),
                                     IconButton(
                                         tooltip: 'แก้ไขชื่อ',
-                                        onPressed: _data == null || _loading
+                                        onPressed: _data == null ||
+                                                _loading ||
+                                                _uploading
                                             ? null
                                             : () => _edit('displayName'),
                                         icon: const Icon(Icons.edit_outlined,

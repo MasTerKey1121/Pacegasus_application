@@ -9,6 +9,10 @@ import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/services/api_client.dart';
 import 'package:pacegasus/services/shop_api.dart';
 import 'package:pacegasus/screens/shop/shop_screen.dart';
+import 'package:pacegasus/screens/home/avatar_layout.dart';
+import 'package:pacegasus/screens/home/home_avatar.dart';
+import 'package:pacegasus/providers/avatar_provider.dart';
+import 'package:pacegasus/providers/user_provider.dart';
 
 class _Fonts extends Fake implements AssetManifest {
   @override
@@ -23,6 +27,42 @@ class _Client extends ApiClient {
   final calls = <Uri>[];
   bool fail = false;
   bool populated = false;
+  bool starterShirts = false;
+  bool paidShirts = false;
+  int coins = 30;
+  final purchased = <String>{};
+  final paidCodes = ['purple', 'brown'];
+  Map<String, dynamic> paidItem(String color) => {
+        'id': color == 'purple'
+            ? '20000000-0000-4000-8000-000000000001'
+            : '20000000-0000-4000-8000-000000000002',
+        'slot': 'inner_top',
+        'name': color == 'purple' ? 'เสื้อวิ่งสีม่วง' : 'เสื้อวิ่งสีน้ำตาล',
+        'code': 'shop_tee_$color',
+        'rarity': 'common',
+        'thumbnailUrl': '',
+        'renderData': {
+          'variant': 'shop_tee_$color',
+          'productAsset': 'asset:assets/models/product_running_tee.glb'
+        },
+      };
+  @override
+  Future<Map<String, dynamic>> post(String path,
+      {Map<String, dynamic>? body, bool auth = false}) async {
+    expect(auth, isTrue);
+    final color = path.contains('000000000001') ? 'purple' : 'brown';
+    final price = color == 'purple' ? 20 : 1000;
+    if (purchased.contains(color)) throw ApiException(409, 'มีแล้ว');
+    if (coins < price) throw ApiException(400, 'เหรียญไม่พอ');
+    coins -= price;
+    purchased.add(color);
+    return {
+      'data': {
+        'progress': {'coinBalance': coins}
+      }
+    };
+  }
+
   Map<String, dynamic>? saved;
   bool saveFail = false;
   @override
@@ -42,11 +82,49 @@ class _Client extends ApiClient {
     if (fail) throw ApiException(503, 'เซิร์ฟเวอร์ไม่พร้อม');
     if (path.contains('/progress')) {
       return {
-        'data': {'coinBalance': 42}
+        'data': {'coinBalance': paidShirts ? coins : 42}
       };
     }
     if (path.contains('/inventory')) {
       final slot = Uri.parse(path).queryParameters['slot']!;
+      if (paidShirts)
+        return {
+          'data': {
+            'items': purchased
+                .map((color) => {'item': paidItem(color), 'equipped': false})
+                .toList(),
+            'total': purchased.length
+          }
+        };
+      if (starterShirts && slot == 'inner_top,outer_top') {
+        return {
+          'data': {
+            'items': [
+              for (final color in ['black', 'white'])
+                {
+                  'equipped':
+                      saved == null ? color == 'black' : color == 'white',
+                  'item': {
+                    'id': color == 'white'
+                        ? '10000000-0000-4000-8000-000000000004'
+                        : '10000000-0000-4000-8000-000000000003',
+                    'code': 'starter_tee_$color',
+                    'slot': 'inner_top',
+                    'name':
+                        color == 'white' ? 'เสื้อวิ่งสีขาว' : 'เสื้อวิ่งสีดำ',
+                    'rarity': 'common',
+                    'thumbnailUrl':
+                        'asset:assets/models/items/starter_tee_$color.png',
+                    'renderData': {
+                      'variant': color == 'white' ? 'starter_tee_white' : null
+                    },
+                  }
+                }
+            ],
+            'total': 2
+          }
+        };
+      }
       return {
         'data': {
           'items': populated && slot == 'hair'
@@ -64,6 +142,28 @@ class _Client extends ApiClient {
                 ]
               : [],
           'total': populated && slot == 'hair' ? 1 : 0
+        }
+      };
+    }
+    if (paidShirts) {
+      expect(Uri.parse(path).queryParameters['owned'], 'false');
+      final colors =
+          Uri.parse(path).queryParameters['slot'] == 'inner_top,outer_top'
+              ? paidCodes.where((c) => !purchased.contains(c)).toList()
+              : <String>[];
+      return {
+        'data': {
+          'items': colors
+              .map((color) => {
+                    'listingId': color == 'purple'
+                        ? '30000000-0000-4000-8000-000000000001'
+                        : '30000000-0000-4000-8000-000000000002',
+                    'priceCoins': color == 'purple' ? 20 : 1000,
+                    'owned': false,
+                    'item': paidItem(color),
+                  })
+              .toList(),
+          'total': colors.length
         }
       };
     }
@@ -110,10 +210,159 @@ void main() {
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(
-        overrides: [shopApiProvider.overrideWithValue(ShopApi(client))],
-        child: MaterialApp(theme: ThemeData.dark(), home: screen)));
+        overrides: [
+          shopApiProvider.overrideWithValue(ShopApi(client)),
+          avatarOutfitProvider
+              .overrideWith((ref) async => const AvatarOutfit({}))
+        ],
+        child: MaterialApp(
+            theme: ThemeData.dark(),
+            home: screen is ShopScreen
+                ? ShopScreen(
+                    wardrobe: screen.wardrobe,
+                    avatarRendererBuilder: (_) => const SizedBox())
+                : screen)));
     await tester.pumpAndSettle();
   }
+
+  for (final wardrobe in [false, true]) {
+    testWidgets(
+        'collapsed panel expands avatar to Home size (wardrobe=$wardrobe)',
+        (tester) async {
+      await open(tester, _Client(), ShopScreen(wardrobe: wardrobe));
+      final frame = find.byKey(const Key('shop-avatar-frame'));
+      final handle = find.byKey(const Key('shop-sheet-handle'));
+      final compact = tester.getSize(frame);
+      final avatarState =
+          wardrobe ? tester.state(find.byType(HomeAvatar)) : null;
+      final target = AvatarLayout.home(const Size(320, 700));
+      await tester.drag(handle, const Offset(0, 500));
+      await tester.pumpAndSettle();
+      final expanded = tester.getSize(frame);
+      expect(expanded.width, closeTo(target.width, .1));
+      expect(expanded.height, closeTo(target.height, .1));
+      expect(expanded.height, greaterThan(compact.height));
+      if (wardrobe)
+        expect(tester.state(find.byType(HomeAvatar)), same(avatarState));
+      await tester.tap(handle);
+      await tester.pumpAndSettle();
+      expect(tester.getSize(frame).height, closeTo(compact.height, .1));
+      expect(tester.takeException(), isNull);
+      final sheet = tester.widget<DraggableScrollableSheet>(
+          find.byType(DraggableScrollableSheet));
+      expect(sheet.maxChildSize, .5);
+      await tester.drag(handle, const Offset(0, -1000));
+      await tester.pumpAndSettle();
+      expect(sheet.controller!.size, closeTo(.5, .001));
+      expect(find.text('ถุงเท้า'), findsNothing);
+      expect(find.text('แท่นยืน'), findsNothing);
+    });
+  }
+
+  testWidgets(
+      'white shirt has a real thumbnail, previews immediately and failed save retains it',
+      (tester) async {
+    final client = _Client()..starterShirts = true;
+    await open(tester, client, const ShopScreen(wardrobe: true));
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    expect(find.text('เสื้อวิ่งสีขาว'), findsOneWidget);
+    expect(find.byType(Image), findsNWidgets(2));
+    await tester.tap(find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000004')));
+    await tester.pumpAndSettle();
+    final avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.outfitPreview['inner_top']!.renderData['variant'],
+        'starter_tee_white');
+    client.saveFail = true;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(
+        tester
+            .widget<HomeAvatar>(find.byType(HomeAvatar))
+            .outfitPreview['inner_top']!
+            .code,
+        'starter_tee_white');
+    client.saveFail = false;
+    await tester.tap(find.text('บันทึกการแต่งตัว'));
+    await tester.pumpAndSettle();
+    expect(client.saved!['equipment'], [
+      {'slot': 'inner_top', 'itemId': '10000000-0000-4000-8000-000000000004'}
+    ]);
+  });
+
+  testWidgets('equipped item or returning to saved shirt leaves save disabled',
+      (tester) async {
+    final client = _Client()..starterShirts = true;
+    await open(tester, client, const ShopScreen(wardrobe: true));
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    final black = find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000003'));
+    final white = find.byKey(
+        const ValueKey('item-thumbnail-10000000-0000-4000-8000-000000000004'));
+    expect(tester.getSize(black).width, closeTo(112 * .8, .01));
+    await tester.tap(black);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    await tester.tap(white);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNotNull);
+    await tester.tap(black);
+    await tester.pumpAndSettle();
+    expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
+        isNull);
+    expect(client.saved, isNull);
+  });
+
+  testWidgets(
+      'shop previews product, toggles try-on, buys once and updates real response balance',
+      (tester) async {
+    final client = _Client()..paidShirts = true;
+    await open(tester, client, const ShopScreen());
+    expect(find.text('30'), findsOneWidget);
+    expect(find.byType(HomeAvatar), findsNothing);
+    expect(find.byKey(const Key('shop-buy')), findsNothing);
+    expect(find.byKey(const Key('shop-preview-toggle')), findsNothing);
+    await tester.ensureVisible(find.text('เสื้อ').first);
+    await tester.tap(find.text('เสื้อ').first);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('เสื้อวิ่งสีม่วง'));
+    await tester.tap(find.text('เสื้อวิ่งสีม่วง'));
+    await tester.pumpAndSettle();
+    var avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.productAsset, 'assets/models/product_running_tee.glb');
+    await tester.tap(find.byKey(const Key('shop-preview-toggle')));
+    await tester.pumpAndSettle();
+    avatar = tester.widget<HomeAvatar>(find.byType(HomeAvatar));
+    expect(avatar.productAsset, isNull);
+    expect(avatar.outfitPreview['inner_top']!.renderData['variant'],
+        'shop_tee_purple');
+    await tester.tap(find.byKey(const Key('shop-buy')));
+    await tester.pumpAndSettle();
+    expect(find.text('ซื้อแล้ว'), findsOneWidget);
+    expect(find.text('10'), findsOneWidget);
+    expect(client.purchased, {'purple'});
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(ShopScreen)));
+    expect(container.read(userProvider).coin, 10);
+    expect(find.byType(HomeAvatar), findsNothing);
+    expect(find.byKey(const Key('shop-buy')), findsNothing);
+    await tester.ensureVisible(find.text('เสื้อวิ่งสีน้ำตาล'));
+    await tester.tap(find.text('เสื้อวิ่งสีน้ำตาล'));
+    await tester.pumpAndSettle();
+    expect(tester.widget<HomeAvatar>(find.byType(HomeAvatar)).productVariant,
+        'shop_tee_brown');
+    await tester.tap(find.byKey(const Key('shop-buy')));
+    await tester.pumpAndSettle();
+    expect(find.text('เหรียญไม่พอ'), findsOneWidget);
+    expect(client.coins, 10);
+    expect(client.purchased, {'purple'});
+  });
 
   testWidgets('shop shows real balance, empty category and see-all navigation',
       (tester) async {
@@ -196,7 +445,7 @@ void main() {
     expect(find.text('ผมของฉัน'), findsOneWidget);
     expect(tester.widget<FilledButton>(find.byType(FilledButton)).onPressed,
         isNull);
-    await tester.tap(find.text('ผมของฉัน'));
+    await tester.tap(find.byKey(const ValueKey('item-thumbnail-owned-hair')));
     await tester.pumpAndSettle();
     expect(find.text('✓ เลือกอยู่'), findsOneWidget);
     client.saveFail = true;

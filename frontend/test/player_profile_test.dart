@@ -21,25 +21,58 @@ class _Fonts extends Fake implements AssetManifest {
 
 class _Client extends ApiClient {
   bool leader = true, kicked = false, failKick = false;
+  bool failProfile = false, failLookup = false;
+  final paths = <String>[];
   int kicks = 0, sends = 0;
   String role = 'member', relationship = 'none';
   @override
   Future<Map<String, dynamic>> get(String path, {bool auth = false}) async {
     expect(auth, true);
+    paths.add(path);
+    if (path == '/api/friends/lookup/ABCDE23456') {
+      if (failLookup) throw ApiException(503, 'lookup unavailable');
+      return {
+        'data': {
+          'relationship': {'status': relationship, 'direction': 'outgoing'}
+        }
+      };
+    }
+    if (path == '/api/clubs/me') {
+      return {
+        'data': leader
+            ? {
+                'club': {'id': 'club'}
+              }
+            : null
+      };
+    }
+    if (path == '/api/clubs/club') {
+      return {
+        'data': {
+          'myMembership': {'role': leader ? 'leader' : 'member'},
+          'members': [
+            {
+              'user': {'id': 'target', 'uid': 'ABCDE23456'},
+              'role': role
+            }
+          ]
+        }
+      };
+    }
+    expect(path, '/api/users/profile/ABCDE23456');
+    if (failProfile) throw ApiException(404, 'ไม่พบผู้ใช้');
     return {
       'data': {
         'user': {
-          'id': 'target',
           'uid': 'ABCDE23456',
           'displayName': 'Runner',
           'level': 3,
           'avatarUrl': null
         },
-        'relationship': {'status': relationship, 'direction': 'outgoing'},
+        'relationship': relationship == 'accepted' ? 'friend' : 'none',
         'club': kicked ? null : {'id': 'club', 'name': 'Club', 'role': role},
-        'canManageMember': leader && !kicked,
         'avatar': {'equipment': []},
-        'distanceKm': 42.5,
+        'stats': {'totalDistanceKm': 42.5, 'totalRuns': 99},
       }
     };
   }
@@ -95,8 +128,10 @@ void main() {
         overrides: [apiClientProvider.overrideWithValue(client)],
         child: MaterialApp(
             theme: ThemeData.dark(),
-            home: const Scaffold(
-                body: PlayerProfileDialog(identifier: 'ABCDE23456')))));
+            home: Scaffold(
+                body: PlayerProfileDialog(
+                    identifier: 'ABCDE23456',
+                    avatarRendererBuilder: (_) => const SizedBox())))));
     await tester.pumpAndSettle();
   }
 
@@ -113,6 +148,46 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.sends, 1);
     expect(find.text('ส่งคำขอแล้ว'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+  testWidgets('new API accepted friend status disables duplicate request',
+      (tester) async {
+    final client = _Client()
+      ..relationship = 'accepted'
+      ..leader = false;
+    await open(tester, client);
+    expect(find.text('42.5 กม.'), findsOneWidget);
+    await tester.ensureVisible(find.text('เป็นเพื่อนแล้ว'));
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'เป็นเพื่อนแล้ว'))
+            .onPressed,
+        isNull);
+    expect(client.paths, contains('/api/users/profile/ABCDE23456'));
+    expect(client.paths, isNot(contains('/api/friends/lookup/ABCDE23456')));
+    expect(client.sends, 0);
+  });
+  testWidgets(
+      'profile failure retries correct endpoint; lookup failure preserves profile without enabling requests',
+      (tester) async {
+    final client = _Client()
+      ..failProfile = true
+      ..leader = false;
+    await open(tester, client);
+    expect(find.text('ไม่พบผู้ใช้'), findsOneWidget);
+    client.failProfile = false;
+    client.failLookup = true;
+    await tester.tap(find.text('ลองอีกครั้ง'));
+    await tester.pumpAndSettle();
+    expect(find.text('Runner'), findsOneWidget);
+    await tester.ensureVisible(find.text('ตรวจสอบเพื่อนไม่สำเร็จ'));
+    expect(
+        tester
+            .widget<FilledButton>(
+                find.widgetWithText(FilledButton, 'ตรวจสอบเพื่อนไม่สำเร็จ'))
+            .onPressed,
+        isNull);
     expect(tester.takeException(), isNull);
   });
   testWidgets(

@@ -4,8 +4,16 @@ import 'package:flutter/material.dart';
 import 'package:web/web.dart' as web;
 
 class AvatarRenderer extends StatefulWidget {
-  const AvatarRenderer({super.key, this.orbitDegrees = 0});
+  const AvatarRenderer(
+      {super.key,
+      this.orbitDegrees = 0,
+      this.variantName,
+      this.assetPath = 'assets/models/pacegasus_starter_v9.glb',
+      this.animated = true});
+  final String assetPath;
+  final bool animated;
   final double orbitDegrees;
+  final String? variantName;
   @override
   State<AvatarRenderer> createState() => _AvatarRendererState();
 }
@@ -39,16 +47,18 @@ class _AvatarRendererState extends State<AvatarRenderer> {
     element.style.height = '100%';
     element.style.backgroundColor = 'transparent';
     element.style.pointerEvents = 'none';
-    element.setAttribute(
-        'src', 'assets/assets/models/pacegasus_wave_male_v8.glb');
+    element.setAttribute('src', 'assets/${widget.assetPath}');
     element.setAttribute(
         'camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');
     element.setAttribute('shadow-intensity', '0.6');
+    if (widget.variantName != null) {
+      element.setAttribute('variant-name', widget.variantName!);
+    }
     element.setAttribute('animation-crossfade-duration', '150');
     _load = ((web.Event event) {
       if (_started || !mounted) return;
       _started = true;
-      _play('Wave_Greeting', once: true);
+      if (widget.animated) _play('Wave_Greeting', once: true);
     }).toJS;
     _finished = ((web.Event event) {
       if (mounted) _play('Idle_Loop');
@@ -64,6 +74,13 @@ class _AvatarRendererState extends State<AvatarRenderer> {
   @override
   void didUpdateWidget(covariant AvatarRenderer oldWidget) {
     super.didUpdateWidget(oldWidget);
+    if (oldWidget.variantName != widget.variantName) {
+      if (widget.variantName == null) {
+        _element?.removeAttribute('variant-name');
+      } else {
+        _element?.setAttribute('variant-name', widget.variantName!);
+      }
+    }
     if (oldWidget.orbitDegrees != widget.orbitDegrees) {
       _element?.setAttribute(
           'camera-orbit', '${widget.orbitDegrees}deg 85deg 105%');

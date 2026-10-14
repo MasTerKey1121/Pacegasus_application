@@ -16,6 +16,11 @@ class UserData extends ChangeNotifier {
     notifyListeners();
   }
 
+  void setCoinBalance(int balance) {
+    coin = balance;
+    notifyListeners();
+  }
+
   void addReward({int coin = 0, int exp = 0}) {
     this.coin += coin;
     this.exp += exp;

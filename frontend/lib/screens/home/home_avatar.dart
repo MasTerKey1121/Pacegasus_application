@@ -1,17 +1,27 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/gestures.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import '../../providers/avatar_provider.dart';
+import '../../services/shop_api.dart';
 import '../../navigation/home_route_observer.dart';
 import 'avatar_renderer.dart';
 
-class HomeAvatar extends StatefulWidget {
-  const HomeAvatar({super.key, this.rendererBuilder});
+class HomeAvatar extends ConsumerStatefulWidget {
+  const HomeAvatar(
+      {super.key,
+      this.rendererBuilder,
+      this.outfitPreview = const {},
+      this.productAsset,
+      this.productVariant});
+  final String? productAsset, productVariant;
+  final Map<String, ShopItem> outfitPreview;
   @visibleForTesting
   final WidgetBuilder? rendererBuilder;
   @override
-  State<HomeAvatar> createState() => _HomeAvatarState();
+  ConsumerState<HomeAvatar> createState() => _HomeAvatarState();
 }
 
-class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
+class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
   PageRoute<dynamic>? _route;
   bool _visible = true;
   int _entry = 0;
@@ -30,11 +40,15 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
   @override
   void didPushNext() => setState(() => _visible = false);
   @override
-  void didPopNext() => setState(() {
-        _visible = true;
-        _entry++;
-        _orbitDegrees = 0;
-      });
+  void didPopNext() {
+    if (widget.rendererBuilder == null) ref.invalidate(avatarOutfitProvider);
+    setState(() {
+      _visible = true;
+      _entry++;
+      _orbitDegrees = 0;
+    });
+  }
+
   @override
   void dispose() {
     homeRouteObserver.unsubscribe(this);
@@ -42,32 +56,36 @@ class _HomeAvatarState extends State<HomeAvatar> with RouteAware {
   }
 
   @override
-  Widget build(BuildContext context) => ExcludeSemantics(
-      child: GestureDetector(
-          key: const Key('avatar-rotation'),
-          behavior: HitTestBehavior.opaque,
+  Widget build(BuildContext context) {
+    // Test renderer injection avoids networking and platform-view setup.
+    final outfit = widget.rendererBuilder != null || widget.productAsset != null
+        ? const AvatarOutfit({})
+        : ref.watch(avatarOutfitProvider).valueOrNull ?? const AvatarOutfit({});
+    final variant = widget.productAsset != null
+        ? widget.productVariant
+        : outfit.preview(widget.outfitPreview).variant;
+    return ExcludeSemantics(
+        child: GestureDetector(
+            key: const Key('avatar-rotation'),
+            behavior: HitTestBehavior.opaque,
             dragStartBehavior: DragStartBehavior.down,
-          onHorizontalDragUpdate: (details) => setState(() {
-                _orbitDegrees = (_orbitDegrees - details.delta.dx * .7) % 360;
-              }),
-          child: Stack(alignment: Alignment.center, children: [
-            Positioned(
-                bottom: 4,
-                width: 350,
-                height: 35,
-                child: DecoratedBox(
-                    decoration: BoxDecoration(
-                        borderRadius: BorderRadius.circular(100),
-                        gradient: const LinearGradient(
-                            colors: [Color(0xFF9570AC), Color(0xFF352640)],
-                            begin: Alignment.topCenter,
-                            end: Alignment.bottomCenter)))),
-            if (_visible)
-              Positioned.fill(
-                  child: IgnorePointer(
-                      child: KeyedSubtree(
-                          key: ValueKey(_entry),
-                          child: widget.rendererBuilder?.call(context) ??
-                              AvatarRenderer(orbitDegrees: _orbitDegrees)))),
-          ])));
+            onHorizontalDragUpdate: (details) => setState(() {
+                  _orbitDegrees = (_orbitDegrees - details.delta.dx * .7) % 360;
+                }),
+            child: Stack(alignment: Alignment.center, children: [
+              if (_visible)
+                Positioned.fill(
+                    child: IgnorePointer(
+                        child: KeyedSubtree(
+                            key: ValueKey(
+                                '$_entry:${widget.productAsset ?? 'avatar'}'),
+                            child: widget.rendererBuilder?.call(context) ??
+                                AvatarRenderer(
+                                    orbitDegrees: _orbitDegrees,
+                                    variantName: variant,
+                                    assetPath: widget.productAsset ??
+                                        'assets/models/pacegasus_starter_v9.glb',
+                                    animated: widget.productAsset == null)))),
+            ])));
+  }
 }

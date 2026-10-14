@@ -7,6 +7,7 @@ import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
 import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
+import '../../providers/wallet_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
@@ -22,6 +23,7 @@ import '../training/training_schedule_screen.dart';
 import '../wellness/daily_wellness_screen.dart';
 import 'daily_missions_screen.dart';
 import 'home_avatar.dart';
+import 'avatar_layout.dart';
 
 const _background = Color(0xFF110E20);
 const _panel = Color(0xFF201A32);
@@ -36,9 +38,9 @@ class HomeScreen extends ConsumerStatefulWidget {
 }
 
 class _HomeScreenState extends ConsumerState<HomeScreen> {
-  final _scaffold = GlobalKey<ScaffoldState>();
   final _sheet = DraggableScrollableController();
   bool _avatarOnly = false;
+  bool _leftMenuOpen = false, _rightMenuOpen = false;
   double _extent = .4;
   double _minimum = .06;
   static const _middle = .4;
@@ -73,6 +75,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   Future<void> _push(Widget screen) async {
+    setState(() {
+      _leftMenuOpen = false;
+      _rightMenuOpen = false;
+    });
     _moveSheet(_minimum);
     await Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => screen));
@@ -118,6 +124,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
+    final wallet = ref.watch(walletProvider);
     final displayName =
         ref.watch(authProvider).user?['displayName']?.toString().trim();
     final name = displayName == null || displayName.isEmpty
@@ -174,47 +181,35 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                             : 'พร้อมออกไปทำเป้าหมายวันนี้';
 
     return PopScope(
-      canPop: !_avatarOnly,
+      canPop: !_avatarOnly && !_leftMenuOpen && !_rightMenuOpen,
       onPopInvokedWithResult: (didPop, result) {
-        if (!didPop && _avatarOnly) setState(() => _avatarOnly = false);
+        if (!didPop) {
+          setState(() {
+            _avatarOnly = false;
+            _leftMenuOpen = false;
+            _rightMenuOpen = false;
+          });
+        }
       },
       child: Scaffold(
-        key: _scaffold,
         backgroundColor: _background,
-        endDrawerEnableOpenDragGesture: false,
-        endDrawer: Drawer(
-          key: const Key('home-menu'),
-          width: MediaQuery.sizeOf(context).width * .25,
-          backgroundColor: _panel,
-          shape: const RoundedRectangleBorder(
-              borderRadius: BorderRadius.horizontal(left: Radius.circular(24))),
-          child: SafeArea(
-              child: SingleChildScrollView(
-            padding: const EdgeInsets.symmetric(vertical: 16, horizontal: 4),
-            child: Column(children: [
-              _menuItem(Icons.calendar_month_outlined, 'ตารางซ้อม', _schedule),
-              _menuItem(Icons.bar_chart_rounded, 'สถิติการวิ่ง',
-                  () => _openPage('สถิติ', const StatsScreen())),
-              _menuItem(Icons.settings_outlined, 'ตั้งค่า',
-                  () => _openPage('ตั้งค่า', const SettingsScreen())),
-            ]),
-          )),
-        ),
         body: SafeArea(child: LayoutBuilder(builder: (context, constraints) {
           final height = constraints.maxHeight;
           _minimum = (48 / height).clamp(.04, .16);
-          final originalAvatarHeight = math.min(330.0, height * .48);
-          final avatarTop = math.min(160.0, height * .25);
-          final avatarHeight = math.min(originalAvatarHeight * 2,
-                  _avatarOnly ? height - 24 : height - avatarTop - 12) *
-              .9;
-          final avatarWidth = math.min(460.0, constraints.maxWidth - 24) * .9;
+          final avatar =
+              AvatarLayout.home(constraints.biggest, avatarOnly: _avatarOnly);
+          final avatarHeight = avatar.height;
+          final avatarWidth = avatar.width;
           return Stack(children: [
             Positioned.fill(
                 child: GestureDetector(
               key: const Key('home-backdrop'),
               behavior: HitTestBehavior.opaque,
               onTap: () {
+                setState(() {
+                  _leftMenuOpen = false;
+                  _rightMenuOpen = false;
+                });
                 if (_avatarOnly) {
                   setState(() => _avatarOnly = false);
                 } else {
@@ -231,7 +226,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
             AnimatedPositioned(
               duration: const Duration(milliseconds: 220),
               curve: Curves.easeOutCubic,
-              top: (_avatarOnly ? (height - avatarHeight) / 2 : avatarTop) - 5,
+              top: _avatarOnly ? (height - avatarHeight) / 2 - 5 : avatar.top,
               left: 0,
               right: 0,
               height: avatarHeight,
@@ -241,7 +236,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                 label: _avatarOnly ? 'กลับหน้าหลัก' : 'ดูเฉพาะอวตารและพื้นหลัง',
                 child: InkWell(
                   key: const Key('home-avatar'),
-                  onTap: () => setState(() => _avatarOnly = !_avatarOnly),
+                  onTap: () => setState(() {
+                    _avatarOnly = !_avatarOnly;
+                    _leftMenuOpen = false;
+                    _rightMenuOpen = false;
+                  }),
                   borderRadius: BorderRadius.circular(100),
                   child: SizedBox(
                       width: avatarWidth,
@@ -310,43 +309,15 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Icon(Icons.toll_outlined,
                               color: AppColors.gold2, size: 18),
                           const SizedBox(width: 6),
-                          Text('${user.coin}',
+                          Text(wallet.valueOrNull?.toString() ?? '—',
                               style: AppText.body(
                                   size: 13, color: AppColors.gold2)),
                         ])),
                   ])),
               Positioned(
-                  top: 88,
-                  left: 16,
-                  child: SizedBox(
-                      height: math.max(56.0, height * (1 - _extent) - 88),
-                      child: SingleChildScrollView(
-                          child: Column(children: [
-                        _shortcut(Icons.emoji_events_outlined, 'อันดับ',
-                            () => _push(const LeaderboardScreen())),
-                        const SizedBox(height: 8),
-                        _shortcut(
-                            Icons.people_outline,
-                            'เพื่อน',
-                            () => Navigator.of(context).push(MaterialPageRoute(
-                                builder: (_) => const FriendsScreen()))),
-                        const SizedBox(height: 8),
-                        _shortcut(Icons.checkroom_outlined, 'แต่งตัว',
-                            () => _push(const ShopScreen(wardrobe: true))),
-                        const SizedBox(height: 8),
-                        _shortcut(Icons.storefront_outlined, 'ร้านค้า',
-                            () => _push(const ShopScreen())),
-                        const SizedBox(height: 8),
-                        _shortcut(Icons.groups_outlined, 'คลับ',
-                            () => _push(const ClubScreen())),
-                      ])))),
+                  top: 88, left: 16, child: _sideMenu(height, left: true)),
               Positioned(
-                  top: 88,
-                  right: 16,
-                  child: _shortcut(Icons.menu, 'เมนู', () {
-                    _moveSheet(_minimum);
-                    _scaffold.currentState?.openEndDrawer();
-                  })),
+                  top: 88, right: 16, child: _sideMenu(height, left: false)),
               Positioned(
                   top: 80,
                   left: 76,
@@ -498,26 +469,119 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     );
   }
 
-  Widget _menuItem(IconData icon, String label, VoidCallback onTap) => InkWell(
-        onTap: () {
-          Navigator.of(context).pop();
-          onTap();
-        },
-        child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 22, horizontal: 3),
-            child: Column(children: [
-              Icon(icon, color: _accent, size: 22),
-              const SizedBox(height: 9),
-              Text(label,
-                  textAlign: TextAlign.center, style: AppText.body(size: 11)),
-            ])),
-      );
+  Widget _sideMenu(double height, {required bool left}) {
+    final open = left ? _leftMenuOpen : _rightMenuOpen;
+    void toggle() => setState(() {
+          if (left) {
+            _leftMenuOpen = !open;
+            _rightMenuOpen = false;
+          } else {
+            _rightMenuOpen = !open;
+            _leftMenuOpen = false;
+          }
+        });
+    if (!open) {
+      final button = left
+          ? _shortcut(Icons.more_horiz, '', toggle,
+              key: const Key('home-shortcuts-toggle'),
+              tooltip: 'เปิดเมนูทางลัด')
+          : _shortcut(Icons.menu, 'เมนู', toggle,
+              key: const Key('home-menu-toggle'));
+      return _animateMenu(button, left: left, open: false);
+    }
+    return _animateMenu(
+        SizedBox(
+          key: Key(left ? 'home-shortcuts' : 'home-menu'),
+          width: 56,
+          height: math.max(56.0, height * (1 - _extent) - 88),
+          child: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            if (left) ...[
+              _shortcut(Icons.emoji_events_outlined, 'อันดับ',
+                  () => _push(const LeaderboardScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.people_outline, 'เพื่อน',
+                  () => _push(const FriendsScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.checkroom_outlined, 'แต่งตัว',
+                  () => _push(const ShopScreen(wardrobe: true))),
+              const SizedBox(height: 8),
+              _shortcut(Icons.storefront_outlined, 'ร้านค้า',
+                  () => _push(const ShopScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.groups_outlined, 'คลับ',
+                  () => _push(const ClubScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.arrow_drop_down, '', toggle,
+                  key: const Key('home-shortcuts-collapse'),
+                  tooltip: 'ย่อเมนูทางลัด'),
+            ] else ...[
+              _shortcut(Icons.calendar_month_outlined, 'ตารางซ้อม', _schedule),
+              const SizedBox(height: 8),
+              _shortcut(Icons.bar_chart_rounded, 'สถิติ',
+                  () => _openPage('สถิติ', const StatsScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.settings_outlined, 'ตั้งค่า',
+                  () => _openPage('ตั้งค่า', const SettingsScreen())),
+              const SizedBox(height: 8),
+              _shortcut(Icons.close, '', toggle,
+                  key: const Key('home-menu-close'), tooltip: 'ปิดเมนู'),
+            ],
+          ])),
+        ),
+        left: left,
+        open: true);
+  }
 
-  Widget _shortcut(IconData icon, String label, VoidCallback? onTap) =>
+  Widget _animateMenu(Widget child, {required bool left, required bool open}) {
+    final activeKey = ValueKey(
+        '${left ? 'left' : 'right'}-${open ? 'expanded' : 'collapsed'}');
+    final reducedMotion = MediaQuery.disableAnimationsOf(context);
+    final animation = AnimatedSwitcher(
+      duration:
+          reducedMotion ? Duration.zero : const Duration(milliseconds: 280),
+      reverseDuration:
+          reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+      switchInCurve: Curves.easeOutCubic,
+      switchOutCurve: Curves.easeInCubic,
+      layoutBuilder: (current, previous) => Stack(
+        alignment: Alignment.topCenter,
+        children: [...previous, if (current != null) current],
+      ),
+      transitionBuilder: (item, progress) {
+        final expanded =
+            item.key == ValueKey('${left ? 'left' : 'right'}-expanded');
+        final content = FadeTransition(opacity: progress, child: item);
+        return IgnorePointer(
+          ignoring: item.key != activeKey,
+          child: ExcludeSemantics(
+            excluding: item.key != activeKey,
+            child: expanded
+                ? SlideTransition(
+                    position: Tween<Offset>(
+                            begin: left
+                                ? const Offset(0, -1)
+                                : const Offset(1.5, 0),
+                            end: Offset.zero)
+                        .animate(progress),
+                    child: content,
+                  )
+                : content,
+          ),
+        );
+      },
+      child: KeyedSubtree(key: activeKey, child: child),
+    );
+    return left ? ClipRect(child: animation) : animation;
+  }
+
+  Widget _shortcut(IconData icon, String label, VoidCallback? onTap,
+          {Key? key, String? tooltip}) =>
       Semantics(
+          key: key,
           button: true,
           enabled: onTap != null,
-          label: onTap == null ? '$label · เร็ว ๆ นี้' : label,
+          label: tooltip ?? (onTap == null ? '$label · เร็ว ๆ นี้' : label),
           excludeSemantics: true,
           child: Material(
             color: _panel,
@@ -531,7 +595,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                       },
                 borderRadius: BorderRadius.circular(15),
                 child: SizedBox(
-                    width: 48,
+                    width: 56,
                     height: 56,
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
@@ -541,13 +605,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ? AppColors.textTertiary
                                 : AppColors.textSecondary,
                             size: 20),
-                        const SizedBox(height: 4),
-                        Text(label,
-                            style: AppText.body(
-                                size: 10,
-                                color: onTap == null
-                                    ? AppColors.textSecondary
-                                    : AppColors.textPrimary))
+                        if (label.isNotEmpty) const SizedBox(height: 4),
+                        if (label.isNotEmpty)
+                          Text(label,
+                              style: AppText.body(
+                                  size: 10,
+                                  color: onTap == null
+                                      ? AppColors.textSecondary
+                                      : AppColors.textPrimary))
                       ],
                     ))),
           ));

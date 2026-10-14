@@ -1,5 +1,6 @@
 const db = require('../config/db');
 const ApiError = require('../utils/ApiError');
+const { ensureStarterCatalog } = require('./starterAvatarCatalog');
 
 const DEFAULT_SKIN_TONE = '#F1C27D';
 
@@ -35,6 +36,7 @@ function toSlot(row) {
 // สร้าง avatar ครั้งแรก + แจกไอเท็ม default (รวมตัวที่เพิ่มเข้าแคตตาล็อกภายหลัง)
 // + ใส่ไอเท็ม default ให้ช่องบังคับที่ยังว่าง — ทุกคำสั่ง idempotent เรียกซ้ำได้
 async function ensureAvatar(client, userId) {
+  await ensureStarterCatalog(client);
   await client.query(`INSERT INTO user_avatars (user_id) VALUES ($1) ON CONFLICT (user_id) DO NOTHING`, [userId]);
   await client.query(
     `INSERT INTO user_avatar_items (user_id, item_id, source)
@@ -48,8 +50,9 @@ async function ensureAvatar(client, userId) {
      SELECT DISTINCT ON (s.code) $1, s.code, i.id
      FROM avatar_slots s
      JOIN avatar_items i ON i.slot_code = s.code AND i.is_default AND i.is_active
-     WHERE s.is_required AND s.is_active
-     ORDER BY s.code, i.created_at
+     WHERE (s.is_required OR i.render_data->>'starterEquipped' = 'true') AND s.is_active
+     ORDER BY s.code, (i.render_data->>'starterEquipped' = 'true') DESC NULLS LAST,
+       i.created_at, i.id
      ON CONFLICT (user_id, slot_code) DO NOTHING`,
     [userId]
   );

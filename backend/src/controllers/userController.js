@@ -4,6 +4,9 @@ const asyncHandler = require('../utils/asyncHandler');
 const gameProgressService = require('../services/gameProgressService');
 const profileService = require('../services/profileService');
 const { uidSchema } = require('../utils/friendValidators');
+const env = require('../config/env');
+const userService = require('../services/userService');
+const { updateProfileSchema } = require('../utils/validators');
 
 // GET /api/users/me/full -> profile + all onboarding data, handy for the app's home screen
 const getFullProfile = asyncHandler(async (req, res) => {
@@ -90,8 +93,7 @@ const deleteUser = asyncHandler(async (req, res) => {
     [userId]
   );
 
-  // TODO: ถ้ามี refresh_tokens / sessions table ให้ revoke ตรงนี้ด้วย เช่น
-  // await db.query(`DELETE FROM refresh_tokens WHERE user_id = $1`, [userId]);
+  await db.query(`UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1`, [userId]);
 
   res.status(200).json({
     success: true,
@@ -108,4 +110,43 @@ const getProfileByUid = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: profile });
 });
 
-module.exports = { getProfileByUid, getFullProfile, getGameProgress, deleteUser };
+// GET /api/users/me
+const getMe = asyncHandler(async (req, res) => {
+  const user = await userService.getProfile(req.user.id);
+  res.status(200).json({ success: true, data: { user } });
+});
+
+// PATCH /api/users/me -> partial update of display name and basic info
+const updateMe = asyncHandler(async (req, res) => {
+  const { value, error } = updateProfileSchema.validate(req.body, { abortEarly: false });
+  if (error) throw new ApiError(400, 'ข้อมูลไม่ถูกต้อง', error.details.map((d) => d.message));
+
+  const user = await userService.updateProfile(req.user.id, value);
+  res.status(200).json({ success: true, message: 'อัปเดตโปรไฟล์สำเร็จ', data: { user } });
+});
+
+// PUT /api/users/me/avatar (multipart/form-data, field "avatar") -> add or replace the profile picture
+const uploadAvatar = asyncHandler(async (req, res) => {
+  if (!req.file) throw new ApiError(400, 'กรุณาแนบไฟล์รูปใน field "avatar"');
+
+  const baseUrl = (env.publicBaseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const user = await userService.setAvatar(req.user.id, `${baseUrl}${userService.AVATAR_URL_PREFIX}${req.file.filename}`);
+  res.status(200).json({ success: true, message: 'อัปโหลดรูปโปรไฟล์สำเร็จ', data: { user } });
+});
+
+// DELETE /api/users/me/avatar
+const deleteAvatar = asyncHandler(async (req, res) => {
+  const user = await userService.deleteAvatar(req.user.id);
+  res.status(200).json({ success: true, message: 'ลบรูปโปรไฟล์สำเร็จ', data: { user } });
+});
+
+module.exports = {
+  getProfileByUid,
+  getFullProfile,
+  getGameProgress,
+  deleteUser,
+  getMe,
+  updateMe,
+  uploadAvatar,
+  deleteAvatar,
+};

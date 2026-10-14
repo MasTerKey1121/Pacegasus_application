@@ -333,8 +333,8 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
   }
 
   Widget _avatar(RankingEntry entry, double size) => GestureDetector(
-      onTap: _scope == 'individual'
-          ? () => showPlayerProfile(context, entry.id)
+      onTap: _scope == 'individual' && entry.uid != null
+          ? () => showPlayerProfile(context, entry.uid!)
           : null,
       child: ClipOval(
           child: Container(
