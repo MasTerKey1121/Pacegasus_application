@@ -310,24 +310,57 @@ void main() {
   });
 
   testWidgets(
-      'right drawer is 25 percent and closes outside without a close button',
+      'floating right menu closes with X, outside or back and has no drawer',
       (tester) async {
     await home(tester);
-    await tester.tap(find.text('เมนู'));
+    expect(find.byType(Drawer), findsNothing);
+    await tester.tap(find.byKey(const Key('home-menu-toggle')));
     await tester.pumpAndSettle();
-    expect(tester.getSize(find.byKey(const Key('home-menu'))).width,
-        closeTo(390 * .25, 1));
-    expect(find.byIcon(Icons.close), findsNothing);
-    await tester.tapAt(const Offset(20, 260));
+    expect(tester.getSize(find.byKey(const Key('home-menu'))).width, 56);
+    expect(find.text('สถิติ'), findsOneWidget);
+    expect(find.text('ตั้งค่า'), findsOneWidget);
+    expect(find.byType(Drawer), findsNothing);
+    await tester.tap(find.byKey(const Key('home-menu-close')));
     await tester.pumpAndSettle();
-    expect(
-        tester
-            .state<ScaffoldState>(find.byType(Scaffold).first)
-            .isEndDrawerOpen,
-        isFalse);
+    expect(find.byKey(const Key('home-menu')), findsNothing);
+    await tester.tap(find.byKey(const Key('home-menu-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tapAt(const Offset(8, 190));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-menu')), findsNothing);
+    await tester.tap(find.byKey(const Key('home-menu-toggle')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.byType(HomeScreen), findsOneWidget);
+    expect(find.byKey(const Key('home-menu')), findsNothing);
     expect(tester.takeException(), isNull);
   });
-
+  testWidgets(
+      'compact left shortcuts scroll to collapse and switching sides closes the first menu',
+      (tester) async {
+    await home(tester, size: const Size(320, 568));
+    expect(find.text('เพื่อน'), findsNothing);
+    await tester.tap(find.byKey(const Key('home-shortcuts-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.text('เพื่อน'), findsOneWidget);
+    final scroll = find.descendant(
+        of: find.byKey(const Key('home-shortcuts')),
+        matching: find.byType(Scrollable));
+    await tester.scrollUntilVisible(
+        find.byKey(const Key('home-shortcuts-collapse')), 100,
+        scrollable: scroll);
+    await tester.tap(find.byKey(const Key('home-shortcuts-collapse')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-shortcuts-toggle')), findsOneWidget);
+    await tester.tap(find.byKey(const Key('home-shortcuts-toggle')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('home-menu-toggle')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('home-shortcuts')), findsNothing);
+    expect(find.byKey(const Key('home-menu-close')), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   testWidgets('primary action sends an unchecked runner to wellness',
       (tester) async {
     // Destination screens predate this redesign; use a wide viewport for this
