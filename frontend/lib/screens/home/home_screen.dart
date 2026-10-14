@@ -541,7 +541,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       duration:
           reducedMotion ? Duration.zero : const Duration(milliseconds: 280),
       reverseDuration:
-          reducedMotion ? Duration.zero : const Duration(milliseconds: 220),
+          reducedMotion ? Duration.zero : const Duration(milliseconds: 280),
       switchInCurve: Curves.easeOutCubic,
       switchOutCurve: Curves.easeInCubic,
       layoutBuilder: (current, previous) => Stack(
@@ -551,7 +551,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
       transitionBuilder: (item, progress) {
         final expanded =
             item.key == ValueKey('${left ? 'left' : 'right'}-expanded');
-        final content = FadeTransition(opacity: progress, child: item);
+        final content =
+            expanded ? item : FadeTransition(opacity: progress, child: item);
         return IgnorePointer(
           ignoring: item.key != activeKey,
           child: ExcludeSemantics(
