@@ -1,0 +1,63 @@
+{
+  "state": "failed",
+  "detail": "Failed at profile: Expected: no matching candidates\n  Actual: _TextWidgetFinder:<Found 1 widget with text \"ลองอีกครั้ง\": [\n            Text(\"ลองอีกครั้ง\", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),\n          ]>\n   Which: means one was found but none were expected\n",
+  "checkpoints": [
+    {
+      "name": "01-existing-login",
+      "description": "Existing account email entered on Login",
+      "status": "passed"
+    },
+    {
+      "name": "02-login-otp",
+      "description": "Login OTP requested for existing account",
+      "status": "passed"
+    },
+    {
+      "name": "03-existing-authenticated",
+      "description": "Existing account restored or authenticated with correct email and name",
+      "status": "passed"
+    },
+    {
+      "name": "07-basic-valid",
+      "description": "Synthetic birth date, gender, weight, height and training days validate",
+      "status": "passed"
+    },
+    {
+      "name": "08-health",
+      "description": "Synthetic no-condition and no-injury answers selected",
+      "status": "passed"
+    },
+    {
+      "name": "09-goal",
+      "description": "Only increased-endurance health goal selected; no distance goal",
+      "status": "passed"
+    },
+    {
+      "name": "10-history",
+      "description": "Synthetic beginner running history selected",
+      "status": "passed"
+    },
+    {
+      "name": "11-home",
+      "description": "Onboarding completes and Home shows test account",
+      "status": "passed"
+    },
+    {
+      "name": "12-wellness-valid",
+      "description": "Five required wellness scores enable Save",
+      "status": "passed"
+    },
+    {
+      "name": "13-wellness-saved",
+      "description": "Real API accepts wellness and Home updates",
+      "status": "passed"
+    },
+    {
+      "name": "failed-profile",
+      "description": "Failure at profile",
+      "status": "failed"
+    }
+  ],
+  "scope": "See checkpoint descriptions for the selected account flow and goals. Real API, synthetic onboarding, wellness and Profile checks. No GPS, purchases or social writes.",
+  "observedError": "Route not found: GET /api/users/me/profile"
+}

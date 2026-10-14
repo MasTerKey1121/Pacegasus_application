@@ -9,3 +9,6 @@ build/
 .flutter-plugins-dependencies
 *.iml
 .idea/
+.uat-runtime/
+.uat-run.log
+android/.kotlin/
