@@ -1,4 +1,5 @@
 const db = require('../config/db');
+const accountDeletionService = require('../services/accountDeletionService');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const gameProgressService = require('../services/gameProgressService');
@@ -64,41 +65,13 @@ const getGameProgress = asyncHandler(async (req, res) => {
 });
 
 
-// DELETE /api/users/me -> soft delete บัญชีตัวเอง
+// DELETE /api/users/me -> permanently delete the account and its owned data.
 const deleteUser = asyncHandler(async (req, res) => {
-  const userId = req.user.id;
-
-  // กันกรณีลบซ้ำ / user ไม่มีอยู่จริง / ถูกลบไปแล้ว
-  const { rows: existingRows } = await db.query(
-    `SELECT id, status FROM users WHERE id = $1`,
-    [userId]
-  );
-
-  if (existingRows.length === 0) {
-    throw new ApiError(404, 'ไม่พบผู้ใช้งาน');
-  }
-
-  if (existingRows[0].status === 'deleted' ) {
-    throw new ApiError(400, 'บัญชีนี้ถูกลบไปแล้ว');
-  }
-
-  // เปลี่ยน email ให้ไม่ชนกับ unique constraint เวลามีคนสมัครใหม่ด้วย email เดิม
-  // เก็บ email เดิมไว้แบบ mark ไม่ให้ query ปกติเจอ (ไม่กระทบข้อมูลจริง)
-  const { rows } = await db.query(
-    `UPDATE users
-     SET status = 'deleted',
-         email = email || '::deleted::' || id::text
-     WHERE id = $1
-     RETURNING id, status`,
-    [userId]
-  );
-
-  await db.query(`UPDATE refresh_tokens SET revoked = TRUE WHERE user_id = $1`, [userId]);
-
+  await accountDeletionService.deleteAccount(req.user.id);
   res.status(200).json({
     success: true,
     message: 'ลบบัญชีเรียบร้อยแล้ว',
-    data: { id: rows[0].id, status: rows[0].status },
+    data: { id: req.user.id, status: 'deleted' },
   });
 });
 

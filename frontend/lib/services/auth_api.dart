@@ -4,6 +4,10 @@ class AuthApi {
   final ApiClient client;
   AuthApi(this.client);
 
+  Future<Map<String, dynamic>> checkRegistration({required String email}) {
+    return client.post('/api/auth/register/check', body: {'email': email});
+  }
+
   Future<Map<String, dynamic>> google({required String idToken}) {
     return client.post('/api/auth/google', body: {'idToken': idToken});
   }

@@ -22,6 +22,7 @@ const otpVerifyLimiter = rateLimit({
   message: { success: false, message: 'พยายามยืนยัน OTP บ่อยเกินไป กรุณาลองใหม่ภายหลัง' },
 });
 
+router.post('/register/check', otpRequestLimiter, authController.checkRegistration);
 router.post('/otp/request', otpRequestLimiter, authController.requestOtp);
 router.post('/otp/verify', otpVerifyLimiter, authController.verifyOtp);
 router.post('/google', authController.googleAuth);

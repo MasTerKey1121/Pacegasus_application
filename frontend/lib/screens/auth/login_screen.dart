@@ -42,7 +42,8 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
       final otpRef = res['data']['otpRef'] as String;
 
       if (!mounted) return;
-      Navigator.of(context).push(
+      final navigator = Navigator.of(context);
+      navigator.push(
         MaterialPageRoute(
           builder: (_) => OtpScreen(
             email: email,
@@ -54,12 +55,12 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
 
               if (!policyAccepted) {
                 // ยัง verify OTP ผ่านแล้ว (พิสูจน์ตัวตนแล้ว) แต่ยังไม่ยอมรับ policy
-                Navigator.of(context).pushAndRemoveUntil(
+                navigator.pushAndRemoveUntil(
                   MaterialPageRoute(
                     builder: (_) => TermsConsentScreen(
                       email: email,
                       onAcceptedDirectly: () {
-                        Navigator.of(context).pushAndRemoveUntil(
+                        navigator.pushAndRemoveUntil(
                           MaterialPageRoute(builder: (_) => const MainShell()),
                           (route) => false,
                         );
@@ -71,7 +72,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 return;
               }
 
-              Navigator.of(context).pushAndRemoveUntil(
+              navigator.pushAndRemoveUntil(
                 MaterialPageRoute(builder: (_) => const MainShell()),
                 (route) => false,
               );

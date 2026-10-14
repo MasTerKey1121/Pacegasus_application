@@ -1,5 +1,6 @@
 const Joi = require('joi');
 const db = require('../config/db');
+const accountDeletionService = require('../services/accountDeletionService');
 const ApiError = require('../utils/ApiError');
 const asyncHandler = require('../utils/asyncHandler');
 const otpService = require('../services/otpService');
@@ -32,7 +33,13 @@ function serializeUser(user) {
 
 async function findUserByEmail(email) {
   const { rows } = await db.query(`SELECT * FROM users WHERE email = $1`, [email]);
-  return rows[0] || null;
+  const user = rows[0] || null;
+  // Older deployments may have left the original email on a deleted account.
+  if (user?.status === 'deleted') {
+    await accountDeletionService.deleteAccount(user.id);
+    return null;
+  }
+  return user;
 }
 
 async function findUserById(id) {
@@ -104,18 +111,31 @@ const acceptPolicySchema = Joi.object({
   policyVersion: Joi.string().trim().max(20).required(),
 });
 
+// Check before showing consent; requestOtp checks again to handle races.
+const checkRegistration = asyncHandler(async (req, res) => {
+  const { value, error } = Joi.object({
+    email: Joi.string().trim().lowercase().email().required(),
+  }).validate(req.body);
+  if (error) throw new ApiError(400, error.message);
+  const user = await findUserByEmail(value.email);
+  if (user && (user.email_verified || user.status !== 'active')) {
+    throw new ApiError(409, 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
+  }
+  res.status(200).json({ success: true, data: { available: true } });
+});
+
 // POST /api/auth/otp/request
 const requestOtp = asyncHandler(async (req, res) => {
   const { value, error } = requestOtpSchema.validate(req.body);
   if (error) throw new ApiError(400, error.message);
 
-  const { email, purpose, policyAccepted, policyVersion } = value;
+  const { email, purpose, policyVersion } = value;
 
   let existingUser = await findUserByEmail(email);
 
   // 1. กรณีสมัครใหม่ (register)
   if (purpose === 'register') {
-    if (existingUser && existingUser.email_verified) {
+    if (existingUser && (existingUser.email_verified || existingUser.status !== 'active')) {
       throw new ApiError(409, 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
     }
 
@@ -258,6 +278,7 @@ const refresh = asyncHandler(async (req, res) => {
 
   const user = await findUserById(rotated.userId);
   if (!user) throw new ApiError(401, 'ไม่พบผู้ใช้งาน');
+  if (user.status !== 'active') throw new ApiError(401, 'บัญชีนี้ถูกลบหรือระงับการใช้งานแล้ว');
 
   const accessToken = tokenService.signAccessToken(user);
 
@@ -285,4 +306,4 @@ const me = asyncHandler(async (req, res) => {
   res.status(200).json({ success: true, data: { user: serializeUser(user) } });
 });
 
-module.exports = { requestOtp, verifyOtp, googleAuth, acceptPolicy, refresh, logout, me, serializeUser, findUserById };
+module.exports = { checkRegistration, requestOtp, verifyOtp, googleAuth, acceptPolicy, refresh, logout, me, serializeUser, findUserById };

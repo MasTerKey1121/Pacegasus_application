@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
 import '../../widgets/google_auth_button.dart';
+import '../../providers/auth_provider.dart';
+import '../../services/api_client.dart';
 import 'terms_screen.dart';
 
 class RegisterScreen extends ConsumerStatefulWidget {
@@ -16,6 +18,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
   final _emailController = TextEditingController();
   final _nameController = TextEditingController();
   bool _googleLoading = false;
+  bool _checkingEmail = false;
 
   @override
   void dispose() {
@@ -24,7 +27,8 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
     super.dispose();
   }
 
-  void _goToTerms() {
+  Future<void> _goToTerms() async {
+    if (_checkingEmail || _googleLoading) return;
     final email = _emailController.text.trim();
     final name = _nameController.text.trim();
     if (email.isEmpty || !email.contains('@')) {
@@ -36,15 +40,27 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
       return;
     }
 
-    // ไม่ยิง OTP ตรงนี้แล้ว — ต้องผ่านหน้ายอมรับข้อกำหนดก่อน
-    Navigator.of(context).push(
-      MaterialPageRoute(
-        builder: (_) => TermsConsentScreen(
-          email: email,
-          displayName: name,
+    setState(() => _checkingEmail = true);
+    try {
+      await ref.read(authApiProvider).checkRegistration(email: email);
+      if (!mounted) return;
+      Navigator.of(context).push(
+        MaterialPageRoute(
+          builder: (_) => TermsConsentScreen(
+            email: email,
+            displayName: name,
+          ),
         ),
-      ),
-    );
+      );
+    } on ApiException catch (e) {
+      if (mounted) showAppToast(context, e.message);
+    } catch (_) {
+      if (mounted) {
+        showAppToast(context, 'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้ ลองใหม่อีกครั้ง');
+      }
+    } finally {
+      if (mounted) setState(() => _checkingEmail = false);
+    }
   }
 
   @override
@@ -79,8 +95,9 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 ),
                 const SizedBox(height: 16),
                 GradientButton(
-                  label: 'สมัครสมาชิก',
-                  onTap: _googleLoading ? null : _goToTerms,
+                  label:
+                      _checkingEmail ? 'กำลังตรวจสอบอีเมล...' : 'สมัครสมาชิก',
+                  onTap: _googleLoading || _checkingEmail ? null : _goToTerms,
                 ),
                 const SizedBox(height: 22),
                 Row(children: [
@@ -96,6 +113,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                 const SizedBox(height: 22),
                 GoogleAuthButton(
                   label: 'สมัครสมาชิกด้วย Google',
+                  enabled: !_checkingEmail,
                   onLoadingChanged: (value) =>
                       setState(() => _googleLoading = value),
                 ),
@@ -107,7 +125,7 @@ class _RegisterScreenState extends ConsumerState<RegisterScreen> {
                         style: AppText.body(
                             size: 13, color: AppColors.textSecondary)),
                     GestureDetector(
-                      onTap: _googleLoading
+                      onTap: _googleLoading || _checkingEmail
                           ? null
                           : () => Navigator.of(context).pop(),
                       child: Text('เข้าสู่ระบบ',

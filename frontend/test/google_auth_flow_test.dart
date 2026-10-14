@@ -15,9 +15,12 @@ import 'package:pacegasus/providers/onboarding_provider.dart';
 import 'package:pacegasus/providers/program_provider.dart';
 import 'package:pacegasus/providers/wellness_provider.dart';
 import 'package:pacegasus/screens/auth/login_screen.dart';
+import 'package:pacegasus/screens/auth/register_screen.dart';
 import 'package:pacegasus/screens/auth/terms_screen.dart';
 import 'package:pacegasus/screens/auth/otp_screen.dart';
 import 'package:pacegasus/screens/home/main_shell.dart';
+import 'package:pacegasus/screens/settings/settings_screen.dart';
+import 'package:pacegasus/services/run_draft_store.dart';
 import 'package:pacegasus/screens/onboarding/onboarding_basic_screen.dart';
 import 'package:pacegasus/screens/onboarding/onboarding_injury_screen.dart';
 import 'package:pacegasus/screens/onboarding/onboarding_goal_screen.dart';
@@ -97,6 +100,71 @@ class _Api extends AuthApi {
   }
 }
 
+class _EmailApi extends _Api {
+  _EmailApi({this.duplicate = false}) : super(existing: false);
+  final bool duplicate;
+  int checkCalls = 0;
+
+  @override
+  Future<Map<String, dynamic>> checkRegistration(
+      {required String email}) async {
+    checkCalls++;
+    if (duplicate) {
+      throw ApiException(409, 'อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน');
+    }
+    return {
+      'data': {'available': true}
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> requestOtp(
+      {required String email,
+      required String purpose,
+      bool? policyAccepted,
+      String? policyVersion}) async {
+    expect(purpose, 'login');
+    expect(policyAccepted, isNull);
+    otpCalls++;
+    return {
+      'data': {'otpRef': 'ABC123'}
+    };
+  }
+
+  @override
+  Future<Map<String, dynamic>> verifyOtp(
+      {required String email,
+      required String otp,
+      required String otpRef,
+      String? displayName}) async {
+    expect(otp, '123456');
+    return {
+      'data': {
+        'user': Map<String, dynamic>.from(user),
+        'accessToken': 'access',
+        'refreshToken': 'refresh'
+      }
+    };
+  }
+}
+
+class _GoogleLifecycleApi extends _Api {
+  _GoogleLifecycleApi() : super(existing: true);
+  int deleteCalls = 0;
+
+  @override
+  Future<void> deleteAccount() async {
+    deleteCalls++;
+    user = {
+      'id': 'new-google-user',
+      'email': 'runner@example.com',
+      'displayName': 'Runner',
+      'policyAccepted': false,
+      'onboardingCompleted': false,
+    };
+  }
+}
+
 // Home's data restoration is independent of authentication routing.
 class _Onboarding extends OnboardingApi {
   _Onboarding(this.auth) : super(ApiClient());
@@ -128,6 +196,8 @@ class _Program extends ProgramNotifier {
   _Program() : super(ProgramApi(ApiClient()), OnboardingApi(ApiClient()));
   @override
   Future<void> restore({bool force = false}) async {}
+  @override
+  Future<void> loadTemplates() async {}
 }
 
 class _Wellness extends WellnessNotifier {
@@ -157,29 +227,82 @@ void main() {
   });
 
   Future<void> open(WidgetTester tester, _Api api,
-      {bool register = false}) async {
+      {bool register = false, bool google = true}) async {
     tester.view.physicalSize = const Size(500, 1100);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
     addTearDown(tester.view.resetDevicePixelRatio);
-    await tester.pumpWidget(ProviderScope(
-        overrides: [
-          authApiProvider.overrideWithValue(api),
-          onboardingApiProvider.overrideWithValue(_Onboarding(api)),
-          googleSignInServiceProvider.overrideWithValue(_Google()),
-          programProvider.overrideWith((ref) => _Program()),
-          wellnessProvider.overrideWith((ref) => _Wellness()),
-        ],
-        child: const MaterialApp(home: AuthGate())));
+    await tester.pumpWidget(ProviderScope(overrides: [
+      authApiProvider.overrideWithValue(api),
+      onboardingApiProvider.overrideWithValue(_Onboarding(api)),
+      googleSignInServiceProvider.overrideWithValue(_Google()),
+      programProvider.overrideWith((ref) => _Program()),
+      wellnessProvider.overrideWith((ref) => _Wellness()),
+    ], child: const MaterialApp(home: AuthGate())));
     await tester.pumpAndSettle();
     if (register) {
       await tester.tap(find.text('สมัครสมาชิก'));
       await tester.pumpAndSettle();
     }
-    await tester.tap(find
-        .text(register ? 'สมัครสมาชิกด้วย Google' : 'เข้าสู่ระบบด้วย Google'));
-    await tester.pumpAndSettle();
+    if (google) {
+      await tester.tap(find.text(
+          register ? 'สมัครสมาชิกด้วย Google' : 'เข้าสู่ระบบด้วย Google'));
+      await tester.pumpAndSettle();
+    }
   }
+
+  for (final duplicate in [true, false]) {
+    testWidgets(
+        'registration checks email before showing consent: duplicate=$duplicate',
+        (tester) async {
+      final api = _EmailApi(duplicate: duplicate);
+      await open(tester, api, register: true, google: false);
+      await tester.enterText(find.byType(TextField).at(0), 'Runner');
+      await tester.enterText(
+          find.byType(TextField).at(1), 'runner@example.com');
+      await tester.tap(find.text('สมัครสมาชิก').last);
+      await tester.pumpAndSettle();
+      expect(api.checkCalls, 1);
+      expect(api.otpCalls, 0);
+      expect(find.byType(TermsConsentScreen),
+          duplicate ? findsNothing : findsOneWidget);
+      if (duplicate) {
+        expect(find.byType(RegisterScreen), findsOneWidget);
+        expect(find.text('อีเมลนี้มีผู้ใช้งานแล้ว กรุณาเข้าสู่ระบบแทน'),
+            findsOneWidget);
+        await tester.pump(const Duration(seconds: 3));
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets(
+      'email login without consent verifies OTP then accepts policy and opens Home',
+      (tester) async {
+    final api = _EmailApi();
+    await open(tester, api, google: false);
+    await tester.enterText(find.byType(TextField), 'runner@example.com');
+    await tester.tap(find.text('เข้าสู่ระบบ').last);
+    await tester.pumpAndSettle();
+    expect(find.byType(OtpScreen), findsOneWidget);
+    for (var i = 0; i < 6; i++) {
+      await tester.enterText(find.byType(TextField).at(i), '${i + 1}');
+    }
+    await tester.pumpAndSettle();
+    expect(find.byType(TermsConsentScreen), findsOneWidget);
+    final consent = find.text(
+        'ฉันได้อ่านและยินยอมตามข้อตกลงการใช้บริการและนโยบายความเป็นส่วนตัวข้างต้น');
+    await tester.ensureVisible(consent);
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ยินยอมและดำเนินการต่อ'));
+    await tester.pumpAndSettle();
+    expect(api.policyCalls, 1);
+    expect(api.otpCalls, 1);
+    expect(find.byType(MainShell), findsOneWidget);
+    expect(find.byType(OnboardingBasicScreen), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final register in [false, true]) {
     final button = register ? 'register' : 'login';
@@ -259,6 +382,54 @@ void main() {
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets(
+      'delete Google account in Settings then register with Google again',
+      (tester) async {
+    final api = _GoogleLifecycleApi();
+    await open(tester, api, register: true);
+    expect(find.byType(MainShell), findsOneWidget);
+    await runDraftStore.save({'ownerUserId': 'user-1', 'distanceKm': 3});
+    final navigator = Navigator.of(tester.element(find.byType(MainShell)));
+    navigator.push(MaterialPageRoute(
+        builder: (_) => const Scaffold(body: SettingsScreen())));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.text('ลบบัญชี'));
+    await tester.tap(find.text('ลบบัญชี'));
+    await tester.pumpAndSettle();
+    expect(find.text('ลบบัญชีถาวร?'), findsOneWidget);
+    await tester.tap(find.widgetWithText(TextButton, 'ลบบัญชี'));
+    await tester.pumpAndSettle();
+    expect(api.deleteCalls, 1);
+    expect(api.logoutCalls, 1);
+    expect(find.byType(LoginScreen), findsOneWidget);
+    expect(
+        await const FlutterSecureStorage().read(key: 'refresh_token'), isNull);
+    expect(await runDraftStore.load(), isNull);
+
+    await tester.tap(find.text('สมัครสมาชิก'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('สมัครสมาชิกด้วย Google'));
+    await tester.pumpAndSettle();
+    expect(api.googleCalls, 2);
+    expect(api.otpCalls, 0);
+    expect(find.byType(TermsConsentScreen), findsOneWidget);
+    final container = ProviderScope.containerOf(
+        tester.element(find.byType(TermsConsentScreen)));
+    expect(container.read(authProvider).user!['id'], 'new-google-user');
+    expect(container.read(authProvider).user!['policyAccepted'], false);
+    final consent = find.text(
+        'ฉันได้อ่านและยินยอมตามข้อตกลงการใช้บริการและนโยบายความเป็นส่วนตัวข้างต้น');
+    await tester.ensureVisible(consent);
+    await tester.tap(consent);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('ยินยอมและดำเนินการต่อ'));
+    await tester.pumpAndSettle();
+    expect(find.byType(OnboardingBasicScreen), findsOneWidget);
+    expect(api.policyCalls, 1);
+    expect(api.otpCalls, 0);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets(
       'declining Google registration terms clears the session and returns to login',
