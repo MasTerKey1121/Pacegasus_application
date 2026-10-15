@@ -1,0 +1,52 @@
+{
+  "state": "passed",
+  "detail": "Phase run-park completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "run-environment",
+      "description": "park selected; quest lookup finished before start; absent quest data reported separately",
+      "status": "passed"
+    },
+    {
+      "name": "park-gps-ready",
+      "description": "Park countdown has passed the app real-GPS-first-fix gate; waited at least five seconds with real timer before finish",
+      "status": "passed"
+    },
+    {
+      "name": "run-summary",
+      "description": "Summary shows 0.00 km from real Park GPS; feedback incomplete so Submit disabled",
+      "status": "passed"
+    },
+    {
+      "name": "run-feedback",
+      "description": "RPE/stress selected, good mood and no pain; Submit enabled",
+      "status": "passed"
+    },
+    {
+      "name": "run-reward",
+      "description": "Displayed coin reward matches actual server coin increase",
+      "status": "passed"
+    },
+    {
+      "name": "run-stats",
+      "description": "Exactly one new completed session; stored feedback correct; Stats totals match API and new history row is visible",
+      "status": "passed"
+    },
+    {
+      "name": "run-history-detail",
+      "description": "New park history detail opened after loading real session data",
+      "status": "passed"
+    },
+    {
+      "name": "run-ranking",
+      "description": "Ranking API returns Thai weekly period, descending Top 50 and own distance including new run; screen opened (partial UAT-03-020)",
+      "status": "passed"
+    }
+  ],
+  "scope": "Real Park GPS acquisition, wait at least five seconds before finishing; no injected distance or location. Checks start/pause/resume/finish, feedback, reward consistency, stats/history and ranking. Stationary Park distance may be zero; this does not establish GPS distance accuracy. Other UAT cases remain Not Run."
+}

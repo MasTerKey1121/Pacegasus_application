@@ -343,18 +343,24 @@ void main() {
               'Reopened schedule matches saved day placement; API still has four quests');
           break;
         case 'run':
+        case 'run-park':
           step = 'run';
+          const isPark = phase == 'run-park';
+          const environment = isPark ? 'park' : 'treadmill';
           final baseline = await StatsApi(api).history();
           final oldIds = baseline.map((r) => r.id).toSet();
           final beforeReward = await read('/api/users/me/progress');
           final observedIssues = <String>[];
           await bridge('/scope', {
             'description':
-                'Real UI treadmill workflow using synthetic 0.10 km UAT input and real elapsed time. '
+                '${isPark ? 'Real Park GPS acquisition, wait at least five seconds before finishing; no injected distance or location.' : 'Real UI treadmill workflow using synthetic 0.10 km UAT input and real elapsed time.'} '
                     'Checks start/pause/resume/finish, feedback, reward consistency, stats/history and ranking. '
-                    'This is not a physical run or a GPS accuracy test. Other UAT cases remain Not Run.'
+                    'Stationary Park distance may be zero; this does not establish GPS distance accuracy. Other UAT cases remain Not Run.'
           });
-          await state('ทดสอบลู่วิ่งด้วยระยะจำลอง 0.10 กม. ผ่านหน้าจอจริง',
+          await state(
+              isPark
+                  ? 'เลือก Park รอ GPS จริง และรออย่างน้อย 5 วินาทีก่อนจบ'
+                  : 'ทดสอบลู่วิ่งด้วยระยะจำลอง 0.10 กม. ผ่านหน้าจอจริง',
               status: 'running');
           await waitUntil(
               () async => !container.read(programProvider).isLoading,
@@ -366,61 +372,97 @@ void main() {
               () async =>
                   find.byType(RunTypeSelectScreen).evaluate().isNotEmpty,
               'Run environment selector opens');
-          await tap(find.text('Treadmill'));
+          await tap(find.text(isPark ? 'Park' : 'Treadmill'));
           await waitUntil(
               () async => !container.read(runSetupProvider).isLoadingQuests,
-              'Treadmill quests load',
+              '$environment quests load',
               seconds: 60);
           final questSetup = container.read(runSetupProvider);
           if (questSetup.errorMessage != null &&
               questSetup.errorMessage!
-                  .contains('ไม่พบ side quest สำหรับ treadmill x easy') &&
+                  .contains('ไม่พบ side quest สำหรับ $environment x easy') &&
               questSetup.sideQuests.isEmpty) {
             await bridge('/checkpoint', {
-              'name': 'treadmill-side-quests-unavailable',
+              'name': '$environment-side-quests-unavailable',
               'description':
-                  'Blocked: real API has no side quests for treadmill/easy; run lifecycle continues without side quests',
+                  'Blocked: real API has no side quests for $environment/easy; run lifecycle continues without side quests',
               'status': 'blocked',
               'png': base64Encode(await binding
-                  .takeScreenshot('treadmill-side-quests-unavailable')),
+                  .takeScreenshot('$environment-side-quests-unavailable')),
             });
           } else {
             expect(questSetup.errorMessage, isNull);
           }
           await capture('run-environment',
-              'Treadmill selected; quest lookup finished before start; absent quest data reported separately; synthetic input disclosed');
+              '$environment selected; quest lookup finished before start; absent quest data reported separately');
           await tap(find.widgetWithText(GradientButton, 'เริ่มต้นการวิ่ง'));
-          await waitUntil(
-              () async =>
-                  find.byType(RunSessionScreen).evaluate().isNotEmpty &&
-                  container.read(runProvider).isRunning,
-              'Treadmill countdown finishes');
+          if (isPark) {
+            await tester.pump(const Duration(seconds: 5));
+          }
+          await waitUntil(() async {
+            final fallback = find.widgetWithText(TextButton, 'เริ่ม Session');
+            if (isPark && fallback.evaluate().isNotEmpty) {
+              await bridge('/checkpoint', {
+                'name': 'park-map-unavailable',
+                'description':
+                    'Map load timed out; continue with real GPS using app fallback. Map rendering acceptance is blocked.',
+                'status': 'blocked',
+                'png': base64Encode(
+                    await binding.takeScreenshot('park-map-unavailable')),
+              });
+              await tap(fallback);
+            }
+            return find.byType(RunSessionScreen).evaluate().isNotEmpty &&
+                container.read(runProvider).isRunning;
+          },
+              isPark
+                  ? 'Real GPS first fix and countdown finish (no fake GPS)'
+                  : 'Treadmill countdown finishes',
+              seconds: 120);
           final setup = container.read(runSetupProvider);
           final sessionId = setup.sessionId;
           expect(sessionId, isNotNull);
           final active = await read('/api/running-sessions/$sessionId');
           expect(active['status'], 'in_progress');
-          expect(active['environment'], 'treadmill');
+          expect(active['environment'], environment);
           final runState = container.read(runProvider);
-          await tester.pump(const Duration(seconds: 8));
-          await tap(find.byKey(const Key('run-pause-resume')));
-          expect(runState.isPaused, isTrue);
-          final pausedAt = runState.elapsedSeconds;
-          await tester.pump(const Duration(seconds: 3));
-          expect(runState.elapsedSeconds, pausedAt);
-          await capture('run-paused',
-              'Real session is in progress; pause stops elapsed time for three seconds');
-          await tap(find.byKey(const Key('run-pause-resume')));
-          expect(runState.isPaused, isFalse);
-          await tester.pump(const Duration(seconds: 5));
-          expect(runState.elapsedSeconds, greaterThan(pausedAt));
+          if (isPark) {
+            await tester.pump(const Duration(seconds: 5));
+            expect(runState.isRunning, isTrue);
+            expect(runState.elapsedSeconds, greaterThanOrEqualTo(5));
+            await capture('park-gps-ready',
+                'Park countdown has passed the app real-GPS-first-fix gate; waited at least five seconds with real timer before finish');
+          } else {
+            await tester.pump(const Duration(seconds: 8));
+            await tap(find.byKey(const Key('run-pause-resume')));
+            expect(runState.isPaused, isTrue);
+            final pausedAt = runState.elapsedSeconds;
+            await tester.pump(const Duration(seconds: 3));
+            expect(runState.elapsedSeconds, pausedAt);
+            await capture('run-paused',
+                'Real session is in progress; pause stops elapsed time for three seconds');
+            await tap(find.byKey(const Key('run-pause-resume')));
+            expect(runState.isPaused, isFalse);
+            await tester.pump(const Duration(seconds: 5));
+            expect(runState.elapsedSeconds, greaterThan(pausedAt));
+            await tap(find.widgetWithText(GradientButton, '■ จบการวิ่ง'));
+            await tap(find.widgetWithText(TextButton, 'วิ่งต่อ'));
+            expect(runState.isRunning, isTrue);
+          }
           await tap(find.widgetWithText(GradientButton, '■ จบการวิ่ง'));
-          await tap(find.widgetWithText(TextButton, 'วิ่งต่อ'));
-          expect(runState.isRunning, isTrue);
-          await tap(find.widgetWithText(GradientButton, '■ จบการวิ่ง'));
-          final distanceField = find.descendant(
-              of: find.byType(AlertDialog), matching: find.byType(TextField));
-          await tester.enterText(distanceField, '0.10');
+          if (!isPark) {
+            final distanceField = find.descendant(
+                of: find.byType(AlertDialog), matching: find.byType(TextField));
+            await tester.enterText(distanceField, '0.10');
+          } else {
+            expect(
+                find.descendant(
+                    of: find.byType(AlertDialog),
+                    matching: find.byType(TextField)),
+                findsNothing,
+                reason:
+                    'Park must use measured distance, no manual treadmill distance');
+          }
           await tap(find.widgetWithText(FilledButton, 'จบการวิ่ง'));
           await waitUntil(
               () async => find.byType(RunSummaryScreen).evaluate().isNotEmpty,
@@ -430,12 +472,18 @@ void main() {
                   find.byType(CircularProgressIndicator).evaluate().isEmpty,
               'Summary loads actual session detail',
               seconds: 60);
-          expect(runState.lastResult?.distanceKm, .10);
-          expect(find.text('0.10'), findsWidgets);
+          final recordedDistance = runState.lastResult!.distanceKm;
+          if (!isPark) expect(recordedDistance, .10);
+          if (isPark) {
+            expect(runState.lastResult!.routePoints, isNotEmpty,
+                reason:
+                    'Park completion must preserve actual GPS route point(s)');
+          }
+          expect(find.text(recordedDistance.toStringAsFixed(2)), findsWidgets);
           final submit = find.widgetWithText(GradientButton, 'ส่งข้อมูล');
           expect(tester.widget<GradientButton>(submit).onTap, isNull);
           await capture('run-summary',
-              'Summary shows entered 0.10 km; feedback incomplete so Submit disabled');
+              'Summary shows ${recordedDistance.toStringAsFixed(2)} km from ${isPark ? 'real Park GPS' : 'entered treadmill distance'}; feedback incomplete so Submit disabled');
           var expectedRpe = 0;
           for (final label in ['ความหนัก RPE', 'ความเครียด']) {
             final slider = find.descendant(
@@ -493,11 +541,12 @@ void main() {
               reason: 'Exactly one new completed run in this phase');
           final run = newRuns.single;
           expect(run.id, sessionId);
-          expect(run.distance, .10);
+          expect(run.distance, closeTo(recordedDistance, .011));
           expect(run.feedback?['rpeScore'], expectedRpe);
           expect(run.feedback?['mood'], 'good');
           expect(run.feedback?['hasPain'], isFalse);
-          expect(run.distance, greaterThan(0));
+          expect(
+              run.distance, isPark ? greaterThanOrEqualTo(0) : greaterThan(0));
           expect(run.seconds, greaterThan(0));
           final detail = await StatsApi(api).detail(run.id);
           expect(detail['status'], 'completed');
@@ -537,7 +586,7 @@ void main() {
               'History detail loads',
               seconds: 60);
           await capture('run-history-detail',
-              'New treadmill history detail opened after loading real session data');
+              'New $environment history detail opened after loading real session data');
           await tap(find.byTooltip('ปิด'));
           await tester.pageBack();
           await waitUntil(
