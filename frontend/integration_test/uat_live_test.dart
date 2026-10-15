@@ -2,8 +2,10 @@
 // authenticated API. No mocked providers, OTP interception or account deletion.
 import 'dart:convert';
 import 'dart:io';
+import 'dart:async';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:integration_test/integration_test.dart';
@@ -31,6 +33,8 @@ import 'package:pacegasus/screens/run/run_select_screen.dart';
 import 'package:pacegasus/screens/run/run_session_screen.dart';
 import 'package:pacegasus/screens/run/run_summary_screen.dart';
 import 'package:pacegasus/screens/run/reward_screen.dart';
+import 'package:pacegasus/screens/friends/friends_screen.dart';
+import 'package:pacegasus/screens/club/club_screen.dart';
 
 const phase = String.fromEnvironment('UAT_PHASE', defaultValue: 'profile');
 const email = String.fromEnvironment('UAT_EMAIL');
@@ -113,12 +117,6 @@ void main() {
       });
     }
 
-    Future<void> onScreen(Type type, String instruction) async {
-      await state(instruction);
-      await waitUntil(
-          () async => find.byType(type).evaluate().isNotEmpty, instruction);
-    }
-
     Future<void> tap(Finder target) async {
       expect(target, findsOneWidget);
       await tester.ensureVisible(target);
@@ -148,6 +146,32 @@ void main() {
               container.read(authProvider).status != AuthStatus.checking,
           'Saved session check finishes',
           seconds: 60);
+      if ((phase == 'friends-accept' ||
+              phase == 'friends-verify' ||
+              phase == 'club-request' ||
+              phase == 'club-approve') &&
+          container.read(authProvider).status == AuthStatus.authenticated &&
+          container
+                  .read(authProvider)
+                  .user?['email']
+                  ?.toString()
+                  .toLowerCase() !=
+              email.toLowerCase()) {
+        await state('สลับบัญชีผ่านเมนูจริง เพื่อทดสอบเพื่อนหรือคลับสองฝั่ง',
+            status: 'running');
+        await waitUntil(
+            () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+            'Current account Home loads');
+        await tester.pump(const Duration(seconds: 3));
+        await tap(find.byKey(const Key('home-menu-toggle')));
+        await tap(find.text('ตั้งค่า'));
+        await tap(find.text('ออกจากระบบ'));
+        await waitUntil(
+            () async =>
+                container.read(authProvider).status ==
+                AuthStatus.unauthenticated,
+            'Intentional account switch logs out current account');
+      }
       if (container.read(authProvider).status == AuthStatus.unauthenticated) {
         await waitUntil(
             () async => find.byType(LoginScreen).evaluate().isNotEmpty,
@@ -201,6 +225,8 @@ void main() {
       final uid = me['uid'] as String;
       expect(uid, matches(RegExp(r'^[23456789ABCDEFGHJKLMNPQRSTUVWXYZ]{10}$')));
       const secondary = phase == 'setup-secondary' ||
+          phase == 'club-request' ||
+          phase == 'friends-accept' ||
           phase == 'secondary-social' ||
           phase == 'verify-secondary';
       await remember({secondary ? 'secondaryUid' : 'primaryUid': uid});
@@ -212,6 +238,160 @@ void main() {
           '/context?environment=${Uri.encodeComponent(ApiConfig.baseUrl)}');
 
       switch (phase) {
+        case 'club-create':
+          step = phase;
+          expect(await read('/api/clubs/me'), isNull,
+              reason: 'Never replace an existing club');
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('คลับ'));
+          await waitUntil(
+              () async => find.text('สร้างคลับ').evaluate().isNotEmpty,
+              'Club discovery loads');
+          await tap(find.text('สร้างคลับ'));
+          await waitUntil(
+              () async => find.byType(ClubFormScreen).evaluate().isNotEmpty,
+              'Create club form opens');
+          final save = find.widgetWithText(FilledButton, 'สร้างคลับ');
+          await tap(save);
+          expect(find.text('ชื่อคลับต้องมี 3–40 ตัวอักษร'), findsOneWidget);
+          expect(await read('/api/clubs/me'), isNull);
+          await capture(
+              'club-invalid-name', 'Empty club name rejected; no club created');
+          await tap(find.byType(TextFormField).first);
+          await tester.enterText(find.byType(TextFormField).first, clubName);
+          await tester.enterText(
+              find.byType(TextFormField).at(1), 'คลับทดสอบ UAT สำหรับสองบัญชี');
+          await tap(save);
+          await waitUntil(
+              () async => find.byType(ClubFormScreen).evaluate().isEmpty,
+              'Create form closes after save');
+          final mine = await read('/api/clubs/me');
+          expect(mine, isNotNull);
+          expect(mine['club']['name'], clubName);
+          expect(mine['club']['description'], 'คลับทดสอบ UAT สำหรับสองบัญชี');
+          expect(mine['myMembership']['role'], 'leader');
+          expect(mine['club']['memberCount'], 1);
+          await remember(
+              {'clubId': mine['club']['id'] as String, 'clubName': clubName});
+          await waitUntil(
+              () async =>
+                  find.byType(ClubDetailScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Own club loads');
+          expect(find.text(clubName), findsWidgets);
+          await capture('club-created',
+              'Main created expected club, leader role and exactly one member; UI and API agree');
+          break;
+        case 'club-request':
+          step = phase;
+          final id = context['clubId'] as String;
+          final name = context['clubName'] as String;
+          expect(await read('/api/clubs/me'), isNull);
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('คลับ'));
+          await waitUntil(
+              () async => find.byTooltip('ค้นหา').evaluate().isNotEmpty,
+              'Club discovery loads');
+          await tester.enterText(find.byType(TextField), name);
+          await tap(find.byTooltip('ค้นหา'));
+          await waitUntil(
+              () async =>
+                  find.text(name).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Search result loads');
+          final results = await read(
+              '/api/clubs?q=${Uri.encodeComponent(name)}&limit=20&offset=0');
+          expect(
+              (results['clubs'] as List).where((r) => r['id'] == id).length, 1);
+          await capture('club-search',
+              'Secondary finds primary club by name in real search');
+          final card = find
+              .ancestor(of: find.text(name), matching: find.byType(AppCard))
+              .first;
+          await tap(find.descendant(of: card, matching: find.text('ดูคลับ')));
+          await waitUntil(
+              () async => find.text('ขอเข้าร่วมคลับ').evaluate().isNotEmpty,
+              'Outsider club detail loads');
+          await tap(find.text('ขอเข้าร่วมคลับ'));
+          await waitUntil(
+              () async =>
+                  find.text('ส่งคำขอแล้ว รออนุมัติ').evaluate().isNotEmpty,
+              'Pending request visible');
+          final detail = await read('/api/clubs/$id');
+          expect(detail['myPendingRequest']['kind'], 'request');
+          expect(detail['myMembership'], isNull);
+          expect(detail['club']['memberCount'], 1);
+          expect(await read('/api/clubs/me'), isNull);
+          final pending = tester.widget<FilledButton>(
+              find.widgetWithText(FilledButton, 'ส่งคำขอแล้ว รออนุมัติ'));
+          expect(pending.onPressed, isNull);
+          await capture('club-request-pending',
+              'Secondary request pending, repeat button disabled, not a member and count remains one');
+          break;
+        case 'club-approve':
+          step = phase;
+          final id = context['clubId'] as String;
+          final target = context['secondaryUid'] as String;
+          final before = await read('/api/clubs/$id');
+          expect(before['myMembership']['role'], 'leader');
+          expect(before['club']['memberCount'], 1);
+          final requests = await read(
+              '/api/clubs/$id/join-requests?kind=request&limit=100&offset=0');
+          final request = (requests['requests'] as List)
+              .singleWhere((r) => r['user']['uid'] == target);
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('คลับ'));
+          await waitUntil(
+              () async => find.text('จัดการคลับ').evaluate().isNotEmpty,
+              'Leader club detail loads');
+          await tap(find.text('จัดการคลับ'));
+          await tap(find.text('คำขอสมัคร'));
+          await waitUntil(
+              () async => find.text('อนุมัติ').evaluate().isNotEmpty,
+              'Incoming club requests load');
+          expect(find.text(request['user']['displayName'] as String),
+              findsWidgets);
+          await capture('club-incoming-request',
+              'Leader sees secondary pending join request');
+          expect(find.text('อนุมัติ'), findsOneWidget,
+              reason: 'Do not approve an ambiguous request');
+          await tap(find.text('อนุมัติ'));
+          await waitUntil(
+              () async => find.text('ยังไม่มีรายการ').evaluate().isNotEmpty,
+              'Approved request removed');
+          final after = await read('/api/clubs/$id');
+          expect(after['club']['memberCount'], 2);
+          final member = (after['members'] as List)
+              .singleWhere((r) => r['user']['uid'] == target);
+          expect(member['role'], 'member');
+          expect(
+              (after['members'] as List)
+                  .where((r) => r['role'] == 'leader')
+                  .length,
+              1);
+          final remaining = await read(
+              '/api/clubs/$id/join-requests?kind=request&limit=100&offset=0');
+          expect(
+              (remaining['requests'] as List)
+                  .where((r) => r['user']['uid'] == target),
+              isEmpty);
+          await capture('club-approved-request-cleared',
+              'Approval adds secondary exactly once as member, one leader remains, pending request cleared');
+          await tester.pageBack();
+          await waitUntil(
+              () async =>
+                  find.byType(ClubDetailScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Club reloads after approval');
+          expect(
+              find.text(member['user']['displayName'] as String), findsWidgets);
+          await capture('club-two-members',
+              'Reloaded leader club screen shows approved secondary member; total two confirmed by API');
+          await tester.pageBack();
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Return main Home');
+          break;
         case 'setup-secondary':
           await capture('secondary-ready',
               'Secondary account UID saved for later two-account steps; no social request sent');
@@ -703,22 +883,365 @@ void main() {
           expect((await StatsApi(api).history()).length, history.length,
               reason: 'Review must not create another run');
           break;
+        case 'friends-send':
+        case 'friends-accept':
+        case 'friends-verify':
+          step = phase;
+          final targetUid =
+              context[phase == 'friends-accept' ? 'primaryUid' : 'secondaryUid']
+                  as String?;
+          expect(targetUid, isNotNull,
+              reason: 'Prepare both public UIDs before social flow');
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('เพื่อน'));
+          Future<void> friendsLoaded() => waitUntil(
+              () async =>
+                  find.byType(FriendsScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Friends page finishes loading',
+              seconds: 60);
+          await friendsLoaded();
+          final row = find.byKey(Key('friend-entry-$targetUid'));
+          if (phase == 'friends-send') {
+            expect(
+                (await read('/api/friends/lookup/$targetUid'))['relationship']
+                    ['status'],
+                'none',
+                reason:
+                    'Send scenario starts without friendship or pending request');
+            await tap(find.byKey(const Key('add-friend')));
+            final uidInput = find.descendant(
+                of: find.byKey(const Key('friend-uid')),
+                matching: find.byType(TextField));
+            final send = find.text('ส่งคำขอเป็นเพื่อน');
+            Future<void> enterUid(String value) async {
+              await tap(uidInput);
+              await tester.enterText(uidInput, value);
+              await tester.pump(const Duration(milliseconds: 300));
+            }
+
+            await enterUid('abc');
+            await tap(send);
+            expect(find.text('กรอก UID 10 ตัวให้ถูกต้อง (ไม่มี 0, 1, I, O)'),
+                findsOneWidget);
+            await capture('friend-invalid-uid',
+                'Invalid UID is rejected before any friendship request is created');
+            await enterUid(uid);
+            await tap(send);
+            await waitUntil(
+                () async => find
+                    .text('ไม่สามารถเพิ่มตัวเองเป็นเพื่อนได้')
+                    .evaluate()
+                    .isNotEmpty,
+                'Self friend request is rejected',
+                seconds: 45);
+            await capture('friend-self-rejected',
+                'App displays server rejection when main account tries to add its own UID');
+            await enterUid(targetUid!.toLowerCase());
+            await tap(send);
+            await waitUntil(
+                () async =>
+                    find.byKey(const Key('friend-uid')).evaluate().isEmpty,
+                'Friend request sheet closes after sending');
+            await friendsLoaded();
+            expect(
+                (await read('/api/friends/lookup/$targetUid'))['relationship']
+                    ['status'],
+                'pending');
+            expect(row, findsOneWidget);
+            await capture('friend-outgoing',
+                'Lowercase secondary UID is accepted; pending request appears on Sent tab');
+            await tap(find.byKey(const Key('add-friend')));
+            await enterUid(targetUid);
+            await tap(send);
+            await waitUntil(
+                () async => find
+                    .text('ส่งคำขอเป็นเพื่อนไปแล้ว กรุณารอการตอบรับ')
+                    .evaluate()
+                    .isNotEmpty,
+                'Duplicate pending request is rejected',
+                seconds: 45);
+            final pending = await read(
+                '/api/friends/requests?direction=outgoing&limit=100');
+            expect(
+                (pending['requests'] as List)
+                    .where((r) => r['user']['uid'] == targetUid)
+                    .length,
+                1);
+            await capture('friend-duplicate-rejected',
+                'Duplicate send rejected; exactly one outgoing request exists');
+            await tester.binding.handlePopRoute();
+            await tester.pump(const Duration(milliseconds: 500));
+            await tap(find.descendant(
+                of: row,
+                matching: find.widgetWithText(TextButton, 'ยกเลิกคำขอ')));
+            await friendsLoaded();
+            await waitUntil(
+                () async =>
+                    (await read('/api/friends/lookup/$targetUid'))[
+                        'relationship']['status'] ==
+                    'none',
+                'Cancellation removes pending friendship');
+            expect(row, findsNothing);
+            await capture('friend-request-cancelled',
+                'Sender cancellation removes pending request from UI and real relationship');
+            await tap(find.byKey(const Key('add-friend')));
+            await enterUid(targetUid);
+            await tap(send);
+            await waitUntil(
+                () async =>
+                    find.byKey(const Key('friend-uid')).evaluate().isEmpty,
+                'New request can be sent after cancellation');
+            await friendsLoaded();
+            final requests = await read(
+                '/api/friends/requests?direction=outgoing&limit=100');
+            final outgoing = (requests['requests'] as List)
+                .where((r) => r['user']['uid'] == targetUid)
+                .toList();
+            expect(outgoing.length, 1);
+            await remember(
+                {'friendshipId': outgoing.single['friendshipId'] as String});
+            expect(row, findsOneWidget);
+            await capture('friend-resent',
+                'New single pending request to secondary remains ready for recipient acceptance');
+          } else if (phase == 'friends-accept') {
+            final incoming = await read(
+                '/api/friends/requests?direction=incoming&limit=100');
+            final matches = (incoming['requests'] as List)
+                .where((r) => r['user']['uid'] == targetUid)
+                .toList();
+            expect(matches.length, 1);
+            expect(matches.single['friendshipId'], context['friendshipId']);
+            await tap(find.widgetWithText(ChoiceChip, 'คำขอที่ได้รับ'));
+            await friendsLoaded();
+            expect(row, findsOneWidget);
+            await capture('friend-incoming',
+                'Secondary sees the exact pending request sent by primary account');
+            await tap(find.descendant(
+                of: row,
+                matching: find.widgetWithText(FilledButton, 'ตอบรับ')));
+            await friendsLoaded();
+            expect(
+                (await read('/api/friends/lookup/$targetUid'))['relationship']
+                    ['status'],
+                'accepted');
+            await tap(find.widgetWithText(ChoiceChip, 'เพื่อนของฉัน'));
+            await friendsLoaded();
+            expect(row, findsOneWidget);
+            final friends = await read('/api/friends?limit=100');
+            final matchesAfter = (friends['friends'] as List)
+                .where((r) => r['user']['uid'] == targetUid)
+                .toList();
+            expect(matchesAfter.length, 1);
+            expect(
+                matchesAfter.single['friendshipId'], context['friendshipId']);
+            await capture('friend-accepted-secondary',
+                'Recipient accepted once and sees primary in My Friends with same friendship ID');
+          } else {
+            expect(
+                (await read('/api/friends/lookup/$targetUid'))['relationship']
+                    ['status'],
+                'accepted');
+            final friends = await read('/api/friends?limit=100');
+            final matches = (friends['friends'] as List)
+                .where((r) => r['user']['uid'] == targetUid)
+                .toList();
+            expect(matches.length, 1);
+            expect(matches.single['friendshipId'], context['friendshipId']);
+            expect(row, findsOneWidget);
+            await capture('friend-accepted-primary',
+                'Primary sees secondary in My Friends after recipient acceptance; exactly one same friendship');
+            await tap(find.widgetWithText(ChoiceChip, 'ส่งแล้ว'));
+            await friendsLoaded();
+            expect(row, findsNothing);
+            await capture('friend-no-pending-after-accept',
+                'Accepted friendship no longer appears as outgoing pending request');
+          }
+          break;
+        case 'profile-image':
+          step = 'profile-image';
+          final previousProfile = await read('/api/users/me/profile');
+          final previousImage = previousProfile['user']['avatarUrl'];
+          final originalName = previousProfile['user']['displayName'];
+          await bridge('/scope', {
+            'description':
+                'Real profile photo upload using latest image selected from the phone native gallery as requested by user. '
+                    'Checks URL changed, image decodes in UI, account identity unchanged and photo persists after reopening. '
+                    'Selected photo remains applied. No logout, account deletion or gallery fixture injection.'
+          });
+          await tap(find.byKey(const Key('home-profile')));
+          await waitUntil(
+              () async =>
+                  find.byType(ProfileScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Profile loads before photo upload',
+              seconds: 60);
+          await capture('photo-before',
+              'Profile loaded before changing photo with original name and UID');
+          await state('เลือกภาพล่าสุดจากแกลเลอรีบนโทรศัพท์ผ่าน native picker',
+              status: 'waiting_image_selection');
+          await tap(find.byKey(const Key('change-profile-avatar')));
+          String? newImage;
+          await waitUntil(() async {
+            final profile = await read('/api/users/me/profile');
+            newImage = profile['user']['avatarUrl'] as String?;
+            return newImage != null &&
+                newImage!.isNotEmpty &&
+                newImage != previousImage;
+          }, 'Native picker selection uploads and persists a new profile photo',
+              seconds: 300);
+          Future<void> verifyPhoto() async {
+            final avatarImage = find.descendant(
+                of: find.byKey(const Key('change-profile-avatar')),
+                matching: find.byType(Image));
+            await waitUntil(
+                () async =>
+                    avatarImage.evaluate().isNotEmpty &&
+                    find.byType(CircularProgressIndicator).evaluate().isEmpty,
+                'Uploaded photo appears in profile',
+                seconds: 60);
+            final widget = tester.widget<Image>(avatarImage);
+            expect(widget.image, isA<NetworkImage>());
+            expect((widget.image as NetworkImage).url, newImage);
+            final ready = Completer<void>();
+            final stream = widget.image.resolve(ImageConfiguration.empty);
+            final listener = ImageStreamListener((_, __) {
+              if (!ready.isCompleted) ready.complete();
+            }, onError: (Object error, StackTrace? stack) {
+              if (!ready.isCompleted) {
+                ready.completeError(
+                    TestFailure('Uploaded profile image could not decode'));
+              }
+            });
+            stream.addListener(listener);
+            try {
+              await ready.future.timeout(const Duration(seconds: 30));
+            } finally {
+              stream.removeListener(listener);
+            }
+            await tester.pump(const Duration(seconds: 1));
+          }
+          await verifyPhoto();
+          final saved = await read('/api/users/me/profile');
+          expect(saved['user']['uid'], uid);
+          expect(saved['user']['displayName'], originalName);
+          expect(container.read(authProvider).user?['avatarUrl'], newImage);
+          await capture('photo-uploaded',
+              'Photo URL changed, uploaded image decoded successfully in UI, name and UID unchanged');
+          await tester.pageBack();
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Return Home without logout');
+          await tester.pump(const Duration(seconds: 3));
+          await tap(find.byKey(const Key('home-profile')));
+          await waitUntil(
+              () async =>
+                  find.byType(ProfileScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Reopened profile loads',
+              seconds: 60);
+          expect((await read('/api/users/me/profile'))['user']['avatarUrl'],
+              newImage);
+          await verifyPhoto();
+          await capture('photo-persisted',
+              'Reopened Profile loads the same new photo from server and image decodes successfully');
+          break;
         case 'profile':
           step = 'profile';
           final original = await read('/api/users/me/profile');
-          final oldName = original['user']['displayName'];
-          await onScreen(
-              ProfileScreen, 'เปิดโปรไฟล์ แก้ชื่อให้ต่างจากเดิมแล้วกดบันทึก');
-          Map? profile;
-          await waitUntil(() async {
-            profile = await read('/api/users/me/profile') as Map;
-            return profile!['user']['displayName'] != oldName;
-          }, 'Profile name changed through UI');
-          expect(profile!['user']['uid'], uid);
-          expect(find.text(profile!['user']['displayName'] as String),
-              findsWidgets);
+          final oldName = original['user']['displayName'] as String;
+          const testName = 'UAT โปรไฟล์ 15-10';
+          expect(oldName, isNot(testName),
+              reason: 'Test name must differ from original');
+          await state(
+              'ตรวจโปรไฟล์ แก้ชื่อ ทดสอบ validation/ยกเลิก/คัดลอก UID แล้วคืนชื่อเดิม',
+              status: 'running');
+          await tap(find.byKey(const Key('home-profile')));
+          await waitUntil(
+              () async =>
+                  find.byType(ProfileScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Profile loads',
+              seconds: 60);
+          expect(find.text(oldName), findsWidgets);
+          expect(find.text('ลองอีกครั้ง'), findsNothing);
+          await tap(find.byTooltip('คัดลอก UID'));
+          expect((await Clipboard.getData(Clipboard.kTextPlain))?.text, uid);
+          await capture('profile-uid',
+              'Profile loads original account and Copy places exact public UID in clipboard');
+          await tap(find.byTooltip('แก้ไขชื่อ'));
+          final nameInput = find.descendant(
+              of: find.byType(AlertDialog), matching: find.byType(TextField));
+          await tester.enterText(nameInput, '   ');
+          await tap(find.widgetWithText(FilledButton, 'บันทึก'));
+          expect(find.text('กรุณากรอกชื่อ'), findsOneWidget);
+          expect((await read('/api/users/me/profile'))['user']['displayName'],
+              oldName);
+          await capture('profile-empty-rejected',
+              'Whitespace-only name is rejected and stored name remains unchanged');
+          await tap(nameInput);
+          await tester.enterText(nameInput, List.filled(81, 'x').join());
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(tester.widget<TextField>(nameInput).controller!.text.length,
+              lessThanOrEqualTo(80),
+              reason: 'Over-limit input may be truncated or rejected');
+          await tap(nameInput);
+          await tester.enterText(nameInput, List.filled(80, 'x').join());
+          await tester.pump(const Duration(milliseconds: 300));
+          expect(
+              tester.widget<TextField>(nameInput).controller!.text.length, 80);
+          await capture('profile-name-limit',
+              'Name field rejects or truncates 81-character input and accepts exactly 80 characters');
+          await tap(find.widgetWithText(TextButton, 'ยกเลิก'));
+          expect((await read('/api/users/me/profile'))['user']['displayName'],
+              oldName);
+          expect(find.text(oldName), findsWidgets);
+          await capture('profile-cancel',
+              'Cancel discards edited text and preserves original name in UI and API');
+          await tap(find.byTooltip('แก้ไขชื่อ'));
+          await tap(nameInput);
+          await tester.enterText(nameInput, testName);
+          await tap(find.widgetWithText(FilledButton, 'บันทึก'));
+          await waitUntil(
+              () async => find.byType(AlertDialog).evaluate().isEmpty,
+              'Valid profile name saved',
+              seconds: 60);
+          final profile = await read('/api/users/me/profile');
+          expect(profile['user']['displayName'], testName);
+          expect(profile['user']['uid'], uid);
+          expect(find.text(testName), findsWidgets);
           await capture('profile-name',
               'Changed profile name persists in real API and visible UI; UID unchanged (partial UAT-04-002)');
+          await tester.pageBack();
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Return Home after profile edit');
+          expect(find.text(testName), findsWidgets);
+          await capture('profile-home-name',
+              'Home displays new saved name; screenshot waits three seconds for model');
+          await tap(find.byKey(const Key('home-profile')));
+          await waitUntil(
+              () async =>
+                  find.byType(ProfileScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Reopened profile loads saved name',
+              seconds: 60);
+          expect(find.text(testName), findsWidgets);
+          await capture('profile-name-restored-from-server',
+              'Reopening Profile reloads the edited name from the real server');
+          await tap(find.byTooltip('แก้ไขชื่อ'));
+          await tap(nameInput);
+          await tester.enterText(nameInput, oldName);
+          await tap(find.widgetWithText(FilledButton, 'บันทึก'));
+          await waitUntil(
+              () async => find.byType(AlertDialog).evaluate().isEmpty,
+              'Original display name restored',
+              seconds: 60);
+          expect((await read('/api/users/me/profile'))['user']['displayName'],
+              oldName);
+          expect(find.text(oldName), findsWidgets);
+          await capture('profile-original-name-restored',
+              'Original display name restored via UI and verified in server; no logout or deletion');
           break;
         case 'primary-social':
           step = 'primary-social';

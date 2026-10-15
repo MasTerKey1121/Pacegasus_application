@@ -1,0 +1,42 @@
+{
+  "state": "passed",
+  "detail": "Phase friends-send completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "friend-invalid-uid",
+      "description": "Invalid UID is rejected before any friendship request is created",
+      "status": "passed"
+    },
+    {
+      "name": "friend-self-rejected",
+      "description": "App displays server rejection when main account tries to add its own UID",
+      "status": "passed"
+    },
+    {
+      "name": "friend-outgoing",
+      "description": "Lowercase secondary UID is accepted; pending request appears on Sent tab",
+      "status": "passed"
+    },
+    {
+      "name": "friend-duplicate-rejected",
+      "description": "Duplicate send rejected; exactly one outgoing request exists",
+      "status": "passed"
+    },
+    {
+      "name": "friend-request-cancelled",
+      "description": "Sender cancellation removes pending request from UI and real relationship",
+      "status": "passed"
+    },
+    {
+      "name": "friend-resent",
+      "description": "New single pending request to secondary remains ready for recipient acceptance",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase friends-send. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}

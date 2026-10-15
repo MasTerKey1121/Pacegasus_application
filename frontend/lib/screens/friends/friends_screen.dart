@@ -238,6 +238,7 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
   Widget _card(FriendEntry entry) {
     final busy = _busy.contains(entry.friendshipId);
     return Container(
+      key: Key('friend-entry-${entry.uid}'),
       margin: const EdgeInsets.only(bottom: 10),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(

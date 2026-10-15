@@ -1,0 +1,22 @@
+{
+  "state": "passed",
+  "detail": "Phase profile-image completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "photo-before",
+      "description": "Profile loaded before changing photo with original name and UID",
+      "status": "passed"
+    },
+    {
+      "name": "photo-persisted",
+      "description": "Reopened Profile loads the same new photo from server and image decodes successfully",
+      "status": "passed"
+    }
+  ],
+  "scope": "Real profile photo upload using latest image selected from the phone native gallery as requested by user. Checks URL changed, image decodes in UI, account identity unchanged and photo persists after reopening. Selected photo remains applied. No logout, account deletion or gallery fixture injection."
+}

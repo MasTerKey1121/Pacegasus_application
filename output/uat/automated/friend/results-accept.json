@@ -1,0 +1,22 @@
+{
+  "state": "passed",
+  "detail": "Phase friends-accept completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "friend-incoming",
+      "description": "Secondary sees the exact pending request sent by primary account",
+      "status": "passed"
+    },
+    {
+      "name": "friend-accepted-secondary",
+      "description": "Recipient accepted once and sees primary in My Friends with same friendship ID",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase friends-accept. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}

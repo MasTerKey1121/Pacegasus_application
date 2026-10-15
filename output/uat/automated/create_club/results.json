@@ -1,0 +1,22 @@
+{
+  "state": "passed",
+  "detail": "Phase club-create completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "club-invalid-name",
+      "description": "Empty club name rejected; no club created",
+      "status": "passed"
+    },
+    {
+      "name": "club-created",
+      "description": "Main created expected club, leader role and exactly one member; UI and API agree",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase club-create. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}

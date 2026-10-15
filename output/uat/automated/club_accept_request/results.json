@@ -1,0 +1,27 @@
+{
+  "state": "passed",
+  "detail": "Phase club-approve completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "club-incoming-request",
+      "description": "Leader sees secondary pending join request",
+      "status": "passed"
+    },
+    {
+      "name": "club-approved-request-cleared",
+      "description": "Approval adds secondary exactly once as member, one leader remains, pending request cleared",
+      "status": "passed"
+    },
+    {
+      "name": "club-two-members",
+      "description": "Reloaded leader club screen shows approved secondary member; total two confirmed by API",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase club-approve. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}

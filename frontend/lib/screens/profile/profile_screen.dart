@@ -106,6 +106,9 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
                     children: [
                       if (_loading) const LinearProgressIndicator(),
                       SizedBox(
+                          // Keep the asynchronous WebView alive when the
+                          // preceding loading indicator is removed.
+                          key: const Key('profile-avatar-preview'),
                           height:
                               (constraints.maxHeight * .48).clamp(200.0, 380.0),
                           child: const HomeAvatar()),

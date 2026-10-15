@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('register-primary','setup-secondary','program','run','run-park','run-review','profile','primary-social','secondary-social','approve-club','verify-secondary','shop')]
+    [ValidateSet('register-primary','setup-secondary','program','run','run-park','run-review','profile','profile-image','friends-send','friends-accept','friends-verify','club-create','club-request','club-approve','primary-social','secondary-social','approve-club','verify-secondary','shop')]
     [string]$Phase = 'register-primary',
     [string]$DeviceId = '',
     [string]$ApiBaseUrl = '',
@@ -34,7 +34,7 @@ if (!$Execute) {
 if (!$DeviceId -or !$ApiBaseUrl) { throw 'Execution requires explicit -DeviceId and -ApiBaseUrl.' }
 if ($ApiBaseUrl -notmatch '^https?://') { throw 'ApiBaseUrl must start with http:// or https://' }
 if ($Phase -eq 'shop' -and !$ShopListingId) { throw 'Choose a specific -ShopListingId before a real purchase.' }
-$secondaryPhase = $Phase -in @('setup-secondary','secondary-social','verify-secondary')
+$secondaryPhase = $Phase -in @('setup-secondary','friends-accept','club-request','secondary-social','verify-secondary')
 $email = if ($secondaryPhase) { $secondaryEmail } else { $mainEmail }
 $mode = if ($Phase -eq 'register-primary') { 'register' } else { 'live' }
 & (Join-Path $PSScriptRoot 'run-uat.ps1') -DeviceId $DeviceId -Email $email -DisplayName 'test account' -ApiBaseUrl $ApiBaseUrl -Mode $mode -OtpMode manual -Phase $Phase -SecondaryEmail $secondaryEmail -ClubName $ClubName -ShopListingId $ShopListingId

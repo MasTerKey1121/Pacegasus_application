@@ -1,0 +1,22 @@
+{
+  "state": "passed",
+  "detail": "Phase club-request completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "club-search",
+      "description": "Secondary finds primary club by name in real search",
+      "status": "passed"
+    },
+    {
+      "name": "club-request-pending",
+      "description": "Secondary request pending, repeat button disabled, not a member and count remains one",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase club-request. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}
