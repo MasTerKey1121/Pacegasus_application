@@ -66,7 +66,9 @@ class _TrainingScheduleScreenState
                   ],
                 ),
                 const SizedBox(height: 18),
-                if (program.isLoading)
+                // A refresh after saving must keep the submitter mounted so
+                // its callback can navigate Home once the request finishes.
+                if (program.isLoading && !program.isRegistered)
                   const Expanded(
                       child: Center(child: CircularProgressIndicator()))
                 else if (!program.isRegistered)

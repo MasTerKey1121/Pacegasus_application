@@ -26,8 +26,6 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   bool get _isTreadmill =>
       ref.read(runSetupProvider).environment == 'treadmill';
   final _treadmillDistanceController = TextEditingController();
-  int _backStep = 0;
-  Timer? _backResetTimer;
   Timer? _draftTimer;
 
   @override
@@ -370,76 +368,74 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _positionSub?.cancel();
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
-    _backResetTimer?.cancel();
     _draftTimer?.cancel();
     _treadmillDistanceController.dispose();
     super.dispose();
   }
 
-  Future<void> _handleBack() async {
+  bool _confirmingFinish = false;
+
+  Future<void> _handleBack() => _requestFinish();
+
+  Future<void> _requestFinish() async {
     final run = ref.read(runProvider);
-    if (!run.isRunning || run.isStopping) return;
-    _backResetTimer?.cancel();
-    if (_backStep == 0) {
-      _backStep = 1;
-      showAppToast(context,
-          'Session กำลังดำเนินอยู่ กดย้อนกลับอีกครั้งเพื่อยืนยันการจบ');
-    } else if (_backStep == 1) {
-      _backStep = 2;
-      await showDialog<void>(
+    if (_confirmingFinish || !run.isRunning || run.isStopping) return;
+    _confirmingFinish = true;
+    final distanceForm = GlobalKey<FormState>();
+    try {
+      final confirmed = await showDialog<bool>(
         context: context,
         barrierDismissible: false,
         builder: (ctx) => AlertDialog(
-          title: const Text('ต้องการจบ Session การวิ่งหรือไม่?'),
-          content: const Text(
-              'กดย้อนกลับอีกครั้งภายใน 5 วินาทีเพื่อจบ Session หรือเลือกวิ่งต่อ'),
+          title: const Text('ต้องการจบการวิ่งไหม?'),
+          content: SingleChildScrollView(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            const Text('เมื่อยืนยัน จะจบการวิ่งและไปหน้าสรุปผล'),
+            if (_isTreadmill) ...[
+              const SizedBox(height: 16),
+              Form(
+                  key: distanceForm,
+                  child: TextFormField(
+                    controller: _treadmillDistanceController,
+                    keyboardType:
+                        const TextInputType.numberWithOptions(decimal: true),
+                    decoration: const InputDecoration(
+                        labelText: 'ระยะทางจากลู่วิ่ง (กม.)'),
+                    validator: (value) {
+                      final distance = double.tryParse((value ?? '').trim());
+                      return distance == null ||
+                              !distance.isFinite ||
+                              distance < 0
+                          ? 'กรุณากรอกระยะทางที่ถูกต้อง'
+                          : null;
+                    },
+                  )),
+            ],
+          ])),
           actions: [
             TextButton(
-              onPressed: () => Navigator.pop(ctx),
-              child: const Text('วิ่งต่อ'),
-            ),
+                onPressed: () => Navigator.pop(ctx, false),
+                child: const Text('วิ่งต่อ')),
+            FilledButton(
+                onPressed: () {
+                  if (_isTreadmill && !distanceForm.currentState!.validate()) {
+                    return;
+                  }
+                  Navigator.pop(ctx, true);
+                },
+                child: const Text('จบการวิ่ง')),
           ],
         ),
       );
-      if (mounted)
-        showAppToast(context, 'หากต้องการจบ Session ให้กดย้อนกลับอีกครั้ง');
-    } else {
+      if (confirmed != true || !mounted) return;
+      if (_isTreadmill) {
+        ref.read(runProvider).setDistance(
+            double.parse(_treadmillDistanceController.text.trim()));
+      }
       await _finishRun();
-      return;
+    } finally {
+      _confirmingFinish = false;
     }
-    _backResetTimer = Timer(const Duration(seconds: 5), () => _backStep = 0);
-  }
-
-  Future<void> _finishTreadmill() async {
-    final controller = _treadmillDistanceController;
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (ctx) => AlertDialog(
-        title: const Text('จบการวิ่งบนลู่'),
-        content: TextField(
-          controller: controller,
-          keyboardType: const TextInputType.numberWithOptions(decimal: true),
-          decoration:
-              const InputDecoration(labelText: 'ระยะทางจากลู่วิ่ง (กม.)'),
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('ยกเลิก')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('จบการวิ่ง')),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    final distance = double.tryParse(controller.text.trim());
-    if (distance == null || distance < 0) {
-      if (mounted) showAppToast(context, 'กรุณากรอกระยะทางที่ถูกต้อง');
-      return;
-    }
-    ref.read(runProvider).setDistance(distance);
-    await _finishRun();
   }
 
   Future<void> _finishRun() async {
@@ -454,6 +450,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
         );
     if (!mounted || result == null) return;
     await runDraftStore.clear();
+    if (!mounted) return;
     Navigator.of(context).pushReplacement(
       MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
     );
@@ -494,11 +491,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final quests = setup.activeSideQuests;
     final doneCount = quests.where((q) => q.done).length;
 
-    return WillPopScope(
-        onWillPop: () async {
-          if (!ref.read(runProvider).isRunning) return true;
-          await _handleBack();
-          return false;
+    return PopScope(
+        canPop: !run.isRunning && !run.isStopping && !_confirmingFinish,
+        onPopInvokedWithResult: (didPop, result) {
+          if (!didPop) _handleBack();
         },
         child: Scaffold(
           backgroundColor: AppColors.bg1,
@@ -724,9 +720,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                   colors: [AppColors.red1, AppColors.red2]),
                               onTap: !run.isRunning || run.isStopping
                                   ? null
-                                  : () => _isTreadmill
-                                      ? _finishTreadmill()
-                                      : _finishRun(),
+                                  : _requestFinish,
                             ),
                           ),
                         ],
