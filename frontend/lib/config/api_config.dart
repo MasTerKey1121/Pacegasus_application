@@ -3,8 +3,10 @@ import 'dart:io' show Platform;
 class ApiConfig {
   /// Override for a deployed server or a device on the same Wi-Fi, for example:
   /// flutter run --dart-define=API_BASE_URL=http://192.168.1.20:4000
-  // Development uses the local backend unless a server is explicitly selected.
-  static const _configuredBaseUrl = String.fromEnvironment('API_BASE_URL');
+  static const _configuredBaseUrl = String.fromEnvironment(
+  'API_BASE_URL',
+  defaultValue: 'https://pacegasus-api.onrender.com',
+);
 
   static List<String> get baseUrls {
     if (_configuredBaseUrl.isNotEmpty) return [_configuredBaseUrl];
