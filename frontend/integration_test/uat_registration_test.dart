@@ -23,8 +23,9 @@ import 'package:pacegasus/screens/profile/profile_screen.dart';
 import 'package:pacegasus/screens/wellness/daily_wellness_screen.dart';
 import 'package:pacegasus/widgets/common.dart';
 
-const _email =
-    String.fromEnvironment('UAT_EMAIL', defaultValue: 'pasen680@gmail.com');
+const _email = String.fromEnvironment('UAT_EMAIL',
+    defaultValue: 'fortest.najajubjub@gmail.com');
+const _manualOtp = bool.fromEnvironment('UAT_MANUAL_OTP', defaultValue: true);
 const _name = String.fromEnvironment('UAT_NAME', defaultValue: 'test account');
 const _bridge = String.fromEnvironment('UAT_BRIDGE_URL',
     defaultValue: 'http://127.0.0.1:8765');
@@ -52,6 +53,7 @@ Future<Map<String, dynamic>> _request(String route,
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  binding.shouldPropagateDevicePointerEvents = _manualOtp;
   testWidgets('real registration, onboarding and screenshot evidence',
       (tester) async {
     var step = 'startup';
@@ -168,26 +170,35 @@ void main() {
           '05-otp-requested', 'Register OTP requested for the specified email');
       await _request('/state', {
         'state': 'waiting_otp',
-        'detail': 'Enter the emailed six-digit OTP into .uat-runtime/otp.txt'
+        'detail': _manualOtp
+            ? 'กรอก OTP เองในแอป ชุดทดสอบจะรอจนยืนยันสำเร็จ'
+            : 'Enter the emailed six-digit OTP into .uat-runtime/otp.txt'
       });
 
       step = 'verify-otp';
-      String? code;
-      final otpDeadline = DateTime.now().add(const Duration(minutes: 4));
-      while (code == null) {
-        if (DateTime.now().isAfter(otpDeadline)) {
-          throw TestFailure(
-              'OTP was not supplied within four minutes; rerun to request a fresh code');
+      if (_manualOtp) {
+        await waitFor(
+            () => find.byType(OnboardingBasicScreen).evaluate().isNotEmpty,
+            'Manual OTP must open fresh-account onboarding',
+            seconds: 600);
+      } else {
+        String? code;
+        final otpDeadline = DateTime.now().add(const Duration(minutes: 4));
+        while (code == null) {
+          if (DateTime.now().isAfter(otpDeadline)) {
+            throw TestFailure(
+                'OTP was not supplied within four minutes; rerun to request a fresh code');
+          }
+          code = (await _request('/otp'))['code'] as String?;
+          await tester.pump(const Duration(seconds: 1));
         }
-        code = (await _request('/otp'))['code'] as String?;
-        await tester.pump(const Duration(seconds: 1));
+        expect(code, matches(RegExp(r'^\d{6}$')));
+        for (var i = 0; i < code.length; i++) {
+          await tester.enterText(find.byType(TextField).at(i), code[i]);
+          await tester.pump(const Duration(milliseconds: 100));
+        }
+        code = null;
       }
-      expect(code, matches(RegExp(r'^\d{6}$')));
-      for (var i = 0; i < code.length; i++) {
-        await tester.enterText(find.byType(TextField).at(i), code[i]);
-        await tester.pump(const Duration(milliseconds: 100));
-      }
-      code = null;
       await page(OnboardingBasicScreen);
       await _request('/state', {
         'state': 'running',
@@ -197,6 +208,7 @@ void main() {
               tester.element(find.byType(OnboardingBasicScreen)))
           .read(authProvider);
       expect(auth.status, AuthStatus.authenticated);
+      expect(auth.user?['email'], _email);
       expect(auth.user?['displayName'], _name);
       await capture('06-otp-verified',
           'OTP authenticates test account and opens onboarding');
@@ -235,8 +247,8 @@ void main() {
           .data;
       expect(selectedGoal.healthGoal, 'เพิ่มความอึด');
       expect(selectedGoal.distanceGoal, isNull);
-      await capture(
-          '09-goal', 'Only increased-endurance health goal selected; no distance goal');
+      await capture('09-goal',
+          'Only increased-endurance health goal selected; no distance goal');
       await tap(find.widgetWithText(GradientButton, 'ถัดไป'));
       await page(OnboardingHistoryScreen);
       step = 'onboarding-history';
@@ -248,8 +260,12 @@ void main() {
           .data;
       expect(historyData.hasRunningExperience, isFalse);
       expect(historyData.longestDistance, 'น้อยกว่า 5 km');
-      expect(tester.widget<GradientButton>(
-          find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓')).onTap, isNotNull);
+      expect(
+          tester
+              .widget<GradientButton>(
+                  find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓'))
+              .onTap,
+          isNotNull);
       await capture(
           '10-history', 'Synthetic beginner running history selected');
       await tap(find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓'));
@@ -315,11 +331,13 @@ void main() {
       });
     } catch (error) {
       try {
-        await capture('failed-$step', 'Failure at $step', failed: true);
+        if (find.byType(OtpScreen).evaluate().isEmpty) {
+          await capture('failed-$step', 'Failure at $step', failed: true);
+        }
       } catch (_) {/* Preserve the original test failure. */}
       await _request(
           '/state', {'state': 'failed', 'detail': 'Failed at $step: $error'});
       rethrow;
     }
-  }, timeout: const Timeout(Duration(minutes: 12)));
+  }, timeout: const Timeout(Duration(minutes: 25)));
 }

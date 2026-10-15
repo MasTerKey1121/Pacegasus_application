@@ -1,5 +1,9 @@
 # Automated UAT with screenshots
 
+For the current two-account preparation, execution phases and manual OTP flow,
+see [the live UAT runbook](../docs/uat/Live-UAT-Runbook.md). Preparing that plan
+does not launch the app or contact the API. Real execution must be requested.
+
 This suite uses Flutter Integration Test to interact with the real app and its
 configured API. It is intentionally a separate command from ordinary unit tests
 because registration and wellness write real account data and require an emailed
@@ -19,20 +23,23 @@ flutter devices
 .\tool\run-uat.ps1 -DeviceId R5CRC0T396T
 ```
 
-Defaults: `pasen680@gmail.com`, display name `test account`, and the API configured
+Defaults: `fortest.najajubjub@gmail.com`, display name `test account`, and the API configured
 in the app. Override with `-Email`, `-DisplayName`, or `-ApiBaseUrl` if required.
 The code defaults to a deployed API; local backend fixes need that deployment
 updated or `-ApiBaseUrl` pointing to the appropriate test server.
 
-When `.uat-runtime/bridge.log` shows `STATE waiting_otp`, enter the current
-six-digit code in a second PowerShell terminal:
+By default (`-OtpMode manual`), enter OTP directly on the phone. The test waits
+for successful navigation for up to ten minutes; each OTP still has the expiry
+shown by the app. Resend in the app if necessary. Never put OTP in chat or reports.
+
+Only if explicitly choosing legacy `-OtpMode file`, enter the current six-digit
+code in a second PowerShell terminal:
 
 ```powershell
 Set-Content -LiteralPath .uat-runtime/otp.txt -Value '<six-digit-code>' -NoNewline
 ```
 
-Replace the placeholder with the actual code. If running through this chat,
-send the code here and the assistant can write it to that local runtime file.
+Replace the placeholder with the actual code only in this legacy mode.
 The local bridge binds to loopback only, consumes the code once, and does not
 include it in logs, screenshots or reports. The ignored runtime directory keeps
 the input out of Git. Supply OTP within four minutes; otherwise rerun for a new
@@ -46,8 +53,8 @@ onboarding completion on Home, wellness validation and saving, and Profile name
 and public UID with no retry error. No service/provider mocks are installed.
 
 Synthetic onboarding data: birth date 1995-01-01, male, 65 kg, 170 cm, three
-running days/week, no chronic conditions or injuries, 5K goal without a finish
-time, no previous running experience. These are test values, not the user's
+running days/week, no chronic conditions or injuries, increased-endurance goal
+without a distance goal, no previous running experience. These are test values, not the user's
 personal health information.
 
 Each asserted checkpoint immediately saves a PNG and updates `results.json` and

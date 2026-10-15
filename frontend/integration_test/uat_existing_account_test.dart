@@ -25,6 +25,7 @@ import 'package:pacegasus/widgets/common.dart';
 const _email = String.fromEnvironment('UAT_EMAIL',
     defaultValue: 'fortest.najajubjub@gmail.com');
 const _name = String.fromEnvironment('UAT_NAME', defaultValue: 'test account');
+const _manualOtp = bool.fromEnvironment('UAT_MANUAL_OTP', defaultValue: true);
 const _bridge = String.fromEnvironment('UAT_BRIDGE_URL',
     defaultValue: 'http://127.0.0.1:8765');
 
@@ -51,6 +52,7 @@ Future<Map<String, dynamic>> _request(String route,
 
 void main() {
   final binding = IntegrationTestWidgetsFlutterBinding.ensureInitialized();
+  binding.shouldPropagateDevicePointerEvents = _manualOtp;
   testWidgets(
       'existing account, health-only onboarding and screenshot evidence',
       (tester) async {
@@ -156,25 +158,35 @@ void main() {
             '02-login-otp', 'Login OTP requested for existing account');
         await _request('/state', {
           'state': 'waiting_otp',
-          'detail':
-              'Waiting for existing-account login OTP in .uat-runtime/otp.txt'
+          'detail': _manualOtp
+              ? 'กรอก OTP เองในแอป'
+              : 'Waiting for existing-account login OTP in .uat-runtime/otp.txt'
         });
         step = 'verify-login-otp';
-        String? code;
-        final otpDeadline = DateTime.now().add(const Duration(minutes: 4));
-        while (code == null) {
-          if (DateTime.now().isAfter(otpDeadline)) {
-            throw TestFailure('Login OTP not supplied within four minutes');
+        if (_manualOtp) {
+          await waitFor(
+              () =>
+                  find.byType(OnboardingBasicScreen).evaluate().isNotEmpty ||
+                  find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Waiting for manual OTP verification',
+              seconds: 600);
+        } else {
+          String? code;
+          final otpDeadline = DateTime.now().add(const Duration(minutes: 4));
+          while (code == null) {
+            if (DateTime.now().isAfter(otpDeadline)) {
+              throw TestFailure('Login OTP not supplied within four minutes');
+            }
+            code = (await _request('/otp'))['code'] as String?;
+            await tester.pump(const Duration(seconds: 1));
           }
-          code = (await _request('/otp'))['code'] as String?;
-          await tester.pump(const Duration(seconds: 1));
+          expect(code, matches(RegExp(r'^\d{6}$')));
+          for (var i = 0; i < code.length; i++) {
+            await tester.enterText(find.byType(TextField).at(i), code[i]);
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          code = null;
         }
-        expect(code, matches(RegExp(r'^\d{6}$')));
-        for (var i = 0; i < code.length; i++) {
-          await tester.enterText(find.byType(TextField).at(i), code[i]);
-          await tester.pump(const Duration(milliseconds: 100));
-        }
-        code = null;
         await waitFor(
             () =>
                 find.byType(OnboardingBasicScreen).evaluate().isNotEmpty ||
@@ -243,8 +255,12 @@ void main() {
             .data;
         expect(historyData.hasRunningExperience, isFalse);
         expect(historyData.longestDistance, 'น้อยกว่า 5 km');
-        expect(tester.widget<GradientButton>(
-            find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓')).onTap, isNotNull);
+        expect(
+            tester
+                .widget<GradientButton>(
+                    find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓'))
+                .onTap,
+            isNotNull);
         await capture(
             '10-history', 'Synthetic beginner running history selected');
         await tap(find.widgetWithText(GradientButton, 'เริ่มใช้งาน ✓'));
@@ -315,11 +331,13 @@ void main() {
       });
     } catch (error) {
       try {
-        await capture('failed-$step', 'Failure at $step', failed: true);
+        if (find.byType(OtpScreen).evaluate().isEmpty) {
+          await capture('failed-$step', 'Failure at $step', failed: true);
+        }
       } catch (_) {/* Preserve the original test failure. */}
       await _request(
           '/state', {'state': 'failed', 'detail': 'Failed at $step: $error'});
       rethrow;
     }
-  }, timeout: const Timeout(Duration(minutes: 12)));
+  }, timeout: const Timeout(Duration(minutes: 25)));
 }

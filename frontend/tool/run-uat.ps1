@@ -3,7 +3,12 @@ param(
     [string]$Email = 'fortest.najajubjub@gmail.com',
     [string]$DisplayName = 'test account',
     [string]$ApiBaseUrl = '',
-    [ValidateSet('register', 'existing')][string]$Mode = 'existing'
+    [ValidateSet('register', 'existing', 'live')][string]$Mode = 'existing',
+    [ValidateSet('manual', 'file')][string]$OtpMode = 'manual',
+    [string]$Phase = 'profile',
+    [string]$SecondaryEmail = 'pheeratchai.s@kkumail.com',
+    [string]$ClubName = 'Pacegasus UAT',
+    [string]$ShopListingId = ''
 )
 $ErrorActionPreference = 'Stop'
 $frontendPath = Split-Path -Parent $PSScriptRoot
@@ -28,11 +33,17 @@ try {
     & adb -s $DeviceId reverse tcp:8765 tcp:8765
     if ($LASTEXITCODE -ne 0) { throw 'Could not connect Android to UAT bridge' }
     Write-Host "Evidence folder: $outputPath"
-    Write-Host "When waiting_otp appears, write the six-digit OTP to $otpPath using another terminal. Do not commit the OTP."
+    if ($OtpMode -eq 'manual') { Write-Host 'กรอก OTP เองในแอปเมื่อถึงหน้ายืนยัน จากนั้นชุดทดสอบจะทำต่อ' }
+    else { Write-Host "When waiting_otp appears, write the six-digit OTP to $otpPath using another terminal. Do not commit the OTP." }
     Push-Location $frontendPath
     try {
-        $uatTarget = if ($Mode -eq 'existing') { 'integration_test/uat_existing_account_test.dart' } else { 'integration_test/uat_registration_test.dart' }
-        $flutterArgs = @('test', $uatTarget, '-d', $DeviceId, '--reporter', 'expanded', "--dart-define=UAT_EMAIL=$Email", "--dart-define=UAT_NAME=$DisplayName")
+        $uatTarget = switch ($Mode) {
+            'existing' { 'integration_test/uat_existing_account_test.dart' }
+            'live' { 'integration_test/uat_live_test.dart' }
+            default { 'integration_test/uat_registration_test.dart' }
+        }
+        $manualOtp = if ($OtpMode -eq 'manual') { 'true' } else { 'false' }
+        $flutterArgs = @('test', $uatTarget, '-d', $DeviceId, '--reporter', 'expanded', "--dart-define=UAT_EMAIL=$Email", "--dart-define=UAT_NAME=$DisplayName", "--dart-define=UAT_MANUAL_OTP=$manualOtp", "--dart-define=UAT_PHASE=$Phase", "--dart-define=UAT_SECONDARY_EMAIL=$SecondaryEmail", "--dart-define=UAT_CLUB_NAME=$ClubName", "--dart-define=UAT_SHOP_LISTING=$ShopListingId")
         if ($ApiBaseUrl) { $flutterArgs += "--dart-define=API_BASE_URL=$ApiBaseUrl" }
         & flutter @flutterArgs
         $exitCode = $LASTEXITCODE

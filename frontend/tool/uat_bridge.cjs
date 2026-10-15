@@ -11,16 +11,20 @@ fs.mkdirSync(path.join(output, 'screenshots'), { recursive: true });
 const checkpoints = [];
 let state = 'running';
 let detail = '';
+let scope = 'Selected assertions only. Other UAT cases remain Not Run. No account deletion.';
+const contextFile = path.join(runtime, 'live-context.json');
+const allowedContext = new Set(['primaryUid', 'secondaryUid', 'clubId', 'clubName', 'friendshipId']);
 function saveReport() {
   fs.writeFileSync(path.join(output, 'results.json'), JSON.stringify({
     state, detail, checkpoints,
-    scope: 'See checkpoint descriptions for the selected account flow and goals. Real API, synthetic onboarding, wellness and Profile checks. No GPS, purchases or social writes.',
+    scope,
   }, null, 2));
   const lines = [
     '# Automated UAT — Pacegasus', '',
     `Status: **${state}**`, '', detail, '',
     'Tests run through Flutter Integration Test against the configured real API.',
-    'Onboarding values are synthetic. Screenshots are evidence of the stated assertions, not complete visual approval.', '',
+    scope, '',
+    'Screenshots support only the stated assertions. A completed phase does not mean all 88 UAT cases passed.', '',
     '| Step | Result | Evidence |', '| --- | --- | --- |',
     ...checkpoints.map(c => `| ${c.description.replaceAll('|', '/')} | ${c.status} | [${c.name}](screenshots/${c.name}.png) |`),
     '', '## Screenshots', '',
@@ -48,6 +52,12 @@ http.createServer(async (req, res) => {
       }
       return;
     }
+    if (req.method === 'GET' && req.url.startsWith('/context?')) {
+      const environment = new URL(req.url, 'http://localhost').searchParams.get('environment');
+      const contexts = fs.existsSync(contextFile) ? JSON.parse(fs.readFileSync(contextFile, 'utf8')) : {};
+      res.end(JSON.stringify(contexts[environment] || {}));
+      return;
+    }
     if (req.method !== 'POST') { res.writeHead(404); res.end('{}'); return; }
     const chunks = [];
     let size = 0;
@@ -65,6 +75,16 @@ http.createServer(async (req, res) => {
       checkpoints.push({ name: body.name, description: body.description,
         status: body.status === 'failed' ? 'failed' : 'passed' });
       console.log(`CHECKPOINT ${body.name}: ${body.status || 'passed'}`);
+    } else if (req.url === '/context') {
+      if (typeof body.environment !== 'string' || !body.environment) throw Error('Missing environment');
+      const values = body.values;
+      if (!values || Object.entries(values).some(([key, value]) => !allowedContext.has(key) || typeof value !== 'string')) throw Error('Only public UAT identifiers may be saved');
+      const contexts = fs.existsSync(contextFile) ? JSON.parse(fs.readFileSync(contextFile, 'utf8')) : {};
+      contexts[body.environment] = { ...contexts[body.environment], ...values };
+      fs.writeFileSync(contextFile, JSON.stringify(contexts, null, 2));
+    } else if (req.url === '/scope') {
+      if (typeof body.description !== 'string') throw Error('Missing scope');
+      scope = body.description;
     } else if (req.url === '/state') {
       state = body.state;
       detail = body.detail || '';
