@@ -18,9 +18,16 @@ import 'package:pacegasus/screens/stats/stats_screen.dart';
 import 'package:pacegasus/screens/leaderboard/leaderboard_screen.dart';
 import 'package:pacegasus/services/api_client.dart';
 import 'package:pacegasus/services/stats_api.dart';
+import 'package:pacegasus/screens/auth/login_screen.dart';
+import 'package:pacegasus/screens/training/training_registration_screen.dart';
+import 'package:pacegasus/screens/training/training_schedule_screen.dart';
+import 'package:pacegasus/providers/training_plan_provider.dart';
+import 'package:pacegasus/models/training_models.dart';
+import 'package:pacegasus/widgets/common.dart';
 
 const phase = String.fromEnvironment('UAT_PHASE', defaultValue: 'profile');
 const email = String.fromEnvironment('UAT_EMAIL');
+const manualOtp = bool.fromEnvironment('UAT_MANUAL_OTP', defaultValue: true);
 const clubName =
     String.fromEnvironment('UAT_CLUB_NAME', defaultValue: 'Pacegasus UAT');
 const listingId = String.fromEnvironment('UAT_SHOP_LISTING');
@@ -88,6 +95,9 @@ void main() {
       expect(tester.takeException(), isNull);
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pump(const Duration(milliseconds: 500));
+      if (find.byType(HomeScreen).evaluate().isNotEmpty) {
+        await tester.pump(const Duration(seconds: 3));
+      }
       await bridge('/checkpoint', {
         'name': name,
         'description': description,
@@ -100,6 +110,15 @@ void main() {
       await state(instruction);
       await waitUntil(
           () async => find.byType(type).evaluate().isNotEmpty, instruction);
+    }
+
+    Future<void> tap(Finder target) async {
+      expect(target, findsOneWidget);
+      await tester.ensureVisible(target);
+      await tester.pump(const Duration(milliseconds: 300));
+      await tester.tap(target);
+      await tester.pump(const Duration(milliseconds: 500));
+      expect(tester.takeException(), isNull);
     }
 
     try {
@@ -117,6 +136,42 @@ void main() {
           seconds: 60);
       container = ProviderScope.containerOf(
           tester.element(find.byType(app.PacegasusApp)));
+      await waitUntil(
+          () async =>
+              container.read(authProvider).status != AuthStatus.checking,
+          'Saved session check finishes',
+          seconds: 60);
+      if (container.read(authProvider).status == AuthStatus.unauthenticated) {
+        await waitUntil(
+            () async => find.byType(LoginScreen).evaluate().isNotEmpty,
+            'Login opens');
+        final emailField = find.descendant(
+            of: find.byWidgetPredicate(
+                (w) => w is AppTextField && w.label == 'Email'),
+            matching: find.byType(TextField));
+        await tester.enterText(emailField, email);
+        await tap(find.widgetWithText(GradientButton, 'เข้าสู่ระบบ'));
+        await waitUntil(
+            () async => find.byType(OtpScreen).evaluate().isNotEmpty,
+            'Login OTP requested',
+            seconds: 45);
+        await state(
+            'ส่ง OTP ล่าสุดของ $email ให้ผู้ช่วยกรอก รอรหัสรอบนี้เท่านั้น',
+            status: 'waiting_otp');
+        if (!manualOtp) {
+          String? code;
+          await waitUntil(() async {
+            code = (await bridge('/otp'))['code'] as String?;
+            return code != null;
+          }, 'OTP supplied by user', seconds: 240);
+          expect(code, matches(RegExp(r'^\d{6}$')));
+          for (var i = 0; i < 6; i++) {
+            await tester.enterText(find.byType(TextField).at(i), code![i]);
+            await tester.pump(const Duration(milliseconds: 100));
+          }
+          code = null;
+        }
+      }
       await state(
           'ใช้บัญชี $email ถ้าเป็นบัญชีอื่นให้ออกจากระบบผ่านเมนู จากนั้นเข้า/สมัครและกรอก OTP เองในแอป');
       await waitUntil(() async {
@@ -160,11 +215,86 @@ void main() {
           expect(today['status'], 'done',
               reason: 'Run registration/wellness phase first');
           final before = container.read(programProvider);
-          expect(before.isRegistered, isFalse,
+          expect(before.isScheduleSaved, isFalse,
               reason:
-                  'Fresh-program case needs no active program; do not cancel automatically');
-          await state(
-              'กดเลือกแผนซ้อม สมัครโปรแกรม จัดตารางตามกติกา แล้วบันทึกกลับหน้าหลัก');
+                  'This scenario requires an unsaved week; never overwrite a saved schedule automatically');
+          final hadProgram = before.isRegistered;
+          await state('ทดสอบลงทะเบียน 5K และจัดตารางผ่านหน้าจออัตโนมัติ',
+              status: 'running');
+          await waitUntil(
+              () async => !container.read(programProvider).isLoading,
+              'Home program restoration finishes',
+              seconds: 60);
+          await tap(find.byKey(const Key('home-primary')));
+          if (!hadProgram) {
+            await waitUntil(
+                () async => find
+                    .byType(TrainingRegistrationScreen)
+                    .evaluate()
+                    .isNotEmpty,
+                'Program registration screen opens');
+            await waitUntil(
+                () async =>
+                    !container.read(programProvider).isLoadingTemplates &&
+                    !container.read(programProvider).isLoading,
+                'Program templates load',
+                seconds: 60);
+            await tap(find.widgetWithText(SelectChip, '5K'));
+            expect(container.read(programProvider).selectedTemplateLevel,
+                'beginner');
+            await capture('program-preview',
+                'Beginner 5K selected on registration screen');
+            await tap(find.widgetWithText(
+                GradientButton, 'บันทึกและลงทะเบียนตารางซ้อม'));
+          }
+          await waitUntil(
+              () async =>
+                  find.byType(TrainingScheduleScreen).evaluate().isNotEmpty &&
+                  !container.read(programProvider).isLoadingTemplates,
+              'Registered program opens schedule builder');
+          await tester.pump(const Duration(seconds: 2));
+          final plan = container.read(trainingPlanProvider);
+          expect(plan.currentWeek, 0);
+          expect(plan.currentWeekData.every((day) => day == null), isTrue,
+              reason: 'Resumed unsaved program must have an empty week');
+          expect(plan.getCaps(0).easy, 3);
+          expect(plan.getCaps(0).long, 1);
+          final save =
+              find.widgetWithText(GradientButton, 'บันทึกตารางสัปดาห์');
+          await tester.ensureVisible(save);
+          expect(tester.widget<GradientButton>(save).onTap, isNull);
+          await capture('schedule-incomplete',
+              'New week cannot save before required workouts are placed');
+          for (final day in [0, 2, 4]) {
+            if (plan.selectedType != SessionType.easy) {
+              await tap(find.byKey(const Key('training-workout-easy')));
+            }
+            await tap(find.byKey(Key('training-day-$day')));
+            expect(plan.currentWeekData[day], SessionType.easy,
+                reason: 'UI must place Easy Run on day $day before proceeding');
+          }
+          expect(
+              plan.currentWeekData
+                  .where((day) => day == SessionType.easy)
+                  .length,
+              3);
+          expect(find.byKey(const Key('training-workout-easy')), findsNothing,
+              reason: 'UI removes Easy Run choice once its quota is filled');
+          expect(plan.selectedType, isNull);
+          await tap(find.byKey(const Key('training-day-1')));
+          expect(plan.currentWeekData[1], isNull,
+              reason: 'Fourth Easy Run must be rejected by quota');
+          await capture('schedule-quota',
+              'Three Easy Runs placed; Easy choice is removed at quota and an empty-day tap adds no fourth Easy');
+          await tap(find.byKey(const Key('training-workout-long')));
+          await tap(find.byKey(const Key('training-day-6')));
+          expect(plan.isWeekComplete(0), isTrue);
+          final expectedDays = List<SessionType?>.of(plan.currentWeekData);
+          await tester.ensureVisible(save);
+          expect(tester.widget<GradientButton>(save).onTap, isNotNull);
+          await capture('schedule-ready',
+              'Week contains Easy on days 1/3/5 and Long Run on day 7; Save enabled');
+          await tap(save);
           await waitUntil(() async {
             final current = container.read(programProvider);
             return current.isRegistered &&
@@ -175,8 +305,35 @@ void main() {
           expect(week['scheduleSaved'], isTrue);
           expect(week['quests'], isA<List>());
           expect((week['quests'] as List), isNotEmpty);
+          expect((week['quests'] as List).length, 4);
+          expect(
+              (week['quests'] as List)
+                  .where((q) => q['session_type'] == 'easy')
+                  .length,
+              3);
+          expect(
+              (week['quests'] as List)
+                  .where((q) => q['session_type'] == 'long_run')
+                  .length,
+              1);
           await capture('program-saved',
-              'New active program has a saved nonempty weekly schedule (partial UAT-02-008/010)');
+              '${hadProgram ? 'Resumed unsaved' : 'New'} active program has four saved weekly quests: three Easy and one Long (partial UAT-02-008/010)');
+          await tester.drag(find.byKey(const Key('home-sheet-handle')),
+              const Offset(0, -450));
+          await tester.pump(const Duration(milliseconds: 600));
+          await tap(find.text('จัดตารางซ้อม'));
+          await waitUntil(
+              () async =>
+                  find.byType(TrainingScheduleScreen).evaluate().isNotEmpty,
+              'Saved schedule reopens');
+          await waitUntil(
+              () async => plan.hasSavedWeeks, 'Saved weeks restored from API');
+          expect(plan.weekSchedules[0], expectedDays);
+          final reread = await read('/api/programs/current/week');
+          expect((reread['quests'] as List).length, 4,
+              reason: 'Reopening must not create duplicate quests');
+          await capture('schedule-restored',
+              'Reopened schedule matches saved day placement; API still has four quests');
           break;
         case 'run':
           step = 'run';
@@ -410,6 +567,16 @@ void main() {
           status: 'passed');
     } catch (error) {
       // No screenshot on OTP screens and no raw API response/token in failure logs.
+      if (find.byType(OtpScreen).evaluate().isEmpty) {
+        try {
+          await bridge('/checkpoint', {
+            'name': 'failed-$step',
+            'description': 'Failure at $step; see assertion output',
+            'status': 'failed',
+            'png': base64Encode(await binding.takeScreenshot('failed-$step')),
+          });
+        } catch (_) {/* Preserve original failure if screenshot fails. */}
+      }
       await state(
           'Phase $phase failed at $step. See test assertion output; remaining steps were not run.',
           status: 'failed');

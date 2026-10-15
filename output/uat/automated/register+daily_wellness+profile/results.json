@@ -1,20 +1,35 @@
 {
-  "state": "failed",
-  "detail": "Failed at profile: Expected: no matching candidates\n  Actual: _TextWidgetFinder:<Found 1 widget with text \"ลองอีกครั้ง\": [\n            Text(\"ลองอีกครั้ง\", dependencies: [DefaultSelectionStyle, DefaultTextStyle, MediaQuery]),\n          ]>\n   Which: means one was found but none were expected\n",
+  "state": "passed",
+  "detail": "Registration, four onboarding pages, Home, wellness and Profile passed. Other features are not covered by this suite.",
   "checkpoints": [
     {
-      "name": "01-existing-login",
-      "description": "Existing account email entered on Login",
+      "name": "01-login",
+      "description": "Login opens without a saved session",
       "status": "passed"
     },
     {
-      "name": "02-login-otp",
-      "description": "Login OTP requested for existing account",
+      "name": "02-register",
+      "description": "Register accepts test account name and email",
       "status": "passed"
     },
     {
-      "name": "03-existing-authenticated",
-      "description": "Existing account restored or authenticated with correct email and name",
+      "name": "03-terms-disabled",
+      "description": "Terms requires consent before proceeding",
+      "status": "passed"
+    },
+    {
+      "name": "04-terms-consented",
+      "description": "Consent enables Continue",
+      "status": "passed"
+    },
+    {
+      "name": "05-otp-requested",
+      "description": "Register OTP requested for the specified email",
+      "status": "passed"
+    },
+    {
+      "name": "06-otp-verified",
+      "description": "OTP authenticates test account and opens onboarding",
       "status": "passed"
     },
     {
@@ -53,11 +68,10 @@
       "status": "passed"
     },
     {
-      "name": "failed-profile",
-      "description": "Failure at profile",
-      "status": "failed"
+      "name": "14-profile",
+      "description": "Profile loads test account and public UID without a retry error",
+      "status": "passed"
     }
   ],
-  "scope": "See checkpoint descriptions for the selected account flow and goals. Real API, synthetic onboarding, wellness and Profile checks. No GPS, purchases or social writes.",
-  "observedError": "Route not found: GET /api/users/me/profile"
+  "scope": "Selected assertions only. Other UAT cases remain Not Run. No account deletion."
 }

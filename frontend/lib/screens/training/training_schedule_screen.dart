@@ -516,6 +516,7 @@ class _WorkoutChoice extends StatelessWidget {
   Widget build(BuildContext context) {
     final meta = sessionMeta[type]!;
     return GestureDetector(
+      key: Key('training-workout-${type.name}'),
       onTap: onTap,
       onLongPress: () => _showWorkoutInfo(context, meta.label),
       child: AnimatedContainer(
@@ -603,6 +604,7 @@ class _WeekGrid extends StatelessWidget {
                           size: 10, color: AppColors.textTertiary)),
                   const SizedBox(height: 5),
                   GestureDetector(
+                    key: Key('training-day-$index'),
                     onTap: disabled || blocked ? null : () => onTap(index),
                     child: Container(
                       height: 54,

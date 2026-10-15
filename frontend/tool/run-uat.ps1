@@ -43,7 +43,9 @@ try {
             default { 'integration_test/uat_registration_test.dart' }
         }
         $manualOtp = if ($OtpMode -eq 'manual') { 'true' } else { 'false' }
-        $flutterArgs = @('test', $uatTarget, '-d', $DeviceId, '--reporter', 'expanded', "--dart-define=UAT_EMAIL=$Email", "--dart-define=UAT_NAME=$DisplayName", "--dart-define=UAT_MANUAL_OTP=$manualOtp", "--dart-define=UAT_PHASE=$Phase", "--dart-define=UAT_SECONDARY_EMAIL=$SecondaryEmail", "--dart-define=UAT_CLUB_NAME=$ClubName", "--dart-define=UAT_SHOP_LISTING=$ShopListingId")
+        # Flutter integration tests uninstall by default, which removes secure
+        # storage and forces another OTP. Keep the app and account session.
+        $flutterArgs = @('test', $uatTarget, '-d', $DeviceId, '--no-uninstall', '--reporter', 'expanded', "--dart-define=UAT_EMAIL=$Email", "--dart-define=UAT_NAME=$DisplayName", "--dart-define=UAT_MANUAL_OTP=$manualOtp", "--dart-define=UAT_PHASE=$Phase", "--dart-define=UAT_SECONDARY_EMAIL=$SecondaryEmail", "--dart-define=UAT_CLUB_NAME=$ClubName", "--dart-define=UAT_SHOP_LISTING=$ShopListingId")
         if ($ApiBaseUrl) { $flutterArgs += "--dart-define=API_BASE_URL=$ApiBaseUrl" }
         & flutter @flutterArgs
         $exitCode = $LASTEXITCODE

@@ -106,6 +106,9 @@ void main() {
       if (!failed) expect(tester.takeException(), isNull, reason: description);
       FocusManager.instance.primaryFocus?.unfocus();
       await tester.pump(const Duration(milliseconds: 600));
+      if (find.byType(HomeScreen).evaluate().isNotEmpty) {
+        await tester.pump(const Duration(seconds: 3));
+      }
       final bytes = await binding.takeScreenshot(id);
       await _request('/checkpoint', {
         'name': id,
