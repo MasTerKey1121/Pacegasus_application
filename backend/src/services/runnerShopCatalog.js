@@ -1,6 +1,6 @@
 const items = [
   { id: '20000000-0000-4000-8000-000000000001', code: 'shop_tee_purple',
-    listingId: '30000000-0000-4000-8000-000000000001', name: 'เสื้อวิ่งสีม่วง', price: 20 },
+    listingId: '30000000-0000-4000-8000-000000000001', name: 'เสื้อวิ่งสีม่วง', price: 15 },
   { id: '20000000-0000-4000-8000-000000000002', code: 'shop_tee_brown',
     listingId: '30000000-0000-4000-8000-000000000002', name: 'เสื้อวิ่งสีน้ำตาล', price: 1000 },
 ].map(item => ({ ...item, render: { family: 'pacegasus_starter_v9',

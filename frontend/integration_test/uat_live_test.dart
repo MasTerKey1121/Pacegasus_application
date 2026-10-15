@@ -35,6 +35,9 @@ import 'package:pacegasus/screens/run/run_summary_screen.dart';
 import 'package:pacegasus/screens/run/reward_screen.dart';
 import 'package:pacegasus/screens/friends/friends_screen.dart';
 import 'package:pacegasus/screens/club/club_screen.dart';
+import 'package:pacegasus/screens/shop/shop_screen.dart';
+import 'package:pacegasus/screens/home/home_avatar.dart';
+import 'package:pacegasus/providers/avatar_provider.dart';
 
 const phase = String.fromEnvironment('UAT_PHASE', defaultValue: 'profile');
 const email = String.fromEnvironment('UAT_EMAIL');
@@ -1377,6 +1380,9 @@ void main() {
           step = 'shop';
           expect(listingId, isNotEmpty,
               reason: 'Choose an explicit listing before this phase');
+          // Load the same catalog as the shop screen before checking its listing.
+          await read(
+              '/api/shop/items?slot=inner_top&owned=false&limit=100&offset=0');
           final listing = await read('/api/shop/items/$listingId');
           expect(listing['owned'], isFalse,
               reason: 'Purchase scenario requires unowned item');
@@ -1387,16 +1393,126 @@ void main() {
               (await read('/api/users/me/progress'))['coinBalance'] as num;
           expect(startBalance, greaterThanOrEqualTo(price),
               reason: 'Prepare coins; this suite never credits coins itself');
+          final beforeAvatar = await read('/api/avatar/me');
+          final beforePurchases = (await read(
+              '/api/shop/purchases?limit=100&offset=0'))['purchases'] as List;
           await state(
-              'เปิดร้าน ซื้อ ${listing['item']['name']} ราคา $price เหรียญ จากนั้นสวมใส่และบันทึกชุด; ระหว่างนี้อย่าทำกิจกรรมรับ/ใช้เหรียญอื่น');
+              'ทดสอบร้านค้า เหรียญไม่พอ ลองใส่ ซื้อ และบันทึกชุดผ่านหน้าจอจริง',
+              status: 'running');
+          Future<void> openShop(bool wardrobe) async {
+            await tap(find.byKey(const Key('home-shortcuts-toggle')));
+            await tap(find.text(wardrobe ? 'แต่งตัว' : 'ร้านค้า'));
+            await waitUntil(
+                () async =>
+                    find.byType(ShopScreen).evaluate().isNotEmpty &&
+                    find.byType(CircularProgressIndicator).evaluate().isEmpty,
+                'Shop or wardrobe loads');
+            // Select เสื้อ so lazy category rows are visible in the sheet.
+            await tap(find.text('เสื้อ').first);
+          }
+          Future<void> goHome() async {
+            await tester.pageBack();
+            await waitUntil(
+                () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+                'Return Home');
+            await tester.pump(const Duration(seconds: 3));
+          }
+          await openShop(false);
+          expect(find.text('$startBalance'), findsWidgets);
+          await capture('shop-catalog',
+              'Shop loads real catalog and displays current coin balance');
+          final catalog = await read(
+              '/api/shop/items?slot=inner_top&owned=false&limit=100&offset=0');
+          final unaffordable = (catalog['items'] as List)
+              .where((r) => (r['priceCoins'] as num) > startBalance)
+              .toList();
+          if (unaffordable.isNotEmpty) {
+            final expensive = unaffordable.first;
+            await tap(find
+                .byKey(ValueKey('item-thumbnail-${expensive['listingId']}')));
+            await tap(find.byKey(const Key('shop-buy')));
+            await waitUntil(
+                () async => find.text('เหรียญไม่พอ').evaluate().isNotEmpty,
+                'Insufficient coins message shown');
+            expect((await read('/api/users/me/progress'))['coinBalance'],
+                startBalance);
+            expect(
+                (await read(
+                    '/api/shop/items/${expensive['listingId']}'))['owned'],
+                isFalse);
+            expect(
+                (await read(
+                    '/api/shop/purchases?limit=100&offset=0'))['purchases'],
+                beforePurchases);
+            await capture('shop-insufficient-coins',
+                'Insufficient coins rejected; balance, purchase history and ownership unchanged');
+          }
+          final product = find.byKey(ValueKey('item-thumbnail-$listingId'));
+          await tap(product);
+          expect(find.text('ซื้อ · $price เหรียญ'), findsOneWidget);
+          await tester.pump(const Duration(seconds: 3));
+          await capture('shop-product',
+              'Selected product shows actual price and product preview');
+          await tap(find.byKey(const Key('shop-preview-toggle')));
+          await tester.pump(const Duration(seconds: 3));
+          final preview = tester.widget<HomeAvatar>(find
+              .descendant(
+                  of: find.byType(ShopScreen),
+                  matching: find.byType(HomeAvatar))
+              .first);
+          expect(preview.outfitPreview[slot]?.id, listingId);
+          expect((await read('/api/avatar/me'))['equipment'],
+              beforeAvatar['equipment']);
+          expect((await read('/api/shop/items/$listingId'))['owned'], isFalse);
+          await capture('shop-try-on',
+              'Trying on unowned item changes preview only; saved equipment and ownership unchanged');
+          await goHome();
+          expect((await read('/api/avatar/me'))['equipment'],
+              beforeAvatar['equipment']);
+          await openShop(false);
+          await tap(product);
+          await tap(find.byKey(const Key('shop-buy')));
           await waitUntil(
               () async =>
                   (await read('/api/shop/items/$listingId'))['owned'] == true,
               'Selected item purchased');
           expect((await read('/api/users/me/progress'))['coinBalance'],
               startBalance - price);
+          final purchases = (await read(
+              '/api/shop/purchases?limit=100&offset=0'))['purchases'] as List;
+          expect(purchases.length, beforePurchases.length + 1);
+          final receipt =
+              purchases.singleWhere((r) => r['listingId'] == listingId);
+          expect(receipt['priceCoins'], price);
+          expect(receipt['coinBalanceAfter'], startBalance - price);
+          await waitUntil(
+              () async =>
+                  find
+                      .byKey(ValueKey('item-thumbnail-$listingId'))
+                      .evaluate()
+                      .isEmpty &&
+                  find.text('${startBalance - price}').evaluate().isNotEmpty,
+              'Purchased item removed and balance refreshed');
           await capture('shop-purchased',
               'Selected item ownership granted and exact price deducted (partial UAT-07-002)');
+          await goHome();
+          await openShop(true);
+          final inventory =
+              await read('/api/avatar/inventory?slot=$slot&limit=100&offset=0');
+          expect(
+              (inventory['items'] as List)
+                  .where((r) => r['item']['id'] == itemId)
+                  .length,
+              1);
+          final wardrobeItem = find.byKey(ValueKey('item-thumbnail-$itemId'));
+          await tap(wardrobeItem);
+          expect(find.text('✓ เลือกอยู่'), findsWidgets);
+          expect((await read('/api/avatar/me'))['equipment'],
+              beforeAvatar['equipment']);
+          await tester.pump(const Duration(seconds: 3));
+          await capture('avatar-draft',
+              'Owned purchased item selected; equipment is not persisted before Save');
+          await tap(find.text('บันทึกการแต่งตัว'));
           await waitUntil(() async {
             final avatar = await read('/api/avatar/me');
             return (avatar['equipment'] as List)
@@ -1404,6 +1520,37 @@ void main() {
           }, 'Purchased item equipped and saved');
           await capture('shop-equipped',
               'Purchased item is saved in the matching avatar slot (partial UAT-07-008)');
+          await goHome();
+          await waitUntil(
+              () async =>
+                  container
+                      .read(avatarOutfitProvider)
+                      .valueOrNull
+                      ?.equipment[slot]
+                      ?.id ==
+                  itemId,
+              'Home outfit reloads saved equipment');
+          await tester.pump(const Duration(seconds: 3));
+          await capture('avatar-home',
+              'Home reloads saved purchased outfit after returning from wardrobe');
+          await openShop(true);
+          expect(
+              find.byKey(ValueKey('item-thumbnail-$itemId')), findsOneWidget);
+          final reopened = await read('/api/avatar/me');
+          expect(
+              (reopened['equipment'] as List)
+                  .singleWhere((e) => e['slot'] == slot)['item']['id'],
+              itemId);
+          final finalPurchases = (await read(
+              '/api/shop/purchases?limit=100&offset=0'))['purchases'] as List;
+          expect(
+              finalPurchases.where((r) => r['listingId'] == listingId).length,
+              1);
+          expect((await read('/api/users/me/progress'))['coinBalance'],
+              startBalance - price);
+          await capture('avatar-reopened',
+              'Reopened wardrobe retains saved equipment; exactly one purchase and no further coin deduction');
+          await goHome();
           break;
         default:
           throw TestFailure('Unknown phase $phase');

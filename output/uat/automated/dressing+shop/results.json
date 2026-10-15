@@ -1,0 +1,57 @@
+{
+  "state": "passed",
+  "detail": "Phase shop completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "shop-catalog",
+      "description": "Shop loads real catalog and displays current coin balance",
+      "status": "passed"
+    },
+    {
+      "name": "shop-insufficient-coins",
+      "description": "Insufficient coins rejected; balance, purchase history and ownership unchanged",
+      "status": "passed"
+    },
+    {
+      "name": "shop-product",
+      "description": "Selected product shows actual price and product preview",
+      "status": "passed"
+    },
+    {
+      "name": "shop-try-on",
+      "description": "Trying on unowned item changes preview only; saved equipment and ownership unchanged",
+      "status": "passed"
+    },
+    {
+      "name": "shop-purchased",
+      "description": "Selected item ownership granted and exact price deducted (partial UAT-07-002)",
+      "status": "passed"
+    },
+    {
+      "name": "avatar-draft",
+      "description": "Owned purchased item selected; equipment is not persisted before Save",
+      "status": "passed"
+    },
+    {
+      "name": "shop-equipped",
+      "description": "Purchased item is saved in the matching avatar slot (partial UAT-07-008)",
+      "status": "passed"
+    },
+    {
+      "name": "avatar-home",
+      "description": "Home reloads saved purchased outfit after returning from wardrobe",
+      "status": "passed"
+    },
+    {
+      "name": "avatar-reopened",
+      "description": "Reopened wardrobe retains saved equipment; exactly one purchase and no further coin deduction",
+      "status": "passed"
+    }
+  ],
+  "scope": "Guided phase shop. Human operates real UI (including OTP); automatic API/state assertions and screenshots. Only checkpoint assertions are checked. Negative cases and other parts of the 88-case plan remain Not Run. No account deletion."
+}
