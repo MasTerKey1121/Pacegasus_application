@@ -2,6 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../models/run_result.dart';
+import '../../models/run_reward.dart';
+import '../../providers/wallet_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
@@ -221,6 +223,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           children: List.generate(_moods.length, (i) {
                             final active = result.moodIndex == i;
                             return GestureDetector(
+                              key: Key('run-mood-$i'),
                               onTap: () => setState(() => result.moodIndex = i),
                               child: Container(
                                 width: 48,
@@ -322,7 +325,9 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
 
                           setState(() => _isSubmitting = true);
                           try {
-                            await ref.read(rpeApiProvider).logRunFeedback(
+                            final response = await ref
+                                .read(rpeApiProvider)
+                                .logRunFeedback(
                                   runningSessionId: sessionId,
                                   durationMinutes: result.duration.inMinutes
                                       .clamp(1, 1440)
@@ -336,14 +341,16 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                   painNote: painNote,
                                 );
                             if (!context.mounted) return;
+                            final reward = RunReward.fromFeedback(response);
+                            ref.invalidate(walletProvider);
                             ref.read(userProvider).addRunStats(
                                 km: result.distanceKm, sessions: 1);
                             ref.read(missionProvider).setDone('run', true);
                             ref.read(runSetupProvider).reset();
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
-                                builder: (_) =>
-                                    const RewardScreen(coin: 20, exp: 50),
+                                builder: (_) => RewardScreen(
+                                    coin: reward?.coins, exp: reward?.exp),
                               ),
                             );
                           } on ApiException catch (error) {

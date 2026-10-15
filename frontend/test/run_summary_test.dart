@@ -9,6 +9,10 @@ import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/models/run_result.dart';
 import 'package:pacegasus/providers/run_provider.dart';
 import 'package:pacegasus/providers/run_setup_provider.dart';
+import 'package:pacegasus/providers/rpe_provider.dart';
+import 'package:pacegasus/providers/user_provider.dart';
+import 'package:pacegasus/models/run_reward.dart';
+import 'package:pacegasus/services/rpe_api.dart';
 import 'package:pacegasus/screens/run/run_summary_screen.dart';
 import 'package:pacegasus/services/api_client.dart';
 import 'package:pacegasus/services/quest_api.dart';
@@ -55,6 +59,22 @@ class _Sessions extends RunningSessionApi {
       {'data': {}};
 }
 
+class _Feedback extends RpeApi {
+  _Feedback(this.response) : super(ApiClient());
+  final Map<String, dynamic> response;
+  @override
+  Future<Map<String, dynamic>> logRunFeedback({
+    required String runningSessionId,
+    required int durationMinutes,
+    required int rpeScore,
+    required int stressLevel,
+    required String mood,
+    required bool hasPain,
+    String? painNote,
+  }) async =>
+      response;
+}
+
 void main() {
   setUp(() {
     GoogleFonts.config.allowRuntimeFetching = false;
@@ -76,7 +96,10 @@ void main() {
       routePoints: points);
 
   Future<void> open(WidgetTester tester, _Sessions api,
-      {RunResult? result, String environment = 'park'}) async {
+      {RunResult? result,
+      String environment = 'park',
+      RpeApi? feedback,
+      UserData? user}) async {
     tester.view.physicalSize = const Size(320, 700);
     tester.view.devicePixelRatio = 1;
     addTearDown(tester.view.resetPhysicalSize);
@@ -86,6 +109,8 @@ void main() {
       ..environment = environment;
     await tester.pumpWidget(ProviderScope(
         overrides: [
+          if (feedback != null) rpeApiProvider.overrideWithValue(feedback),
+          if (user != null) userProvider.overrideWith((ref) => user),
           runningSessionApiProvider.overrideWithValue(api),
           runSetupProvider.overrideWith((ref) => setup)
         ],
@@ -93,6 +118,61 @@ void main() {
             theme: ThemeData.dark(),
             home: RunSummaryScreen(result: result ?? snapshot()))));
     await tester.pumpAndSettle();
+  }
+
+  test('missing reward amounts never fall back to made-up rewards', () {
+    expect(RunReward.fromFeedback({'data': {}}), isNull);
+    expect(
+        RunReward.fromFeedback({
+          'data': {
+            'reward': {'awarded': true}
+          }
+        }),
+        isNull);
+  });
+
+  test('an API reward marked not awarded displays zero', () {
+    final reward = RunReward.fromFeedback({
+      'data': {
+        'reward': {'awarded': false, 'coins': 20, 'exp': 50}
+      }
+    });
+    expect(reward!.coins, 0);
+    expect(reward.exp, 0);
+  });
+
+  for (final earnings in [17, 0]) {
+    testWidgets(
+        'post-run screen shows confirmed earnings $earnings without adding them again',
+        (tester) async {
+      final user = UserData();
+      final initialCoins = user.coin;
+      final initialExp = user.exp;
+      final result = snapshot()
+        ..rpe = 4
+        ..stressLevel = 3
+        ..moodIndex = 3
+        ..hasInjury = false;
+      await open(tester, _Sessions(),
+          result: result,
+          user: user,
+          feedback: _Feedback({
+            'data': {
+              'reward': {
+                'awarded': true,
+                'coins': earnings,
+                'exp': earnings * 2
+              }
+            }
+          }));
+      await tester.tap(find.text('ส่งข้อมูล'));
+      await tester.pumpAndSettle();
+      expect(find.text('+$earnings 🌙'), findsOneWidget);
+      expect(find.text('+${earnings * 2} ⭐'), findsOneWidget);
+      expect(user.coin, initialCoins);
+      expect(user.exp, initialExp);
+      expect(tester.takeException(), isNull);
+    });
   }
 
   test('stop preserves recorded GPS coordinates in the result', () async {

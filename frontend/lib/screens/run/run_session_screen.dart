@@ -693,6 +693,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                       Row(
                         children: [
                           GestureDetector(
+                            key: const Key('run-pause-resume'),
                             onTap: !run.isRunning || run.isStopping
                                 ? null
                                 : () => ref.read(runProvider).togglePause(),

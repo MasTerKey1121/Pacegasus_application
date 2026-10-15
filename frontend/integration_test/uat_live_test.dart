@@ -24,6 +24,13 @@ import 'package:pacegasus/screens/training/training_schedule_screen.dart';
 import 'package:pacegasus/providers/training_plan_provider.dart';
 import 'package:pacegasus/models/training_models.dart';
 import 'package:pacegasus/widgets/common.dart';
+import 'package:pacegasus/providers/run_provider.dart';
+import 'package:pacegasus/providers/run_setup_provider.dart';
+import 'package:pacegasus/models/training_date.dart';
+import 'package:pacegasus/screens/run/run_select_screen.dart';
+import 'package:pacegasus/screens/run/run_session_screen.dart';
+import 'package:pacegasus/screens/run/run_summary_screen.dart';
+import 'package:pacegasus/screens/run/reward_screen.dart';
 
 const phase = String.fromEnvironment('UAT_PHASE', defaultValue: 'profile');
 const email = String.fromEnvironment('UAT_EMAIL');
@@ -339,8 +346,142 @@ void main() {
           step = 'run';
           final baseline = await StatsApi(api).history();
           final oldIds = baseline.map((r) => r.id).toSet();
-          await state(
-              'เริ่มวิ่งจากแผนวันนี้ ใช้ GPS จริงหรือลู่วิ่ง พัก/วิ่งต่อ แล้วจบและบันทึก RPE; ไม่จำลอง GPS ให้เอง');
+          final beforeReward = await read('/api/users/me/progress');
+          final observedIssues = <String>[];
+          await bridge('/scope', {
+            'description':
+                'Real UI treadmill workflow using synthetic 0.10 km UAT input and real elapsed time. '
+                    'Checks start/pause/resume/finish, feedback, reward consistency, stats/history and ranking. '
+                    'This is not a physical run or a GPS accuracy test. Other UAT cases remain Not Run.'
+          });
+          await state('ทดสอบลู่วิ่งด้วยระยะจำลอง 0.10 กม. ผ่านหน้าจอจริง',
+              status: 'running');
+          await waitUntil(
+              () async => !container.read(programProvider).isLoading,
+              'Home plan loads',
+              seconds: 60);
+          expect(container.read(programProvider).todayQuest, isNotNull);
+          await tap(find.byKey(const Key('home-primary')));
+          await waitUntil(
+              () async =>
+                  find.byType(RunTypeSelectScreen).evaluate().isNotEmpty,
+              'Run environment selector opens');
+          await tap(find.text('Treadmill'));
+          await waitUntil(
+              () async => !container.read(runSetupProvider).isLoadingQuests,
+              'Treadmill quests load',
+              seconds: 60);
+          final questSetup = container.read(runSetupProvider);
+          if (questSetup.errorMessage != null &&
+              questSetup.errorMessage!
+                  .contains('ไม่พบ side quest สำหรับ treadmill x easy') &&
+              questSetup.sideQuests.isEmpty) {
+            await bridge('/checkpoint', {
+              'name': 'treadmill-side-quests-unavailable',
+              'description':
+                  'Blocked: real API has no side quests for treadmill/easy; run lifecycle continues without side quests',
+              'status': 'blocked',
+              'png': base64Encode(await binding
+                  .takeScreenshot('treadmill-side-quests-unavailable')),
+            });
+          } else {
+            expect(questSetup.errorMessage, isNull);
+          }
+          await capture('run-environment',
+              'Treadmill selected; quest lookup finished before start; absent quest data reported separately; synthetic input disclosed');
+          await tap(find.widgetWithText(GradientButton, 'เริ่มต้นการวิ่ง'));
+          await waitUntil(
+              () async =>
+                  find.byType(RunSessionScreen).evaluate().isNotEmpty &&
+                  container.read(runProvider).isRunning,
+              'Treadmill countdown finishes');
+          final setup = container.read(runSetupProvider);
+          final sessionId = setup.sessionId;
+          expect(sessionId, isNotNull);
+          final active = await read('/api/running-sessions/$sessionId');
+          expect(active['status'], 'in_progress');
+          expect(active['environment'], 'treadmill');
+          final runState = container.read(runProvider);
+          await tester.pump(const Duration(seconds: 8));
+          await tap(find.byKey(const Key('run-pause-resume')));
+          expect(runState.isPaused, isTrue);
+          final pausedAt = runState.elapsedSeconds;
+          await tester.pump(const Duration(seconds: 3));
+          expect(runState.elapsedSeconds, pausedAt);
+          await capture('run-paused',
+              'Real session is in progress; pause stops elapsed time for three seconds');
+          await tap(find.byKey(const Key('run-pause-resume')));
+          expect(runState.isPaused, isFalse);
+          await tester.pump(const Duration(seconds: 5));
+          expect(runState.elapsedSeconds, greaterThan(pausedAt));
+          await tap(find.widgetWithText(GradientButton, '■ จบการวิ่ง'));
+          await tap(find.widgetWithText(TextButton, 'วิ่งต่อ'));
+          expect(runState.isRunning, isTrue);
+          await tap(find.widgetWithText(GradientButton, '■ จบการวิ่ง'));
+          final distanceField = find.descendant(
+              of: find.byType(AlertDialog), matching: find.byType(TextField));
+          await tester.enterText(distanceField, '0.10');
+          await tap(find.widgetWithText(FilledButton, 'จบการวิ่ง'));
+          await waitUntil(
+              () async => find.byType(RunSummaryScreen).evaluate().isNotEmpty,
+              'Completed session opens summary');
+          await waitUntil(
+              () async =>
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Summary loads actual session detail',
+              seconds: 60);
+          expect(runState.lastResult?.distanceKm, .10);
+          expect(find.text('0.10'), findsWidgets);
+          final submit = find.widgetWithText(GradientButton, 'ส่งข้อมูล');
+          expect(tester.widget<GradientButton>(submit).onTap, isNull);
+          await capture('run-summary',
+              'Summary shows entered 0.10 km; feedback incomplete so Submit disabled');
+          var expectedRpe = 0;
+          for (final label in ['ความหนัก RPE', 'ความเครียด']) {
+            final slider = find.descendant(
+                of: find.byWidgetPredicate(
+                    (w) => w is LabeledSlider && w.label == label),
+                matching: find.byType(Slider));
+            await tester.ensureVisible(slider);
+            await tester.pump(const Duration(milliseconds: 300));
+            await tester.tapAt(tester.getCenter(slider));
+            await tester.pump(const Duration(milliseconds: 300));
+            if (label == 'ความหนัก RPE') {
+              expectedRpe = tester.widget<Slider>(slider).value.round();
+            }
+          }
+          await tap(find.byKey(const Key('run-mood-3')));
+          await tap(find.text('ไม่มี'));
+          expect(tester.widget<GradientButton>(submit).onTap, isNotNull);
+          await capture('run-feedback',
+              'RPE/stress selected, good mood and no pain; Submit enabled');
+          await tap(submit);
+          await waitUntil(
+              () async => find.byType(RewardScreen).evaluate().isNotEmpty,
+              'Feedback saves and reward screen opens');
+          final afterReward = await read('/api/users/me/progress');
+          final rewardView =
+              tester.widget<RewardScreen>(find.byType(RewardScreen));
+          final coinDelta = (afterReward['coinBalance'] as num) -
+              (beforeReward['coinBalance'] as num);
+          if (coinDelta != rewardView.coin) {
+            observedIssues.add(
+                'Reward screen claims ${rewardView.coin} coins but server coin delta is $coinDelta');
+            await bridge('/checkpoint', {
+              'name': 'run-reward-mismatch',
+              'description': observedIssues.last,
+              'status': 'failed',
+              'png': base64Encode(
+                  await binding.takeScreenshot('run-reward-mismatch'))
+            });
+          } else {
+            await capture('run-reward',
+                'Displayed coin reward matches actual server coin increase');
+          }
+          await tap(find.widgetWithText(GradientButton, 'กลับหน้าหลัก'));
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Reward returns Home');
           List<RunHistoryEntry> newRuns = [];
           await waitUntil(() async {
             newRuns = (await StatsApi(api).history())
@@ -351,18 +492,65 @@ void main() {
           expect(newRuns.length, 1,
               reason: 'Exactly one new completed run in this phase');
           final run = newRuns.single;
+          expect(run.id, sessionId);
+          expect(run.distance, .10);
+          expect(run.feedback?['rpeScore'], expectedRpe);
+          expect(run.feedback?['mood'], 'good');
+          expect(run.feedback?['hasPain'], isFalse);
           expect(run.distance, greaterThan(0));
           expect(run.seconds, greaterThan(0));
           final detail = await StatsApi(api).detail(run.id);
           expect(detail['status'], 'completed');
           expect(double.parse('${detail['distance_km']}'),
               closeTo(run.distance!, .001));
-          await onScreen(StatsScreen,
-              'เปิดหน้าสถิติ ตรวจรายการวิ่งที่เพิ่งจบและช่วงวันที่ให้ครอบคลุมรายการนั้น');
+          await tap(find.byKey(const Key('home-menu-toggle')));
+          await tap(find.text('สถิติ'));
+          await waitUntil(
+              () async =>
+                  find.byType(StatsScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Stats and history load',
+              seconds: 60);
+          final allRuns = await StatsApi(api).history();
+          final weekStats = RunStats(allRuns, 7, trainingToday());
+          expect(find.text('${weekStats.distance.toStringAsFixed(2)} กม.'),
+              findsWidgets);
+          expect(find.text('${weekStats.runs.length} ครั้ง'), findsWidgets);
+          expect(find.text(formatRunTime(weekStats.seconds)), findsWidgets);
+          final historyRow = find.byKey(Key('stats-run-${run.id}'));
+          await tester.scrollUntilVisible(historyRow, 300,
+              scrollable: find
+                  .descendant(
+                      of: find.byType(StatsScreen),
+                      matching: find.byType(Scrollable))
+                  .first);
+          await tester.pump(const Duration(milliseconds: 400));
           await capture('run-stats',
-              'Exactly one new completed run with positive distance/time and stored feedback; Stats screen opened (partial UAT-03-016/018)');
-          await onScreen(
-              LeaderboardScreen, 'กลับหน้าหลักแล้วเปิดดูอันดับบุคคล');
+              'Exactly one new completed session; stored feedback correct; Stats totals match API and new history row is visible');
+          await tap(historyRow);
+          await waitUntil(
+              () async => find.byTooltip('ปิด').evaluate().isNotEmpty,
+              'New run history detail opens');
+          await waitUntil(
+              () async =>
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'History detail loads',
+              seconds: 60);
+          await capture('run-history-detail',
+              'New treadmill history detail opened after loading real session data');
+          await tap(find.byTooltip('ปิด'));
+          await tester.pageBack();
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Return Home from stats');
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('อันดับ'));
+          await waitUntil(
+              () async =>
+                  find.byType(LeaderboardScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Individual rankings load',
+              seconds: 60);
           final ranks = await read('/api/leaderboard?scope=individual');
           expect(ranks['period']['timezone'], 'Asia/Bangkok');
           final entries = ranks['entries'] as List;
@@ -379,6 +567,92 @@ void main() {
               greaterThanOrEqualTo(run.distance!));
           await capture('run-ranking',
               'Ranking API returns Thai weekly period, descending Top 50 and own distance including new run; screen opened (partial UAT-03-020)');
+          expect(observedIssues, isEmpty,
+              reason:
+                  'All workflow checks ran; fix recorded reward inconsistencies before acceptance');
+          break;
+        case 'run-review':
+          step = 'run-review';
+          await bridge('/scope', {
+            'description':
+                'Review only: existing latest 0.10 km synthetic treadmill session. No new run or feedback submitted. '
+                    'Checks Stats totals, history detail and individual ranking. Earlier reward failure remains unresolved.'
+          });
+          final history = await StatsApi(api).history();
+          expect(history, isNotEmpty);
+          final run = history.first;
+          expect(run.environment, 'treadmill');
+          expect(run.distance, .10);
+          expect(run.feedback, isNotNull);
+          final detail = await StatsApi(api).detail(run.id);
+          expect(detail['status'], 'completed');
+          await tap(find.byKey(const Key('home-menu-toggle')));
+          await tap(find.text('สถิติ'));
+          await waitUntil(
+              () async =>
+                  find.byType(StatsScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Stats loads',
+              seconds: 60);
+          final totals = RunStats(history, 7, trainingToday());
+          expect(find.text('${totals.distance.toStringAsFixed(2)} กม.'),
+              findsWidgets);
+          expect(find.text('${totals.runs.length} ครั้ง'), findsWidgets);
+          expect(find.text(formatRunTime(totals.seconds)), findsWidgets);
+          await capture('run-stat-totals',
+              'Displayed seven-day distance, count and duration match real completed run history');
+          final historyRow = find.byKey(Key('stats-run-${run.id}'));
+          await tester.scrollUntilVisible(historyRow, 300,
+              scrollable: find
+                  .descendant(
+                      of: find.byType(StatsScreen),
+                      matching: find.byType(Scrollable))
+                  .first);
+          await capture('run-history',
+              'Existing recorded 0.10 km treadmill session appears in history; no duplicate run created');
+          await tap(historyRow);
+          await waitUntil(
+              () async =>
+                  find.byTooltip('ปิด').evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'History detail loads',
+              seconds: 60);
+          expect(find.text('ความหนัก RPE ${run.feedback!['rpeScore']} /10'),
+              findsOneWidget);
+          expect(find.text('อาการบาดเจ็บ: ไม่มี'), findsOneWidget);
+          await capture('run-history-detail',
+              'Recorded treadmill session detail displays stored RPE and no pain');
+          await tap(find.byTooltip('ปิด'));
+          await tester.pageBack();
+          await waitUntil(
+              () async => find.byType(HomeScreen).evaluate().isNotEmpty,
+              'Return Home');
+          await tap(find.byKey(const Key('home-shortcuts-toggle')));
+          await tap(find.text('อันดับ'));
+          await waitUntil(
+              () async =>
+                  find.byType(LeaderboardScreen).evaluate().isNotEmpty &&
+                  find.byType(CircularProgressIndicator).evaluate().isEmpty,
+              'Individual leaderboard loads',
+              seconds: 60);
+          final ranks = await read('/api/leaderboard?scope=individual');
+          expect(ranks['period']['timezone'], 'Asia/Bangkok');
+          final entries = ranks['entries'] as List;
+          expect(entries.length, lessThanOrEqualTo(50));
+          for (var i = 1; i < entries.length; i++) {
+            expect(
+                (entries[i - 1]['distanceKm'] as num).toDouble(),
+                greaterThanOrEqualTo(
+                    (entries[i]['distanceKm'] as num).toDouble()));
+          }
+          expect(ranks['myEntry']['uid'], uid);
+          expect((ranks['myEntry']['distanceKm'] as num).toDouble(),
+              greaterThanOrEqualTo(.10));
+          expect(find.text('อันดับของคุณ'), findsOneWidget);
+          await capture('run-ranking',
+              'Thai weekly individual ranking includes the existing run; own ranking section visible and API Top 50 ordered');
+          expect((await StatsApi(api).history()).length, history.length,
+              reason: 'Review must not create another run');
           break;
         case 'profile':
           step = 'profile';

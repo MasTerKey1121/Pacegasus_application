@@ -1,0 +1,47 @@
+{
+  "state": "failed",
+  "detail": "Phase run failed at run. See test assertion output; remaining steps were not run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "treadmill-side-quests-unavailable",
+      "description": "Blocked: real API has no side quests for treadmill/easy; run lifecycle continues without side quests",
+      "status": "blocked"
+    },
+    {
+      "name": "run-environment",
+      "description": "Treadmill selected; quest lookup finished before start; absent quest data reported separately; synthetic input disclosed",
+      "status": "passed"
+    },
+    {
+      "name": "run-paused",
+      "description": "Real session is in progress; pause stops elapsed time for three seconds",
+      "status": "passed"
+    },
+    {
+      "name": "run-summary",
+      "description": "Summary shows entered 0.10 km; feedback incomplete so Submit disabled",
+      "status": "passed"
+    },
+    {
+      "name": "run-feedback",
+      "description": "RPE/stress selected, good mood and no pain; Submit enabled",
+      "status": "passed"
+    },
+    {
+      "name": "run-reward-mismatch",
+      "description": "Reward screen claims 20 coins but server coin delta is 5",
+      "status": "failed"
+    },
+    {
+      "name": "failed-run",
+      "description": "Failure at run; see assertion output",
+      "status": "failed"
+    }
+  ],
+  "scope": "Real UI treadmill workflow using synthetic 0.10 km UAT input and real elapsed time. Checks start/pause/resume/finish, feedback, reward consistency, stats/history and ranking. This is not a physical run or a GPS accuracy test. Other UAT cases remain Not Run."
+}

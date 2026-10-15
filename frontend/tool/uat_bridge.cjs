@@ -69,11 +69,12 @@ http.createServer(async (req, res) => {
     const body = JSON.parse(Buffer.concat(chunks).toString());
     if (req.url === '/checkpoint') {
       if (!/^[a-z0-9_-]+$/.test(body.name)) throw Error('Invalid checkpoint name');
+      if (!['passed', 'failed', 'blocked', 'not_run'].includes(body.status)) throw Error('Invalid checkpoint status');
       const bytes = Buffer.from(body.png, 'base64');
       if (!bytes.subarray(0, 8).equals(Buffer.from([137,80,78,71,13,10,26,10]))) throw Error('Invalid PNG');
       fs.writeFileSync(path.join(output, 'screenshots', `${body.name}.png`), bytes);
       checkpoints.push({ name: body.name, description: body.description,
-        status: body.status === 'failed' ? 'failed' : 'passed' });
+        status: body.status });
       console.log(`CHECKPOINT ${body.name}: ${body.status || 'passed'}`);
     } else if (req.url === '/context') {
       if (typeof body.environment !== 'string' || !body.environment) throw Error('Missing environment');

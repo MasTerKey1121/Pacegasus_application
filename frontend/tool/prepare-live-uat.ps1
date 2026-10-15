@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('register-primary','setup-secondary','program','run','profile','primary-social','secondary-social','approve-club','verify-secondary','shop')]
+    [ValidateSet('register-primary','setup-secondary','program','run','run-review','profile','primary-social','secondary-social','approve-club','verify-secondary','shop')]
     [string]$Phase = 'register-primary',
     [string]$DeviceId = '',
     [string]$ApiBaseUrl = '',

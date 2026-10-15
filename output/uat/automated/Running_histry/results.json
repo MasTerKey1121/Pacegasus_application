@@ -1,0 +1,32 @@
+{
+  "state": "passed",
+  "detail": "Phase run-review completed: only listed assertions passed. Other UAT cases remain Not Run.",
+  "checkpoints": [
+    {
+      "name": "identity",
+      "description": "Expected account authenticated, onboarding complete, real public UID verified",
+      "status": "passed"
+    },
+    {
+      "name": "run-stat-totals",
+      "description": "Displayed seven-day distance, count and duration match real completed run history",
+      "status": "passed"
+    },
+    {
+      "name": "run-history",
+      "description": "Existing recorded 0.10 km treadmill session appears in history; no duplicate run created",
+      "status": "passed"
+    },
+    {
+      "name": "run-history-detail",
+      "description": "Recorded treadmill session detail displays stored RPE and no pain",
+      "status": "passed"
+    },
+    {
+      "name": "run-ranking",
+      "description": "Thai weekly individual ranking includes the existing run; own ranking section visible and API Top 50 ordered",
+      "status": "passed"
+    }
+  ],
+  "scope": "Review only: existing latest 0.10 km synthetic treadmill session. No new run or feedback submitted. Checks Stats totals, history detail and individual ranking. Earlier reward failure remains unresolved."
+}

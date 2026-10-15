@@ -129,6 +129,7 @@ class _StatsScreenState extends ConsumerState<StatsScreen> {
                             ]))),
                   for (final run in stats.runs.take(_visible))
                     Padding(
+                        key: Key('stats-run-${run.id}'),
                         padding: const EdgeInsets.only(bottom: 10),
                         child: AppCard(
                             onTap: () => showDialog<void>(
