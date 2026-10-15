@@ -11,7 +11,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity-send.png) |
 | Invalid UID is rejected before any friendship request is created | passed | [friend-invalid-uid](screenshots/friend-invalid-uid.png) |
 | App displays server rejection when main account tries to add its own UID | passed | [friend-self-rejected](screenshots/friend-self-rejected.png) |
 | Lowercase secondary UID is accepted; pending request appears on Sent tab | passed | [friend-outgoing](screenshots/friend-outgoing.png) |
@@ -20,10 +19,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 | New single pending request to secondary remains ready for recipient acceptance | passed | [friend-resent](screenshots/friend-resent.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity-send.png)
 
 ### Invalid UID is rejected before any friendship request is created
 

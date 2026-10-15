@@ -11,24 +11,14 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity-profile-image.png) |
 | Profile loaded before changing photo with original name and UID | passed | [photo-before](screenshots/photo-before.png) |
-| Photo URL changed, uploaded image decoded successfully in UI, name and UID unchanged | passed | [photo-uploaded](screenshots/photo-uploaded.png) |
 | Reopened Profile loads the same new photo from server and image decodes successfully | passed | [photo-persisted](screenshots/photo-persisted.png) |
 
 ## Screenshots
 
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity-profile-image.png)
-
 ### Profile loaded before changing photo with original name and UID
 
 ![photo-before](screenshots/photo-before.png)
-
-### Photo URL changed, uploaded image decoded successfully in UI, name and UID unchanged
-
-![photo-uploaded](screenshots/photo-uploaded.png)
 
 ### Reopened Profile loads the same new photo from server and image decodes successfully
 

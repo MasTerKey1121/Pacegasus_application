@@ -11,15 +11,10 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity-verify.png) |
 | Primary sees secondary in My Friends after recipient acceptance; exactly one same friendship | passed | [friend-accepted-primary](screenshots/friend-accepted-primary.png) |
 | Accepted friendship no longer appears as outgoing pending request | passed | [friend-no-pending-after-accept](screenshots/friend-no-pending-after-accept.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity-verify.png)
 
 ### Primary sees secondary in My Friends after recipient acceptance; exactly one same friendship
 

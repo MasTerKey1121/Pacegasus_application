@@ -11,7 +11,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity.png) |
 | New week cannot save before required workouts are placed | passed | [schedule-incomplete](screenshots/schedule-incomplete.png) |
 | Three Easy Runs placed; Easy choice is removed at quota and an empty-day tap adds no fourth Easy | passed | [schedule-quota](screenshots/schedule-quota.png) |
 | Week contains Easy on days 1/3/5 and Long Run on day 7; Save enabled | passed | [schedule-ready](screenshots/schedule-ready.png) |
@@ -19,10 +18,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 | Reopened schedule matches saved day placement; API still has four quests | passed | [schedule-restored](screenshots/schedule-restored.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity.png)
 
 ### New week cannot save before required workouts are placed
 

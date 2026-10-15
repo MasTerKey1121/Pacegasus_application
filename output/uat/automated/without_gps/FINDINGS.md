@@ -24,7 +24,7 @@
 
 คาดหวัง: ตัวเลขบนหน้ารางวัลและยอดที่เพิ่มจริงต้องตรงกันตามกฎรางวัลที่ทีมรับรอง
 
-หลักฐาน: [ภาพรางวัล](screenshots/run-reward-mismatch.png), [ผล assertions](results.json)
+ประวัติผลรัน: [ผล assertions ต้นฉบับ](results.json) ภาพรางวัลที่ใช้ในรายงานนำเสนอหลังแก้อยู่ใน [รายงาน Park](../gps_run/UAT-REPORT.md)
 
 จุดอ้างอิงเพื่อให้ผู้พัฒนาตรวจ: หน้า RunSummary สร้าง RewardScreen ด้วยค่าคงที่ coin=20, exp=50 ขณะที่ rpeService.award ให้ coins=5, exp=5 ความไม่ตรงของ EXP เป็นข้อพบจากการอ่านโค้ด ยังไม่ได้วัด delta EXP เป็น assertion ในรอบนี้
 

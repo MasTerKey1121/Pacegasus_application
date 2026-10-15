@@ -11,7 +11,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity.png) |
 | Shop loads real catalog and displays current coin balance | passed | [shop-catalog](screenshots/shop-catalog.png) |
 | Insufficient coins rejected; balance, purchase history and ownership unchanged | passed | [shop-insufficient-coins](screenshots/shop-insufficient-coins.png) |
 | Selected product shows actual price and product preview | passed | [shop-product](screenshots/shop-product.png) |
@@ -23,10 +22,6 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 | Reopened wardrobe retains saved equipment; exactly one purchase and no further coin deduction | passed | [avatar-reopened](screenshots/avatar-reopened.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity.png)
 
 ### Shop loads real catalog and displays current coin balance
 

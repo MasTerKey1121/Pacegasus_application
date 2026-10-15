@@ -11,16 +11,11 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity.png) |
 | Leader sees secondary pending join request | passed | [club-incoming-request](screenshots/club-incoming-request.png) |
 | Approval adds secondary exactly once as member, one leader remains, pending request cleared | passed | [club-approved-request-cleared](screenshots/club-approved-request-cleared.png) |
 | Reloaded leader club screen shows approved secondary member; total two confirmed by API | passed | [club-two-members](screenshots/club-two-members.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity.png)
 
 ### Leader sees secondary pending join request
 

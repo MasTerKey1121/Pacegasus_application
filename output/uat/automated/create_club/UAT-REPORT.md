@@ -11,15 +11,10 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity.png) |
 | Empty club name rejected; no club created | passed | [club-invalid-name](screenshots/club-invalid-name.png) |
 | Main created expected club, leader role and exactly one member; UI and API agree | passed | [club-created](screenshots/club-created.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity.png)
 
 ### Empty club name rejected; no club created
 

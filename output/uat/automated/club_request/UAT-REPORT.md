@@ -11,15 +11,10 @@ Screenshots support only the stated assertions. A completed phase does not mean 
 
 | Step | Result | Evidence |
 | --- | --- | --- |
-| Expected account authenticated, onboarding complete, real public UID verified | passed | [identity](screenshots/identity.png) |
 | Secondary finds primary club by name in real search | passed | [club-search](screenshots/club-search.png) |
 | Secondary request pending, repeat button disabled, not a member and count remains one | passed | [club-request-pending](screenshots/club-request-pending.png) |
 
 ## Screenshots
-
-### Expected account authenticated, onboarding complete, real public UID verified
-
-![identity](screenshots/identity.png)
 
 ### Secondary finds primary club by name in real search
 
