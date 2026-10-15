@@ -19,6 +19,7 @@ class SettingsScreen extends ConsumerStatefulWidget {
 
 class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   bool _deleting = false;
+  bool _accountActionPending = false;
   bool _cancellingProgram = false;
 
   @override
@@ -28,23 +29,40 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
   }
 
   Future<void> _logout() async {
-    // เคลียร์ session ผ่าน authProvider (ยิง /api/auth/logout + ลบ refresh token
-    // ที่เก็บไว้ใน secure storage) แทนการ Navigator.push เฉยๆ แบบเดิม
-    await ref.read(authProvider.notifier).logout();
-    if (!mounted) return;
-    Navigator.of(context).pushAndRemoveUntil(
-        MaterialPageRoute(builder: (_) => const LoginScreen()),
-        (route) => false);
+    if (_accountActionPending) return;
+    setState(() => _accountActionPending = true);
+    try {
+      final confirmed = await _confirmAccountAction(
+        title: 'ออกจากระบบ?',
+        message:
+            'คุณต้องการออกจากระบบใช่ไหม? หากต้องการใช้งานอีกครั้ง คุณจะต้องเข้าสู่ระบบใหม่',
+        confirmLabel: 'ออกจากระบบ',
+      );
+      if (!confirmed || !mounted) return;
+      await ref.read(authProvider.notifier).logout();
+      if (!mounted) return;
+      Navigator.of(context).pushAndRemoveUntil(
+          MaterialPageRoute(builder: (_) => const LoginScreen()),
+          (route) => false);
+    } catch (_) {
+      if (mounted) showAppToast(context, 'ออกจากระบบไม่สำเร็จ ลองใหม่อีกครั้ง');
+    } finally {
+      if (mounted) setState(() => _accountActionPending = false);
+    }
   }
 
-  Future<void> _confirmDeleteAccount() async {
+  Future<bool> _confirmAccountAction({
+    required String title,
+    required String message,
+    required String confirmLabel,
+  }) async {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (ctx) => AlertDialog(
         backgroundColor: AppColors.bg2,
-        title: Text('ลบบัญชีถาวร?', style: AppText.heading(size: 17)),
+        title: Text(title, style: AppText.heading(size: 17)),
         content: Text(
-          'ข้อมูลทั้งหมดของคุณ (โปรไฟล์ ประวัติการวิ่ง เควส คอยน์) จะถูกลบและกู้คืนไม่ได้',
+          message,
           style: AppText.body(size: 13.5, color: AppColors.textSecondary),
         ),
         actions: [
@@ -55,17 +73,35 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
           ),
           TextButton(
             onPressed: () => Navigator.of(ctx).pop(true),
-            child: Text('ลบบัญชี',
+            child: Text(confirmLabel,
                 style: AppText.body(
                     color: AppColors.red1, weight: FontWeight.w700)),
           ),
         ],
       ),
     );
-    if (confirmed != true) return;
+    return confirmed == true;
+  }
 
-    setState(() => _deleting = true);
+  Future<void> _confirmDeleteAccount() async {
+    if (_accountActionPending) return;
+    setState(() => _accountActionPending = true);
     try {
+      final confirmed = await _confirmAccountAction(
+        title: 'ลบบัญชีถาวร?',
+        message:
+            'ข้อมูลทั้งหมดของคุณ (โปรไฟล์ ประวัติการวิ่ง เควส คอยน์) จะถูกลบและกู้คืนไม่ได้',
+        confirmLabel: 'ลบบัญชี',
+      );
+      if (!confirmed || !mounted) return;
+      final finalConfirmed = await _confirmAccountAction(
+        title: 'ยืนยันลบบัญชีอีกครั้ง',
+        message:
+            'นี่คือการยืนยันครั้งสุดท้าย บัญชีและข้อมูลทั้งหมดของคุณจะถูกลบถาวร และไม่สามารถกู้คืนได้ ต้องการดำเนินการต่อหรือไม่?',
+        confirmLabel: 'ยืนยันลบถาวร',
+      );
+      if (!finalConfirmed || !mounted) return;
+      setState(() => _deleting = true);
       final authApi = ref.read(authApiProvider);
       await authApi.deleteAccount();
       // The deleted account must not leave a resumable run on this device.
@@ -81,7 +117,12 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
     } catch (_) {
       if (mounted) showAppToast(context, 'ลบบัญชีไม่สำเร็จ ลองใหม่อีกครั้ง');
     } finally {
-      if (mounted) setState(() => _deleting = false);
+      if (mounted) {
+        setState(() {
+          _deleting = false;
+          _accountActionPending = false;
+        });
+      }
     }
   }
 
@@ -138,14 +179,14 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
             icon: Icons.logout_rounded,
             label: 'ออกจากระบบ',
             danger: true,
-            onTap: _logout,
+            onTap: _accountActionPending ? () {} : _logout,
           ),
           const SizedBox(height: 10),
           _MenuTile(
             icon: Icons.delete_forever_rounded,
             label: _deleting ? 'กำลังลบบัญชี...' : 'ลบบัญชี',
             danger: true,
-            onTap: _deleting ? () {} : _confirmDeleteAccount,
+            onTap: _accountActionPending ? () {} : _confirmDeleteAccount,
           ),
         ],
       ),
