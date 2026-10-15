@@ -125,8 +125,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
     final wallet = ref.watch(walletProvider);
-    final displayName =
-        ref.watch(authProvider).user?['displayName']?.toString().trim();
+    final account = ref.watch(authProvider).user;
+    final displayName = account?['displayName']?.toString().trim();
+    final avatarUrl = account?['avatarUrl']?.toString().trim();
     final name = displayName == null || displayName.isEmpty
         ? user.username
         : displayName;
@@ -269,8 +270,20 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 color: const Color(0xFF564573),
                                 borderRadius: BorderRadius.circular(16),
                                 border: Border.all(color: _accent, width: 1.5)),
-                            child: const Icon(Icons.person_outline,
-                                color: Colors.white)),
+                            padding: const EdgeInsets.all(1.5),
+                            child: ClipRRect(
+                                borderRadius: BorderRadius.circular(14.5),
+                                child: avatarUrl == null || avatarUrl.isEmpty
+                                    ? const Icon(Icons.person_outline,
+                                        color: Colors.white)
+                                    : Image.network(avatarUrl,
+                                        key: const Key('home-profile-image'),
+                                        width: double.infinity,
+                                        height: double.infinity,
+                                        fit: BoxFit.cover,
+                                        errorBuilder: (_, __, ___) =>
+                                            const Icon(Icons.person_outline,
+                                                color: Colors.white)))),
                         const SizedBox(width: 10),
                         Expanded(
                             child: Column(

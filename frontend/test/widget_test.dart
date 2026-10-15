@@ -220,6 +220,40 @@ void main() {
     await tester.pumpAndSettle();
   }
 
+  testWidgets(
+      'Home profile photo follows account changes and handles missing or failed images',
+      (tester) async {
+    await home(tester);
+    final profile = find.byKey(const Key('home-profile'));
+    final image = find.byKey(const Key('home-profile-image'));
+    expect(image, findsNothing);
+    expect(
+        find.descendant(
+            of: profile, matching: find.byIcon(Icons.person_outline)),
+        findsOneWidget);
+    final container =
+        ProviderScope.containerOf(tester.element(find.byType(HomeScreen)));
+    final auth = container.read(authProvider.notifier);
+    for (final url in [
+      'https://example.invalid/first.png',
+      'https://example.invalid/updated.png'
+    ]) {
+      auth.updateUser(
+          {...container.read(authProvider).user!, 'avatarUrl': url});
+      await tester.pumpAndSettle();
+      expect((tester.widget<Image>(image).image as NetworkImage).url, url);
+      // Widget tests reject HTTP: a failed image must keep a usable fallback.
+      expect(
+          find.descendant(
+              of: profile, matching: find.byIcon(Icons.person_outline)),
+          findsOneWidget);
+      expect(tester.takeException(), isNull);
+    }
+    auth.updateUser({...container.read(authProvider).user!, 'avatarUrl': '  '});
+    await tester.pumpAndSettle();
+    expect(image, findsNothing);
+  });
+
   double extent(WidgetTester tester) => tester
       .widget<DraggableScrollableSheet>(
           find.byKey(const Key('home-quest-sheet')))
