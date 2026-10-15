@@ -175,8 +175,7 @@ void main() {
       await tester.pumpAndSettle();
       expect(find.byType(TrainingScheduleScreen), findsNothing);
       expect(find.byType(HomeScreen), findsOneWidget);
-      expect(find.text(readFails ? 'ลองโหลดอีกครั้ง' : 'เริ่มวิ่ง'),
-          findsOneWidget);
+      expect(find.text('เริ่มวิ่ง'), findsOneWidget);
       expect(program.isScheduleSaved, isTrue);
       expect(api.writes, 1);
       expect(tester.takeException(), isNull);

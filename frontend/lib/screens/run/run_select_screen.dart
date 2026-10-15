@@ -96,7 +96,13 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
   Widget build(BuildContext context) {
     final setup = ref.watch(runSetupProvider);
     final program = ref.watch(programProvider);
-    final todayQuest = program.todayQuest;
+    final scheduledQuest = program.isRegistered &&
+            program.isScheduleSaved &&
+            program.currentWeekErrorMessage == null
+        ? program.todayQuest
+        : null;
+    final todayQuest =
+        scheduledQuest?['status'] == 'completed' ? null : scheduledQuest;
     final sessionType = todayQuest?['session_type']?.toString();
 
     return Scaffold(
@@ -199,17 +205,15 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                             );
                           }),
                       ],
-                      const SectionLabel(title: 'Main Quest วันนี้'),
-                      AppCard(
-                        child: todayQuest == null
-                            ? Text('วันนี้ไม่มีเควสในตารางฝึก',
-                                style: AppText.body(
-                                    size: 12, color: AppColors.textSecondary))
-                            : Text(
-                                '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
-                                style: AppText.heading(size: 13.5),
-                              ),
-                      ),
+                      if (todayQuest != null) ...[
+                        const SectionLabel(title: 'Main Quest วันนี้'),
+                        AppCard(
+                          child: Text(
+                            '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
+                            style: AppText.heading(size: 13.5),
+                          ),
+                        ),
+                      ],
                     ],
                   ),
                 ),

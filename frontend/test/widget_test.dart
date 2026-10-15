@@ -412,6 +412,7 @@ void main() {
     await tester.tap(find.byKey(const Key('home-primary')));
     await tester.pumpAndSettle();
     expect(find.byType(RunTypeSelectScreen), findsOneWidget);
+    expect(find.text('Main Quest วันนี้'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 
@@ -439,29 +440,35 @@ void main() {
     expect(find.text('เริ่มวิ่ง'), findsOneWidget);
   });
 
-  testWidgets(
-      'registration, schedule, rest and completion keep the correct next action',
-      (tester) async {
-    final program = _Program()..registered = false;
-    await home(tester, checkedIn: true, program: program);
-    expect(find.text('เลือกแผนซ้อม'), findsOneWidget);
-    program.registered = true;
-    program.scheduled = false;
-    program.notifyListeners();
-    await tester.pumpAndSettle();
-    expect(find.text('จัดตารางซ้อม'), findsWidgets);
-    program.scheduled = true;
-    program.quest = null;
-    program.notifyListeners();
-    await tester.pumpAndSettle();
-    expect(find.text('วันพักของคุณ'), findsOneWidget);
-    expect(find.text('เริ่มวิ่ง'), findsNothing);
-    program.quest = {'status': 'completed', 'session_type': 'easy'};
-    program.notifyListeners();
-    await tester.pumpAndSettle();
-    expect(find.text('ทำแผนวันนี้สำเร็จ'), findsOneWidget);
-    expect(find.text('เริ่มวิ่ง'), findsNothing);
-  });
+  for (final mode in [
+    'unregistered',
+    'unscheduled',
+    'rest',
+    'completed',
+    'unavailable'
+  ]) {
+    testWidgets('runner can start without a daily quest ($mode)',
+        (tester) async {
+      final program = _Program();
+      if (mode == 'unregistered') program.registered = false;
+      if (mode == 'unscheduled') program.scheduled = false;
+      if (mode == 'rest') program.quest = null;
+      if (mode == 'completed') {
+        program.quest = {'status': 'completed', 'session_type': 'tempo'};
+      }
+      if (mode == 'unavailable') program.currentWeekErrorMessage = 'offline';
+      await home(tester,
+          checkedIn: true, program: program, size: const Size(800, 1000));
+      expect(find.text('เริ่มวิ่ง'), findsOneWidget);
+      expect(find.text('ภารกิจประจำวัน'), findsNothing);
+      expect(find.text('ภารกิจของฉัน'), findsNothing);
+      await tester.tap(find.byKey(const Key('home-primary')));
+      await tester.pumpAndSettle();
+      expect(find.byType(RunTypeSelectScreen), findsOneWidget);
+      expect(find.text('Main Quest วันนี้'), findsNothing);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   testWidgets('profile displays and copies public UID, not database id',
       (tester) async {

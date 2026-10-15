@@ -106,16 +106,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   }
 
   void _primaryAction() {
-    final program = ref.read(programProvider);
     if (!ref.read(wellnessProvider).completedToday) {
       _push(const DailyWellnessScreen());
-    } else if (program.currentWeekErrorMessage != null) {
-      program.restore(force: true);
-    } else if (!program.isRegistered || !program.isScheduleSaved) {
-      _schedule();
-    } else if (program.todayQuest == null ||
-        program.todayQuest?['status'] == 'completed') {
-      _schedule();
     } else {
       _push(const RunTypeSelectScreen());
     }
@@ -134,51 +126,45 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     final wellness = ref.watch(wellnessProvider);
     final program = ref.watch(programProvider);
     final missions = ref.watch(missionProvider);
-    final quest = program.todayQuest;
+    final quest = program.isRegistered &&
+            program.isScheduleSaved &&
+            program.currentWeekErrorMessage == null
+        ? program.todayQuest
+        : null;
     final done = quest?['status'] == 'completed';
-    final ready = wellness.completedToday &&
-        program.isRegistered &&
-        program.isScheduleSaved;
+    final ready = wellness.completedToday;
     final label = program.isLoading
         ? 'กำลังโหลด…'
         : !wellness.completedToday
             ? 'เช็กอินก่อนวิ่ง'
-            : program.currentWeekErrorMessage != null
-                ? 'ลองโหลดอีกครั้ง'
-                : !program.isRegistered
-                    ? 'เลือกแผนซ้อม'
-                    : !program.isScheduleSaved
-                        ? 'จัดตารางซ้อม'
-                        : quest == null || done
-                            ? 'ดูแผนซ้อม'
-                            : 'เริ่มวิ่ง';
+            : 'เริ่มวิ่ง';
     final title = program.isLoading
         ? 'กำลังโหลดแผนวันนี้…'
         : !wellness.completedToday
             ? 'แผนวันนี้รอคุณอยู่'
             : program.currentWeekErrorMessage != null
-                ? 'โหลดแผนไม่สำเร็จ'
+                ? 'วิ่งอิสระ'
                 : !program.isRegistered
-                    ? 'เริ่มการเดินทางครั้งใหม่'
+                    ? 'วิ่งอิสระ'
                     : !program.isScheduleSaved
-                        ? 'จัดตารางซ้อมของคุณ'
+                        ? 'วิ่งอิสระ'
                         : done
                             ? 'ทำแผนวันนี้สำเร็จ'
                             : quest == null
-                                ? 'วันพักของคุณ'
+                                ? 'วิ่งอิสระ'
                                 : _questLabel(quest);
     final hint = !wellness.completedToday
         ? 'เริ่มจากเช็กความพร้อมของวันนี้'
         : program.currentWeekErrorMessage != null
-            ? 'แตะเพื่อลองโหลดข้อมูลอีกครั้ง'
+            ? 'โหลดแผนไม่สำเร็จ แต่ยังเริ่มวิ่งอิสระได้'
             : !program.isRegistered
-                ? 'เลือกโปรแกรมให้เหมาะกับเป้าหมาย'
+                ? 'เริ่มวิ่งได้โดยไม่ต้องลงแผนซ้อม'
                 : !program.isScheduleSaved
-                    ? 'บันทึกตารางก่อนเริ่มการวิ่ง'
+                    ? 'เริ่มวิ่งได้โดยไม่ต้องลงตารางซ้อม'
                     : done
-                        ? 'วันนี้ทำสำเร็จแล้ว พักให้เต็มที่'
+                        ? 'วันนี้ทำสำเร็จแล้ว สามารถวิ่งอิสระต่อได้'
                         : quest == null
-                            ? 'วันนี้ไม่มีเควสในตารางฝึก'
+                            ? 'วันนี้ไม่มีภารกิจตามแผน เริ่มวิ่งอิสระได้'
                             : 'พร้อมออกไปทำเป้าหมายวันนี้';
 
     return PopScope(
@@ -422,7 +408,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   children: [
-                                Text('แผนวันนี้',
+                                Text(
+                                    quest == null
+                                        ? 'การวิ่งวันนี้'
+                                        : 'แผนวันนี้',
                                     style:
                                         AppText.body(size: 10, color: _accent)),
                                 const SizedBox(height: 8),
@@ -451,7 +440,10 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 ],
                               ])),
                           const SizedBox(height: 16),
-                          Text('ภารกิจประจำวัน',
+                          Text(
+                              quest == null || done
+                                  ? 'กิจกรรมวันนี้'
+                                  : 'ภารกิจประจำวัน',
                               style: AppText.heading(size: 14)),
                           if (!wellness.completedToday)
                             _taskRow(
@@ -459,11 +451,12 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 'เช็กอินสุขภาพ',
                                 'เช็กความพร้อมก่อนวิ่ง',
                                 () => _push(const DailyWellnessScreen())),
-                          _taskRow(
-                              Icons.flag_outlined,
-                              'ภารกิจของฉัน',
-                              'ทำครบแล้ว ${missions.doneCount} / ${missions.missions.length}',
-                              () => _push(const DailyMissionsScreen())),
+                          if (quest != null && !done)
+                            _taskRow(
+                                Icons.flag_outlined,
+                                'ภารกิจของฉัน',
+                                'ทำครบแล้ว ${missions.doneCount} / ${missions.missions.length}',
+                                () => _push(const DailyMissionsScreen())),
                           _taskRow(
                               Icons.calendar_month_outlined,
                               'จัดตารางซ้อม',

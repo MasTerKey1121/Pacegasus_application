@@ -61,6 +61,7 @@ class TestQuests extends QuestApi {
 class TestSessions extends RunningSessionApi {
   TestSessions() : super(ApiClient(baseUrl: 'http://localhost'));
   int starts = 0;
+  String? lastSessionType;
   int completions = 0;
 
   @override
@@ -73,6 +74,7 @@ class TestSessions extends RunningSessionApi {
     List<String> sideQuestInstanceIds = const [],
   }) async {
     starts++;
+    lastSessionType = sessionType;
     expect(sideQuestInstanceIds, isEmpty);
     return {
       'data': {'id': 'run-1'}
@@ -96,6 +98,23 @@ class TestSessions extends RunningSessionApi {
 }
 
 void main() {
+  test('free run starts without a program or daily quest', () async {
+    final quests = TestQuests()..pending = Completer<Map<String, dynamic>>();
+    quests.pending!.complete({
+      'data': {'quests': []}
+    });
+    final sessions = TestSessions();
+    final setup = RunSetupNotifier(quests, sessions);
+    addTearDown(setup.dispose);
+    await setup.selectEnvironment(env: 'treadmill', mainQuestSessionType: null);
+    expect(await setup.startRun(mainQuestSessionType: null), isTrue);
+    expect(sessions.starts, 1);
+    expect(sessions.lastSessionType, 'easy');
+    expect(quests.started, isEmpty);
+    expect(setup.activeSideQuests, isEmpty);
+    expect(setup.sessionId, 'run-1');
+  });
+
   test(
       'all quests are available; only an explicitly completed quest earns reward',
       () async {
