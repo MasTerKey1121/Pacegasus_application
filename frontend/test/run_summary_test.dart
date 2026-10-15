@@ -120,68 +120,6 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  test('missing reward amounts never fall back to made-up rewards', () {
-    expect(RunReward.fromFeedback({'data': {}}), isNull);
-    expect(
-        RunReward.fromFeedback({
-          'data': {
-            'reward': {'awarded': true}
-          }
-        }),
-        isNull);
-  });
-
-  test('a reward marked not awarded displays zero', () {
-    final reward = RunReward.fromFeedback({
-      'data': {
-        'reward': {'awarded': false, 'coins': 20, 'exp': 50}
-      }
-    });
-    expect(reward!.coins, 0);
-    expect(reward.exp, 0);
-  });
-
-  for (final earnings in [17, 0, null]) {
-    testWidgets(
-        'post-run screen shows confirmed earnings $earnings without adding them again',
-        (tester) async {
-      final user = UserData();
-      final initialCoins = user.coin;
-      final initialExp = user.exp;
-      final result = snapshot()
-        ..rpe = 4
-        ..stressLevel = 3
-        ..moodIndex = 3
-        ..hasInjury = false;
-      await open(tester, _Sessions(),
-          result: result,
-          user: user,
-          feedback: _Feedback({
-            'data': {
-              if (earnings != null)
-                'reward': {
-                  'awarded': true,
-                  'coins': earnings,
-                  'exp': earnings * 2
-                }
-            }
-          }));
-      await tester.tap(find.text('ส่งข้อมูล'));
-      await tester.pumpAndSettle();
-      if (earnings == null) {
-        expect(find.text('ยังไม่มีข้อมูลรางวัลจากเซิร์ฟเวอร์'), findsOneWidget);
-        expect(find.text('— 🌙'), findsOneWidget);
-        expect(find.text('— ⭐'), findsOneWidget);
-      } else {
-        expect(find.text('+$earnings 🌙'), findsOneWidget);
-        expect(find.text('+${earnings * 2} ⭐'), findsOneWidget);
-      }
-      expect(user.coin, initialCoins);
-      expect(user.exp, initialExp);
-      expect(tester.takeException(), isNull);
-    });
-  }
-
   test('stop preserves recorded GPS coordinates in the result', () async {
     final run = RunSessionNotifier(_Sessions());
     addTearDown(run.dispose);

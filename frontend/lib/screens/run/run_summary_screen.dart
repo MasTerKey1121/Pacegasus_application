@@ -223,6 +223,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           children: List.generate(_moods.length, (i) {
                             final active = result.moodIndex == i;
                             return GestureDetector(
+                              key: Key('run-mood-$i'),
                               onTap: () => setState(() => result.moodIndex = i),
                               child: Container(
                                 width: 48,

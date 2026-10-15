@@ -136,6 +136,38 @@ void main() {
     expect(program.currentWeekErrorMessage, isNull);
   });
 
+  test('legacy responses retain saved state only for the same program',
+      () async {
+    final api = TestApi([
+      {
+        'data': {
+          'userProgramId': 'plan-1',
+          'quests': [
+            {
+              'scheduled_date': trainingDateKey(trainingToday()),
+              'session_type': 'easy',
+              'status': 'pending',
+            }
+          ],
+        }
+      },
+      {
+        'data': {'userProgramId': 'plan-1', 'quests': []}
+      },
+      {
+        'data': {'userProgramId': 'plan-2', 'quests': []}
+      },
+    ]);
+    final program = notifier(api);
+    await program.restore();
+    expect(program.isScheduleSaved, isTrue);
+    expect(program.todayQuest, isNotNull);
+    await program.loadCurrentWeek();
+    expect(program.isScheduleSaved, isTrue);
+    await program.loadCurrentWeek();
+    expect(program.isScheduleSaved, isFalse);
+  });
+
   test('new registration creates once and loads the schedule', () async {
     final api = TestApi([ApiException(404, 'no plan'), activePlan]);
     final program = notifier(api);

@@ -7,17 +7,17 @@ class RunReward {
   static RunReward? fromFeedback(Map<String, dynamic> response) {
     final data = response['data'];
     if (data is! Map) return null;
-    final reward = data['reward'];
-    if (reward is! Map) return null;
-    if (reward['awarded'] == false) {
+    final total = data['reward'];
+    if (total is Map && total['awarded'] == false) {
       return const RunReward(coins: 0, exp: 0);
     }
-    if (reward['awarded'] == true &&
-        reward['coins'] is num &&
-        reward['exp'] is num) {
+    if (total is Map &&
+        total['awarded'] == true &&
+        total['coins'] is num &&
+        total['exp'] is num) {
       return RunReward(
-          coins: (reward['coins'] as num).toInt(),
-          exp: (reward['exp'] as num).toInt());
+          coins: (total['coins'] as num).toInt(),
+          exp: (total['exp'] as num).toInt());
     }
     return null;
   }
