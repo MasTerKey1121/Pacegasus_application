@@ -1,3 +1,15 @@
+/// A receipt from this process's successful Side Quest finish response.
+/// No EXP amount is inferred from the coin amount.
+class SideQuestRewardReceipt {
+  final String questId, sessionId, title;
+  final int coins;
+  const SideQuestRewardReceipt(
+      {required this.questId,
+      required this.sessionId,
+      required this.title,
+      required this.coins});
+}
+
 /// Rewards confirmed by the existing post-run feedback API.
 class RunReward {
   final int coins;

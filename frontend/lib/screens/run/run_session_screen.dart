@@ -576,9 +576,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final setup = ref.watch(runSetupProvider);
     final quests = setup.activeSideQuests;
     final daily = ref.watch(dailyQuestProvider);
-    final unfinishedSideQuests = quests.where((q) => !q.done).length;
-    final unfinishedMissions = unfinishedSideQuests +
-        (daily.quest != null && !daily.completed ? 1 : 0);
+    final totalMissions = quests.length + (daily.quest != null ? 1 : 0);
+    final completedMissions =
+        quests.where((q) => q.done).length + (daily.completed ? 1 : 0);
 
     return PopScope(
         canPop: !run.isRunning &&
@@ -701,7 +701,11 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                     ),
                                   ),
                                 ),
-                              if (!run.isRunning)
+                              if (!run.isRunning &&
+                                  !_draftClosed &&
+                                  !run.isStopping &&
+                                  run.finishError == null &&
+                                  run.lastResult == null)
                                 Positioned.fill(
                                   child: Container(
                                     color: Colors.black.withOpacity(.38),
@@ -771,13 +775,12 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                           size: 11.5,
                                           color: AppColors.textTertiary)),
                                   Text(
-                                    unfinishedMissions > 0
-                                        ? 'ค้าง $unfinishedMissions ภารกิจ'
-                                        : daily.loading
-                                            ? 'กำลังโหลดภารกิจ…'
-                                            : daily.error != null
-                                                ? 'ตรวจสถานะภารกิจ'
-                                                : 'ไม่มีภารกิจที่ค้างอยู่',
+                                    totalMissions == 0 && daily.loading
+                                        ? 'กำลังโหลดภารกิจ…'
+                                        : totalMissions == 0 &&
+                                                daily.error != null
+                                            ? 'ตรวจสถานะภารกิจ'
+                                            : 'สำเร็จ $completedMissions/$totalMissions ภารกิจ',
                                     textAlign: TextAlign.right,
                                     style: AppText.heading(size: 13.5),
                                   ),
@@ -1092,6 +1095,12 @@ class _MissionsMiniWindow extends ConsumerWidget {
                                       style: AppText.body(
                                           size: 11.5,
                                           color: AppColors.textSecondary)),
+                                if (setup.questSessionNotice(q.sideQuestId) !=
+                                    null)
+                                  Text(setup.questSessionNotice(q.sideQuestId)!,
+                                      style: AppText.body(
+                                          size: 11,
+                                          color: AppColors.textSecondary)),
                                 Text(
                                     q.done
                                         ? 'คุณสำเร็จภารกิจนี้แล้ว${q.confirmedCoins == null ? '' : ' · Side Quest ${q.confirmedCoins} coin (server)'}'
@@ -1122,6 +1131,9 @@ class _MissionActionButton extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final setup = ref.watch(runSetupProvider);
     final loading = setup.isCompletingQuest(quest.sideQuestId);
+    final available = ref.watch(runProvider).isRunning &&
+        !ref.watch(runProvider).isStopping &&
+        setup.canFinish(quest.sideQuestId);
 
     if (quest.done) {
       return const Icon(Icons.check_circle, color: AppColors.green1, size: 26);
@@ -1136,22 +1148,27 @@ class _MissionActionButton extends ConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: !ref.watch(runProvider).isRunning ||
-              ref.watch(runProvider).isStopping ||
-              !setup.canFinish(quest.sideQuestId)
+      onTap: !available
           ? null
           : () =>
               ref.read(runSetupProvider).completeSideQuest(quest.sideQuestId),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(
-          color: AppColors.purple2.withOpacity(.18),
+          color:
+              available ? AppColors.purple2.withOpacity(.18) : Colors.white10,
           borderRadius: BorderRadius.circular(999),
-          border: Border.all(color: AppColors.purple2),
+          border: Border.all(
+              color: available ? AppColors.purple2 : AppColors.border),
         ),
-        child: Text('จบภารกิจ',
+        child: Text(
+            setup.questSessionNotice(quest.sideQuestId) != null
+                ? 'รอบก่อน'
+                : 'จบภารกิจ',
             style: AppText.body(
-                size: 11.5, weight: FontWeight.w600, color: AppColors.purple2)),
+                size: 11.5,
+                weight: FontWeight.w600,
+                color: available ? AppColors.purple2 : AppColors.textTertiary)),
       ),
     );
   }

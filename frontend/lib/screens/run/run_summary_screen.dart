@@ -371,11 +371,16 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                             ref.read(userProvider).addRunStats(
                                 km: result.distanceKm, sessions: 1);
                             ref.read(missionProvider).setDone('run', true);
+                            final sideRewards = ref
+                                .read(runSetupProvider)
+                                .rewardsForSession(sessionId);
                             ref.read(runSetupProvider).reset();
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (_) => RewardScreen(
-                                    coin: reward?.coins, exp: reward?.exp),
+                                    coin: reward?.coins,
+                                    exp: reward?.exp,
+                                    sideRewards: sideRewards),
                               ),
                             );
                           } on ApiException catch (error) {

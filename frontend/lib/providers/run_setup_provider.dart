@@ -2,6 +2,7 @@ import 'dart:async';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/side_quest.dart';
+import '../models/run_reward.dart';
 import '../models/training_date.dart';
 import '../services/quest_api.dart';
 import '../services/api_client.dart';
@@ -72,6 +73,19 @@ class RunSetupNotifier extends ChangeNotifier {
   bool isLoadingQuests = false, isStarting = false;
   String? errorMessage;
   final Set<String> _completingIds = {};
+  final Map<String, SideQuestRewardReceipt> _confirmedRewards = {};
+  List<SideQuestRewardReceipt> rewardsForSession(String session) =>
+      List.unmodifiable(
+          _confirmedRewards.values.where((r) => r.sessionId == session));
+  String? questSessionNotice(String id) {
+    final rows = _daily.where((q) => q['instanceId'] == id);
+    if (rows.isEmpty || rows.first['done'] == true) return null;
+    final bound = rows.first['bound'];
+    return bound != null && bound != sessionId
+        ? 'ภารกิจนี้ผูกกับการวิ่งรอบก่อน'
+        : null;
+  }
+
   Future<void> _writes = Future.value();
   Set<String> get selectedInstanceIds => _daily
       .where((q) => q['done'] != true && q['bound'] == null)
@@ -336,12 +350,6 @@ class RunSetupNotifier extends ChangeNotifier {
       }
       _showDaily();
       await _persist();
-      if (_boundSession != null &&
-          _boundSession != sessionId &&
-          !dailyComplete) {
-        errorMessage =
-            'Side Quest ที่ค้างอยู่กับการวิ่งรอบเดิม ยังทำต่อในรอบใหม่ไม่ได้ · วิ่งอิสระต่อได้';
-      }
     } catch (e) {
       if (_alive && day == _day) {
         final noTemplates = sent &&
@@ -465,12 +473,6 @@ class RunSetupNotifier extends ChangeNotifier {
         }
       }
       _showDaily();
-      if (_boundSession != null &&
-          _boundSession != sessionId &&
-          !dailyComplete) {
-        errorMessage =
-            'Side Quest ที่ค้างอยู่กับการวิ่งรอบเดิม ยังทำต่อในรอบใหม่ไม่ได้ · วิ่งอิสระต่อได้';
-      }
       return true;
     } catch (e) {
       if (_alive) errorMessage = e.toString();
@@ -512,7 +514,17 @@ class RunSetupNotifier extends ChangeNotifier {
           (owner != null && result['userId']?.toString() != owner)) {
         throw StateError('ยังไม่ได้รับการยืนยันจาก server');
       }
-      completingSet.firstWhere((q) => q['instanceId'] == id)['done'] = true;
+      final completedQuest =
+          completingSet.firstWhere((q) => q['instanceId'] == id);
+      completedQuest['done'] = true;
+      final coins = result['coinAwarded'];
+      if (coins is num && coins.isFinite && coins >= 0) {
+        _confirmedRewards[id] = SideQuestRewardReceipt(
+            questId: id,
+            sessionId: session,
+            title: '${completedQuest['title']}',
+            coins: coins.toInt());
+      }
       onReward?.call();
       if (day != _day) {
         if (store != null && owner != null) {
@@ -573,6 +585,7 @@ class RunSetupNotifier extends ChangeNotifier {
     restoredRoute = [];
     activeSideQuests = [];
     sideQuestIds = [];
+    _confirmedRewards.clear();
     // Daily set/completed state survives new runs and feedback on the same day.
     notifyListeners();
   }

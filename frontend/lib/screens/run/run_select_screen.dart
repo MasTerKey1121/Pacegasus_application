@@ -2,6 +2,7 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
+import '../../models/side_quest.dart';
 import '../../providers/daily_quest_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/common.dart';
@@ -165,12 +166,11 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                           Text(setup.noSideQuestsMessage!,
                               style: AppText.body(
                                   size: 12, color: AppColors.textSecondary))
-                        else if (setup.dailyComplete)
-                          Text('ทำภารกิจเสร็จสิ้น',
-                              style: AppText.heading(size: 16))
                         else ...[
                           Text(
-                            'ทุกภารกิจพร้อมให้ทำระหว่างวิ่ง ทำอันไหนสำเร็จ ก็รับรางวัลของอันนั้น ไม่จำเป็นต้องทำครบทุกอัน',
+                            setup.dailyComplete
+                                ? 'คุณทำ Side Quest ของวันนี้สำเร็จแล้ว'
+                                : 'ทำ Side Quest ระหว่างวิ่ง รับรางวัลเฉพาะภารกิจที่สำเร็จ',
                             style: AppText.body(
                                 size: 12, color: AppColors.textSecondary),
                           ),
@@ -181,37 +181,11 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                                 style: AppText.body(
                                     size: 12, color: AppColors.textSecondary))
                           else
-                            ...setup.sideQuests.map((q) {
-                              return AppCard(
-                                child: Row(children: [
-                                  Text(q.icon ?? '🎯',
-                                      style: const TextStyle(fontSize: 20)),
-                                  const SizedBox(width: 10),
-                                  Expanded(
-                                    child: Column(
-                                      crossAxisAlignment:
-                                          CrossAxisAlignment.start,
-                                      children: [
-                                        Text(q.title,
-                                            style: AppText.heading(size: 13.5)),
-                                        Text(q.description,
-                                            style: AppText.body(
-                                                size: 11.5,
-                                                color:
-                                                    AppColors.textSecondary)),
-                                        Text(
-                                            setup.isDone(q.instanceId)
-                                                ? 'ทำภารกิจเสร็จสิ้น'
-                                                : 'รางวัลที่เสนอ ${q.coinReward} เหรียญ',
-                                            style: AppText.body(
-                                                size: 11,
-                                                color: AppColors.gold1)),
-                                      ],
-                                    ),
-                                  ),
-                                ]),
-                              );
-                            }),
+                            ...setup.sideQuests.map((q) => _SideQuestCard(
+                                quest: q,
+                                completed: setup.isDone(q.instanceId),
+                                notice:
+                                    setup.questSessionNotice(q.instanceId))),
                         ],
                       ],
                       const DailyQuestPanel(),
@@ -262,4 +236,77 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
       ),
     );
   }
+}
+
+class _SideQuestCard extends StatelessWidget {
+  const _SideQuestCard(
+      {required this.quest, required this.completed, this.notice});
+  final SideQuest quest;
+  final bool completed;
+  final String? notice;
+
+  @override
+  Widget build(BuildContext context) => Stack(children: [
+        Opacity(
+          opacity: completed ? .38 : 1,
+          child: AppCard(
+            child: Padding(
+              padding: EdgeInsets.only(bottom: completed ? 40 : 0),
+              child: Row(children: [
+                Text(quest.icon ?? '🎯', style: const TextStyle(fontSize: 20)),
+                const SizedBox(width: 10),
+                Expanded(
+                    child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                      Text(quest.title, style: AppText.heading(size: 13.5)),
+                      Text(quest.description,
+                          style: AppText.body(
+                              size: 11.5, color: AppColors.textSecondary)),
+                      if (!completed)
+                        Text('รางวัลที่เสนอ ${quest.coinReward} เหรียญ',
+                            style:
+                                AppText.body(size: 11, color: AppColors.gold1)),
+                      if (notice != null)
+                        Text(notice!,
+                            style: AppText.body(
+                                size: 11, color: AppColors.textSecondary)),
+                    ])),
+              ]),
+            ),
+          ),
+        ),
+        if (completed) ...[
+          Positioned.fill(
+              child: IgnorePointer(
+                  child: CustomPaint(
+            key: ValueKey('completed-quest-cross-${quest.instanceId}'),
+            painter: _CompletedQuestCross(),
+          ))),
+          Positioned(
+              left: 12,
+              right: 12,
+              bottom: 18,
+              child: Text('ทำภารกิจสำเร็จแล้ว',
+                  textAlign: TextAlign.center,
+                  style: AppText.heading(size: 18, color: AppColors.gold1))),
+        ],
+      ]);
+}
+
+class _CompletedQuestCross extends CustomPainter {
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = AppColors.textSecondary.withValues(alpha: .45)
+      ..strokeWidth = 2.5
+      ..strokeCap = StrokeCap.round;
+    canvas.drawLine(
+        const Offset(18, 14), Offset(size.width - 18, size.height - 50), paint);
+    canvas.drawLine(
+        Offset(size.width - 18, 14), Offset(18, size.height - 50), paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant _CompletedQuestCross oldDelegate) => false;
 }
