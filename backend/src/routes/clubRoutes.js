@@ -1,9 +1,20 @@
 const express = require('express');
 const clubController = require('../controllers/clubController');
 const { requireAuth } = require('../middleware/auth');
+const asyncHandler = require('../utils/asyncHandler');
+const { saveImage } = require('../services/clubImageService');
+const env = require('../config/env');
 
 const router = express.Router();
 router.use(requireAuth);
+router.post('/images', asyncHandler(async (req, res) => {
+  const id = await saveImage(req.body?.imageBase64);
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0].trim();
+  const protocol = forwardedProto === 'https' ? 'https' : req.protocol;
+  const baseUrl = (env.publicBaseUrl || `${protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const imageUrl = `${baseUrl}/api/club-images/${id}`;
+  res.status(201).json({ success: true, data: { imageUrl } });
+}));
 
 router.get('/', clubController.searchClubs);
 router.post('/', clubController.createClub);

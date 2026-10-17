@@ -11,6 +11,7 @@ const friendRoutes = require('./friendRoutes');
 const clubRoutes = require('./clubRoutes');
 const avatarRoutes = require('./avatarRoutes');
 const shopRoutes = require('./shopRoutes');
+const leaderboardRoutes = require('./leaderboardRoutes');
 
 const router = express.Router();
 
@@ -27,6 +28,7 @@ router.use('/friends', friendRoutes);
 router.use('/clubs', clubRoutes);
 router.use('/avatar', avatarRoutes);
 router.use('/shop', shopRoutes);
+router.use('/leaderboard', leaderboardRoutes);
 router.use('/', sideQuestRoutes);
 router.use('/quests', sideQuestRoutes);
 
