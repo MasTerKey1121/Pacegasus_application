@@ -288,7 +288,7 @@ class _SideQuestCard extends StatelessWidget {
               left: 12,
               right: 12,
               bottom: 18,
-              child: Text('ทำภารกิจสำเร็จแล้ว',
+              child: Text('ทำภารกิจเสริมของวันนี้สำเร็จแล้ว',
                   textAlign: TextAlign.center,
                   style: AppText.heading(size: 18, color: AppColors.gold1))),
         ],

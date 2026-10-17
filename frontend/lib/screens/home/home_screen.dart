@@ -8,7 +8,6 @@ import '../../providers/user_provider.dart';
 import '../../providers/progress_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/daily_quest_panel.dart';
-import '../../widgets/daily_side_quest_panel.dart';
 import '../../providers/daily_quest_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../profile/profile_screen.dart';
@@ -431,7 +430,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                               style: AppText.heading(size: 19)),
                           const SizedBox(height: 12),
                           const DailyQuestPanel(home: true),
-                          const DailySideQuestPanel(),
                           if (progress.hasError)
                             TextButton(
                                 onPressed: () =>
