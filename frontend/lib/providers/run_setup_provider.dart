@@ -49,6 +49,20 @@ class RunSetupNotifier extends ChangeNotifier {
   List<ActiveSideQuest> activeSideQuests = [];
   List<String> sideQuestIds = [];
   List<Map<String, dynamic>> _daily = [];
+  final Map<String, Map<String, dynamic>> _places = {};
+  String _viewEnvironment = 'park';
+  bool _hasLoadedPlaces = false;
+  Future<void>? _placeLoad;
+  Map<String, dynamic>? _unscopedLegacy;
+  String? noSideQuestsMessage;
+  String get _placeLabel => switch (_viewEnvironment) {
+        'park' => 'Park',
+        'road' => 'Road',
+        'city' => 'City',
+        'treadmill' => 'Treadmill',
+        'trail' => 'Trail',
+        _ => _viewEnvironment,
+      };
   String? _boundSession;
   bool _generationUnknown = false;
   bool canRetryQuests = false;
@@ -78,30 +92,96 @@ class RunSetupNotifier extends ChangeNotifier {
           q['activated'] == true &&
           q['done'] != true);
 
+  Map<String, dynamic> _currentPlace() => {
+        'environment': _viewEnvironment,
+        'quests': _daily.map((q) => Map<String, dynamic>.from(q)).toList(),
+        'boundSession': _boundSession,
+        'retryable': canRetryQuests,
+        'lastQuestErrorStatus': _lastQuestErrorStatus,
+        'generationUnknown': _generationUnknown,
+        'noQuests': noSideQuestsMessage != null,
+        'errorMessage': errorMessage,
+      };
+  void _rememberPlace() {
+    if (_hasLoadedPlaces) _places[_viewEnvironment] = _currentPlace();
+  }
+
+  Map<String, dynamic> _snapshot() => {
+        'version': 2,
+        'lastEnvironment': _viewEnvironment,
+        'places': _places.map(
+            (key, value) => MapEntry(key, Map<String, dynamic>.from(value))),
+        if (_unscopedLegacy != null) 'legacyUncertain': _unscopedLegacy,
+      };
+  void _displayPlace(String env) {
+    _viewEnvironment = env;
+    final place = _places[env] ?? const <String, dynamic>{};
+    _daily = (place['quests'] as List? ?? [])
+        .map((q) => Map<String, dynamic>.from(q as Map))
+        .toList();
+    _boundSession = place['boundSession']?.toString();
+    _generationUnknown = place['generationUnknown'] == true;
+    _lastQuestErrorStatus = (place['lastQuestErrorStatus'] as num?)?.toInt();
+    canRetryQuests = place['retryable'] == true;
+    _retryUnsentGeneration = false;
+    errorMessage = place['errorMessage']?.toString();
+    noSideQuestsMessage =
+        place['noQuests'] == true ? 'ขณะนี้ยังไม่มีเควสที่ $_placeLabel' : null;
+    _showDaily();
+  }
+
+  Future<void> _loadPlaces(String day) async {
+    if (_hasLoadedPlaces) return;
+    try {
+      await (_placeLoad ??= _readPlaces(day));
+    } catch (_) {
+      if (day == _day) _placeLoad = null;
+      rethrow;
+    }
+  }
+
+  Future<void> _readPlaces(String day) async {
+    if (_hasLoadedPlaces) return;
+    final cached = owner == null ? null : await store?.load(owner!, day);
+    if (!_alive || day != _day) return;
+    if (cached?['places'] is Map) {
+      for (final entry in (cached!['places'] as Map).entries) {
+        _places[entry.key.toString()] =
+            Map<String, dynamic>.from(entry.value as Map);
+      }
+      _unscopedLegacy = cached['legacyUncertain'] is Map
+          ? Map<String, dynamic>.from(cached['legacyUncertain'] as Map)
+          : null;
+    } else if (cached != null) {
+      final legacy = Map<String, dynamic>.from(cached);
+      final rows = legacy['quests'] as List? ?? [];
+      // The legacy release only had Park templates. Preserve successful IDs
+      // and completion flags, rather than generating a replacement set.
+      final knownEnvironment = legacy['environment']?.toString() ??
+          (rows.isNotEmpty ? 'park' : null);
+      if (knownEnvironment != null) {
+        _places[knownEnvironment] = legacy;
+      } else if (legacy['generationUnknown'] == true) {
+        _unscopedLegacy = legacy;
+      }
+    }
+    _hasLoadedPlaces = true;
+  }
+
   Future<void> restoreDaily() async {
     if (isLoadingQuests || isStarting || !_alive) return;
+    checkDay();
     final day = _day;
     try {
-      if (owner == null) return;
-      final cached = await store?.load(owner!, day);
-      if (!_alive ||
-          day != _day ||
-          cached == null ||
-          isLoadingQuests ||
-          isStarting) {
-        return;
-      }
-      _daily = (cached['quests'] as List)
-          .map((q) => Map<String, dynamic>.from(q as Map))
-          .toList();
-      _boundSession = cached['boundSession']?.toString();
-      _generationUnknown = cached['generationUnknown'] == true;
-      _lastQuestErrorStatus = (cached['lastQuestErrorStatus'] as num?)?.toInt();
-      _showDaily();
+      await _loadPlaces(day);
+      if (!_alive || day != _day || isLoadingQuests || isStarting) return;
+      _displayPlace(environment ??
+          (_places.containsKey('park') ? 'park' : _viewEnvironment));
       notifyListeners();
-    } catch (e) {
-      if (_alive) {
-        errorMessage = 'อ่าน Side Quest ที่เก็บไว้ไม่สำเร็จ: $e';
+    } catch (_) {
+      if (_alive && day == _day) {
+        canRetryQuests = true;
+        errorMessage = 'อ่าน Side Quest ที่เก็บไว้ไม่สำเร็จ กรุณาลองใหม่';
         notifyListeners();
       }
     }
@@ -110,6 +190,10 @@ class RunSetupNotifier extends ChangeNotifier {
   void checkDay() {
     if (_day == _today()) return;
     _day = _today();
+    _places.clear();
+    _hasLoadedPlaces = false;
+    _placeLoad = null;
+    _unscopedLegacy = null;
     _daily = [];
     sideQuests = [];
     activeSideQuests = [];
@@ -118,21 +202,17 @@ class RunSetupNotifier extends ChangeNotifier {
     canRetryQuests = false;
     _lastQuestErrorStatus = null;
     _retryUnsentGeneration = false;
+    noSideQuestsMessage = null;
     errorMessage =
         'วันใหม่แล้ว กรุณาเลือกประเภทการวิ่งเพื่อโหลด Side Quest ของวันนี้';
     notifyListeners();
   }
 
   Future<void> _persist() {
+    _rememberPlace();
     if (owner == null || store == null) return Future.value();
     final day = _day;
-    final snapshot = <String, dynamic>{
-      'quests': _daily.map((q) => Map<String, dynamic>.from(q)).toList(),
-      'boundSession': _boundSession,
-      'retryable': canRetryQuests,
-      'lastQuestErrorStatus': _lastQuestErrorStatus,
-      'generationUnknown': _generationUnknown
-    };
+    final snapshot = _snapshot();
     final next = _writes.then((_) => store!.save(owner!, day, snapshot));
     _writes = next.then((_) {}, onError: (Object _, StackTrace __) {});
     return next;
@@ -163,31 +243,40 @@ class RunSetupNotifier extends ChangeNotifier {
 
   Future<void> selectEnvironment(
       {required String env, required String? mainQuestSessionType}) async {
-    if (isLoadingQuests || isStarting) return;
+    if (!_alive || isLoadingQuests || isStarting || _completingIds.isNotEmpty) {
+      return;
+    }
     checkDay();
+    _rememberPlace();
     final day = _day;
     environment = env;
     sessionType = mainQuestSessionType;
     isLoadingQuests = true;
     canRetryQuests = false;
     errorMessage = null;
+    noSideQuestsMessage = null;
+    _displayPlace(env);
+    errorMessage = null;
+    canRetryQuests = false;
     var cacheLoaded = false;
     var sent = false;
     var received = false;
     notifyListeners();
     try {
-      final cached = owner == null ? null : await store?.load(owner!, day);
+      await _loadPlaces(day);
       if (!_alive || day != _day) return;
       cacheLoaded = true;
-      if (cached != null && _daily.isEmpty) {
-        _daily = (cached['quests'] as List)
-            .map((q) => Map<String, dynamic>.from(q as Map))
-            .toList();
-        _boundSession = cached['boundSession']?.toString();
-        _generationUnknown = cached['generationUnknown'] == true;
+      _displayPlace(env);
+      errorMessage = null;
+      final cached = _places[env];
+      // Old unattributed failures must not block places whose requests can
+      // safely return 404. Park is the only legacy place with created sets.
+      if (cached == null && env == 'park' && _unscopedLegacy != null) {
+        _generationUnknown = true;
         _lastQuestErrorStatus =
-            (cached['lastQuestErrorStatus'] as num?)?.toInt();
+            (_unscopedLegacy!['lastQuestErrorStatus'] as num?)?.toInt();
       }
+      if (noSideQuestsMessage != null) return;
       // A stored request marker is NOT evidence of quest completion. Reuse a
       // known set; only retry generation when an explicit pre-write rejection
       // or a locally unsent request proves no replacement is being created.
@@ -229,6 +318,8 @@ class RunSetupNotifier extends ChangeNotifier {
             .toList();
         received = true;
         _generationUnknown = false;
+        noSideQuestsMessage =
+            _daily.isEmpty ? 'ขณะนี้ยังไม่มีเควสที่ $_placeLabel' : null;
       }
       _showDaily();
       await _persist();
@@ -240,6 +331,28 @@ class RunSetupNotifier extends ChangeNotifier {
       }
     } catch (e) {
       if (_alive && day == _day) {
+        final noTemplates = sent &&
+            e is ApiException &&
+            e.statusCode == 404 &&
+            e.message.startsWith('ไม่พบ side quest สำหรับ $env x ');
+        if (noTemplates) {
+          _generationUnknown = false;
+          _lastQuestErrorStatus = 404;
+          _daily = [];
+          _boundSession = null;
+          canRetryQuests = false;
+          noSideQuestsMessage = 'ขณะนี้ยังไม่มีเควสที่ $_placeLabel';
+          errorMessage = null;
+          _showDaily();
+          try {
+            await _persist();
+          } catch (_) {
+            errorMessage =
+                'เก็บสถานะ Side Quest ในอุปกรณ์ไม่สำเร็จ กรุณาลองใหม่';
+            canRetryQuests = true;
+          }
+          return;
+        }
         final rejected = e is ApiException &&
             [400, 401, 403, 404, 422].contains(e.statusCode);
         if (cacheLoaded) {
@@ -362,6 +475,9 @@ class RunSetupNotifier extends ChangeNotifier {
     final day = _day;
     final session = sessionId!;
     final completingSet = _daily;
+    final completingEnvironment = _viewEnvironment;
+    _rememberPlace();
+    final completingSnapshot = _snapshot();
     _completingIds.add(id);
     errorMessage = null;
     notifyListeners();
@@ -387,11 +503,16 @@ class RunSetupNotifier extends ChangeNotifier {
       onReward?.call();
       if (day != _day) {
         if (store != null && owner != null) {
-          await store!.save(owner!, day, {
+          final places =
+              Map<String, dynamic>.from(completingSnapshot['places'] as Map);
+          places[completingEnvironment] = {
+            'environment': completingEnvironment,
             'quests': completingSet,
             'boundSession': session,
             'generationUnknown': false
-          });
+          };
+          await store!
+              .save(owner!, day, {...completingSnapshot, 'places': places});
         }
         return;
       }

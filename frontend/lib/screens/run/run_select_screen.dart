@@ -161,7 +161,11 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         const Center(child: CircularProgressIndicator())
                       else if (setup.environment != null) ...[
                         const SectionLabel(title: 'Side Quest วันนี้'),
-                        if (setup.dailyComplete)
+                        if (setup.noSideQuestsMessage != null)
+                          Text(setup.noSideQuestsMessage!,
+                              style: AppText.body(
+                                  size: 12, color: AppColors.textSecondary))
+                        else if (setup.dailyComplete)
                           Text('ทำภารกิจเสร็จสิ้น',
                               style: AppText.heading(size: 16))
                         else ...[
