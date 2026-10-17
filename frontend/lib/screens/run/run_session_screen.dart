@@ -509,7 +509,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
           ref.read(authProvider).user?['id']?.toString() != owner) {
         return;
       }
-      await runDraftStore.clear(userId: owner);
+      await runDraftStore.clearSession(owner, session);
       if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
         return;
       }
@@ -575,7 +575,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final run = ref.watch(runProvider);
     final setup = ref.watch(runSetupProvider);
     final quests = setup.activeSideQuests;
-    final doneCount = quests.where((q) => q.done).length;
+    final daily = ref.watch(dailyQuestProvider);
+    final unfinishedSideQuests = quests.where((q) => !q.done).length;
+    final unfinishedMissions = unfinishedSideQuests +
+        (daily.quest != null && !daily.completed ? 1 : 0);
 
     return PopScope(
         canPop: !run.isRunning &&
@@ -757,22 +760,29 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                                   style: AppText.heading(size: 13.5)),
                             ],
                           ),
-                          GestureDetector(
-                            onTap: _openMissionsSheet,
-                            child: Column(
-                              crossAxisAlignment: CrossAxisAlignment.end,
-                              children: [
-                                Text('ภารกิจ',
-                                    style: AppText.body(
-                                        size: 11.5,
-                                        color: AppColors.textTertiary)),
-                                Text(
-                                  quests.isEmpty
-                                      ? 'ไม่มีภารกิจ'
-                                      : '$doneCount/${quests.length}',
-                                  style: AppText.heading(size: 13.5),
-                                ),
-                              ],
+                          Flexible(
+                            child: GestureDetector(
+                              onTap: _openMissionsSheet,
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.end,
+                                children: [
+                                  Text('ภารกิจ',
+                                      style: AppText.body(
+                                          size: 11.5,
+                                          color: AppColors.textTertiary)),
+                                  Text(
+                                    unfinishedMissions > 0
+                                        ? 'ค้าง $unfinishedMissions ภารกิจ'
+                                        : daily.loading
+                                            ? 'กำลังโหลดภารกิจ…'
+                                            : daily.error != null
+                                                ? 'ตรวจสถานะภารกิจ'
+                                                : 'ไม่มีภารกิจที่ค้างอยู่',
+                                    textAlign: TextAlign.right,
+                                    style: AppText.heading(size: 13.5),
+                                  ),
+                                ],
+                              ),
                             ),
                           ),
                         ],

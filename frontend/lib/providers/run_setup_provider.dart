@@ -103,7 +103,17 @@ class RunSetupNotifier extends ChangeNotifier {
         'errorMessage': errorMessage,
       };
   void _rememberPlace() {
-    if (_hasLoadedPlaces) _places[_viewEnvironment] = _currentPlace();
+    // Home can restore an empty store before any place has been requested.
+    // That default view is not a server result and must not suppress its GET.
+    if (_hasLoadedPlaces &&
+        (_daily.isNotEmpty ||
+            _generationUnknown ||
+            _boundSession != null ||
+            noSideQuestsMessage != null ||
+            _lastQuestErrorStatus != null ||
+            canRetryQuests)) {
+      _places[_viewEnvironment] = _currentPlace();
+    }
   }
 
   Map<String, dynamic> _snapshot() => {
@@ -292,11 +302,14 @@ class RunSetupNotifier extends ChangeNotifier {
             'ยังตรวจสอบผลการโหลด Side Quest ครั้งก่อนไม่ได้ ไม่ได้หมายความว่าทำภารกิจแล้ว จึงไม่สร้างชุดซ้ำในวันนี้ · ยังวิ่งอิสระได้';
         return;
       }
-      if (_daily.isEmpty &&
-          (cached == null ||
-              rejected ||
-              _retryUnsentGeneration ||
-              cached['retryable'] == true)) {
+      if (_daily.isEmpty && _boundSession != null) {
+        errorMessage =
+            'อ่านชุด Side Quest ของการวิ่งเดิมไม่ได้ · ยังวิ่งอิสระได้';
+        return;
+      }
+      // An old empty placeholder has neither a response nor an outstanding
+      // request. Fetch it too; confirmed emptiness/uncertainty returned above.
+      if (_daily.isEmpty) {
         _generationUnknown = true;
         _lastQuestErrorStatus = null;
         await _persist();

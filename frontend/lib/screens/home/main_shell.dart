@@ -54,7 +54,13 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _offerRunResume() async {
-    if (_checkingDraft) return;
+    // Replacing run selection resolves Home's original push future while the
+    // new run is on top. Only the visible Home may offer recovery.
+    if (_checkingDraft ||
+        !mounted ||
+        ModalRoute.of(context)?.isCurrent != true) {
+      return;
+    }
     final userId = ref.read(authProvider).user?['id']?.toString();
     if (userId == null) return;
     _checkingDraft = true;
@@ -62,6 +68,7 @@ class _MainShellState extends ConsumerState<MainShell> {
       final draft = await verifiedRunDraft(
           runDraftStore, ref.read(runningSessionApiProvider), userId);
       if (!mounted ||
+          ModalRoute.of(context)?.isCurrent != true ||
           ref.read(authProvider).user?['id']?.toString() != userId) {
         return;
       }
@@ -105,7 +112,9 @@ class _MainShellState extends ConsumerState<MainShell> {
           .push(MaterialPageRoute(builder: (_) => const RunSessionScreen()));
       if (mounted) ref.read(dailyQuestProvider).refresh();
     } catch (error) {
-      if (mounted && ref.read(authProvider).user?['id']?.toString() == userId) {
+      if (mounted &&
+          ModalRoute.of(context)?.isCurrent == true &&
+          ref.read(authProvider).user?['id']?.toString() == userId) {
         setState(() => _draftError =
             'ตรวจสถานะ Session ไม่สำเร็จ เก็บข้อมูลการวิ่งไว้แล้ว: $error');
       }

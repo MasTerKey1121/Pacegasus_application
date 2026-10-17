@@ -65,6 +65,16 @@ class RunDraftStore {
 
   Future<void> clear({String? userId}) => _enqueue(
       () => _storage.delete(key: userId == null ? _legacyKey : _key(userId)));
+
+  /// A delayed check for an older run must not delete a newer checkpoint.
+  Future<void> clearSession(String owner, String session) => _enqueue(() async {
+        final raw = await _storage.read(key: _key(owner));
+        if (raw == null) return;
+        final saved = jsonDecode(raw) as Map;
+        if (saved['ownerUserId'] == owner && saved['sessionId'] == session) {
+          await _storage.delete(key: _key(owner));
+        }
+      });
 }
 
 /// Offline/404 are errors, never evidence that a checkpoint should be deleted.
@@ -81,7 +91,7 @@ Future<Map<String, dynamic>?> verifiedRunDraft(
   }
   if (detail['status'] == 'completed' || detail['status'] == 'abandoned') {
     await store.seal(userId, draft['sessionId'].toString());
-    await store.clear(userId: userId);
+    await store.clearSession(userId, draft['sessionId'].toString());
     return null;
   }
   if (detail['status'] != 'in_progress') {

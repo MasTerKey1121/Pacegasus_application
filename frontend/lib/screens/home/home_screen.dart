@@ -60,14 +60,22 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
   }
 
   void _refreshOnEntry() {
-    if (!mounted) return;
+    if (!mounted || _route?.isCurrent != true) return;
     ref.read(dailyQuestProvider).refresh();
     ref.invalidate(progressProvider);
     ref.read(runSetupProvider).restoreDaily();
   }
 
   @override
-  void didPopNext() => _refreshOnEntry();
+  void didPopNext() {
+    _refreshOnEntry();
+    // A run replaces its selection/summary routes, so the original push
+    // future may have completed long before Home actually becomes visible.
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted && _route?.isCurrent == true) widget.onReturned?.call();
+    });
+  }
+
   final _sheet = DraggableScrollableController();
   bool _avatarOnly = false;
   bool _leftMenuOpen = false, _rightMenuOpen = false;
@@ -113,6 +121,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     _moveSheet(_minimum);
     await Navigator.of(context)
         .push(MaterialPageRoute<void>(builder: (_) => screen));
+    if (!mounted || _route?.isCurrent != true) return;
     // Refresh after returning from wellness, scheduling or a run.
     if (mounted && ref.read(programProvider).isRegistered) {
       await ref.read(programProvider).loadCurrentWeek();
