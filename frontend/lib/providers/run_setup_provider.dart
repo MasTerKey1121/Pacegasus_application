@@ -4,6 +4,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/side_quest.dart';
 import '../models/training_date.dart';
 import '../services/quest_api.dart';
+import '../services/api_client.dart';
 import '../services/running_session_api.dart';
 import '../services/daily_side_quest_store.dart';
 import '../services/run_draft_store.dart';
@@ -50,6 +51,10 @@ class RunSetupNotifier extends ChangeNotifier {
   List<Map<String, dynamic>> _daily = [];
   String? _boundSession;
   bool _generationUnknown = false;
+  bool canRetryQuests = false;
+  bool _retryUnsentGeneration = false;
+  bool get sideQuestLoadUncertain => _generationUnknown && _daily.isEmpty;
+  int? _lastQuestErrorStatus;
   bool isLoadingQuests = false, isStarting = false;
   String? errorMessage;
   final Set<String> _completingIds = {};
@@ -91,6 +96,7 @@ class RunSetupNotifier extends ChangeNotifier {
           .toList();
       _boundSession = cached['boundSession']?.toString();
       _generationUnknown = cached['generationUnknown'] == true;
+      _lastQuestErrorStatus = (cached['lastQuestErrorStatus'] as num?)?.toInt();
       _showDaily();
       notifyListeners();
     } catch (e) {
@@ -109,6 +115,9 @@ class RunSetupNotifier extends ChangeNotifier {
     activeSideQuests = [];
     _boundSession = null;
     _generationUnknown = false;
+    canRetryQuests = false;
+    _lastQuestErrorStatus = null;
+    _retryUnsentGeneration = false;
     errorMessage =
         'วันใหม่แล้ว กรุณาเลือกประเภทการวิ่งเพื่อโหลด Side Quest ของวันนี้';
     notifyListeners();
@@ -120,6 +129,8 @@ class RunSetupNotifier extends ChangeNotifier {
     final snapshot = <String, dynamic>{
       'quests': _daily.map((q) => Map<String, dynamic>.from(q)).toList(),
       'boundSession': _boundSession,
+      'retryable': canRetryQuests,
+      'lastQuestErrorStatus': _lastQuestErrorStatus,
       'generationUnknown': _generationUnknown
     };
     final next = _writes.then((_) => store!.save(owner!, day, snapshot));
@@ -128,6 +139,9 @@ class RunSetupNotifier extends ChangeNotifier {
   }
 
   void _showDaily() {
+    for (final quest in _daily) {
+      if (quest['status'] == 'completed') quest['done'] = true;
+    }
     sideQuests = _daily.map(SideQuest.fromJson).toList();
     activeSideQuests = _daily
         .where((q) => q['bound'] != null)
@@ -141,43 +155,83 @@ class RunSetupNotifier extends ChangeNotifier {
     sideQuestIds = activeSideQuests.map((q) => q.sideQuestId).toList();
   }
 
+  Future<void> retrySideQuests() async {
+    if (!canRetryQuests || environment == null) return;
+    await selectEnvironment(
+        env: environment!, mainQuestSessionType: sessionType);
+  }
+
   Future<void> selectEnvironment(
       {required String env, required String? mainQuestSessionType}) async {
     if (isLoadingQuests || isStarting) return;
     checkDay();
     final day = _day;
     environment = env;
+    sessionType = mainQuestSessionType;
     isLoadingQuests = true;
+    canRetryQuests = false;
     errorMessage = null;
+    var cacheLoaded = false;
+    var sent = false;
+    var received = false;
     notifyListeners();
     try {
       final cached = owner == null ? null : await store?.load(owner!, day);
       if (!_alive || day != _day) return;
-      if (cached != null) {
+      cacheLoaded = true;
+      if (cached != null && _daily.isEmpty) {
         _daily = (cached['quests'] as List)
             .map((q) => Map<String, dynamic>.from(q as Map))
             .toList();
         _boundSession = cached['boundSession']?.toString();
         _generationUnknown = cached['generationUnknown'] == true;
+        _lastQuestErrorStatus =
+            (cached['lastQuestErrorStatus'] as num?)?.toInt();
+      }
+      // A stored request marker is NOT evidence of quest completion. Reuse a
+      // known set; only retry generation when an explicit pre-write rejection
+      // or a locally unsent request proves no replacement is being created.
+      final rejected =
+          [400, 401, 403, 404, 422].contains(_lastQuestErrorStatus);
+      if (_generationUnknown &&
+          (_daily.isNotEmpty || rejected || _retryUnsentGeneration)) {
+        _generationUnknown = false;
       }
       if (_generationUnknown) {
-        throw StateError(
-            'ยังยืนยันชุด Side Quest ไม่ได้ API ไม่มีค้นรายการเดิม จึงไม่สร้างชุดซ้ำในวันนี้');
+        _showDaily();
+        errorMessage =
+            'ยังตรวจสอบผลการโหลด Side Quest ครั้งก่อนไม่ได้ ไม่ได้หมายความว่าทำภารกิจแล้ว จึงไม่สร้างชุดซ้ำในวันนี้ · ยังวิ่งอิสระได้';
+        return;
       }
-      if (_daily.isEmpty && cached == null) {
+      if (_daily.isEmpty &&
+          (cached == null ||
+              rejected ||
+              _retryUnsentGeneration ||
+              cached['retryable'] == true)) {
         _generationUnknown = true;
-        await _persist(); // GET creates instances: persist intent before sending.
+        _lastQuestErrorStatus = null;
+        await _persist();
+        _retryUnsentGeneration = false;
+        sent = true;
         final response = await _questApi.getTodaySideQuests(
             environment: env,
             trainingType: mapToSideQuestTrainingType(mainQuestSessionType));
         if (!_alive || day != _day) return;
-        _daily = ((response['data'] as Map)['quests'] as List)
-            .map((q) => {...Map<String, dynamic>.from(q as Map), 'done': false})
+        final items = ((response['data'] as Map)['quests'] as List)
+            .map((q) => Map<String, dynamic>.from(q as Map))
             .toList();
+        if (items.any((q) =>
+            q['instanceId'] == null || q['instanceId'].toString().isEmpty)) {
+          throw const FormatException('Missing instance ID');
+        }
+        _daily = items
+            .map((q) => {...q, 'done': q['status'] == 'completed'})
+            .toList();
+        received = true;
         _generationUnknown = false;
-        await _persist();
       }
       _showDaily();
+      await _persist();
       if (_boundSession != null &&
           _boundSession != sessionId &&
           !dailyComplete) {
@@ -185,7 +239,28 @@ class RunSetupNotifier extends ChangeNotifier {
             'Side Quest ที่ค้างอยู่กับการวิ่งรอบเดิม ยังทำต่อในรอบใหม่ไม่ได้ · วิ่งอิสระต่อได้';
       }
     } catch (e) {
-      if (_alive && day == _day) errorMessage = e.toString();
+      if (_alive && day == _day) {
+        final rejected = e is ApiException &&
+            [400, 401, 403, 404, 422].contains(e.statusCode);
+        if (cacheLoaded) {
+          _lastQuestErrorStatus = e is ApiException ? e.statusCode : null;
+          _generationUnknown = sent && !received && !rejected;
+          _retryUnsentGeneration = !sent && _daily.isEmpty;
+        }
+        canRetryQuests = !cacheLoaded || !_generationUnknown;
+        _showDaily();
+        final reason = e is ApiException
+            ? e.message
+            : 'กรุณาตรวจสอบการเชื่อมต่อหรือพื้นที่เก็บข้อมูล';
+        errorMessage = _generationUnknown
+            ? 'ยังไม่ได้รับผลยืนยันการโหลด Side Quest: $reason · ไม่ได้หมายความว่าทำภารกิจแล้ว'
+            : 'โหลด Side Quest ไม่สำเร็จ: $reason';
+        if (cacheLoaded) {
+          try {
+            await _persist();
+          } catch (_) {/* Preserve the known set in memory. */}
+        }
+      }
     } finally {
       if (_alive) {
         isLoadingQuests = false;

@@ -1019,7 +1019,8 @@ class _MissionsMiniWindow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setup = ref.watch(runSetupProvider);
-    final quests = setup.activeSideQuests;
+    final quests =
+        setup.activeSideQuests.where((quest) => !quest.done).toList();
 
     return SafeArea(
       child: Container(
@@ -1048,12 +1049,13 @@ class _MissionsMiniWindow extends ConsumerWidget {
             const DailyQuestPanel(duringRun: true),
             const Text('Side Quest'),
             if (setup.errorMessage != null) Text(setup.errorMessage!),
-            if (setup.dailyComplete)
-              const Text('คุณทำ Side Quest ของวันนี้สำเร็จแล้ว'),
             if (quests.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
-                child: Text('ไม่ได้เลือกภารกิจไว้สำหรับการวิ่งนี้',
+                child: Text(
+                    setup.dailyComplete
+                        ? 'ทำภารกิจเสร็จสิ้น'
+                        : 'ไม่มี Side Quest ที่ยังไม่เสร็จสำหรับการวิ่งนี้',
                     style: AppText.body(
                         size: 12.5, color: AppColors.textSecondary)),
               )

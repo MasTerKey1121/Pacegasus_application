@@ -6,7 +6,6 @@ import '../../providers/daily_quest_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/common.dart';
 import '../../widgets/daily_quest_panel.dart';
-import '../../widgets/daily_side_quest_panel.dart';
 import '../home/main_shell.dart';
 import 'run_session_screen.dart';
 
@@ -162,48 +161,54 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         const Center(child: CircularProgressIndicator())
                       else if (setup.environment != null) ...[
                         const SectionLabel(title: 'Side Quest วันนี้'),
-                        const DailySideQuestPanel(),
-                        Text(
-                          'ทุกภารกิจพร้อมให้ทำระหว่างวิ่ง ทำอันไหนสำเร็จ ก็รับรางวัลของอันนั้น ไม่จำเป็นต้องทำครบทุกอัน',
-                          style: AppText.body(
-                              size: 12, color: AppColors.textSecondary),
-                        ),
-                        const SizedBox(height: 12),
-                        if (setup.sideQuests.isEmpty)
-                          Text('ไม่มี side quest สำหรับตัวเลือกนี้',
-                              style: AppText.body(
-                                  size: 12, color: AppColors.textSecondary))
-                        else
-                          ...setup.sideQuests.map((q) {
-                            return AppCard(
-                              child: Row(children: [
-                                Text(q.icon ?? '🎯',
-                                    style: const TextStyle(fontSize: 20)),
-                                const SizedBox(width: 10),
-                                Expanded(
-                                  child: Column(
-                                    crossAxisAlignment:
-                                        CrossAxisAlignment.start,
-                                    children: [
-                                      Text(q.title,
-                                          style: AppText.heading(size: 13.5)),
-                                      Text(q.description,
-                                          style: AppText.body(
-                                              size: 11.5,
-                                              color: AppColors.textSecondary)),
-                                      Text(
-                                          setup.isDone(q.instanceId)
-                                              ? 'คุณสำเร็จภารกิจนี้แล้ว'
-                                              : 'รางวัลที่เสนอ ${q.coinReward} เหรียญ',
-                                          style: AppText.body(
-                                              size: 11,
-                                              color: AppColors.gold1)),
-                                    ],
+                        if (setup.dailyComplete)
+                          Text('ทำภารกิจเสร็จสิ้น',
+                              style: AppText.heading(size: 16))
+                        else ...[
+                          Text(
+                            'ทุกภารกิจพร้อมให้ทำระหว่างวิ่ง ทำอันไหนสำเร็จ ก็รับรางวัลของอันนั้น ไม่จำเป็นต้องทำครบทุกอัน',
+                            style: AppText.body(
+                                size: 12, color: AppColors.textSecondary),
+                          ),
+                          const SizedBox(height: 12),
+                          if (setup.sideQuests.isEmpty &&
+                              setup.errorMessage == null)
+                            Text('ไม่มี side quest สำหรับตัวเลือกนี้',
+                                style: AppText.body(
+                                    size: 12, color: AppColors.textSecondary))
+                          else
+                            ...setup.sideQuests.map((q) {
+                              return AppCard(
+                                child: Row(children: [
+                                  Text(q.icon ?? '🎯',
+                                      style: const TextStyle(fontSize: 20)),
+                                  const SizedBox(width: 10),
+                                  Expanded(
+                                    child: Column(
+                                      crossAxisAlignment:
+                                          CrossAxisAlignment.start,
+                                      children: [
+                                        Text(q.title,
+                                            style: AppText.heading(size: 13.5)),
+                                        Text(q.description,
+                                            style: AppText.body(
+                                                size: 11.5,
+                                                color:
+                                                    AppColors.textSecondary)),
+                                        Text(
+                                            setup.isDone(q.instanceId)
+                                                ? 'ทำภารกิจเสร็จสิ้น'
+                                                : 'รางวัลที่เสนอ ${q.coinReward} เหรียญ',
+                                            style: AppText.body(
+                                                size: 11,
+                                                color: AppColors.gold1)),
+                                      ],
+                                    ),
                                   ),
-                                ),
-                              ]),
-                            );
-                          }),
+                                ]),
+                              );
+                            }),
+                        ],
                       ],
                       const DailyQuestPanel(),
                     ],
@@ -217,6 +222,11 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                   textAlign: TextAlign.center,
                   style: AppText.body(size: 12, color: AppColors.red1),
                 ),
+                if (setup.canRetryQuests)
+                  TextButton(
+                      onPressed:
+                          setup.isLoadingQuests ? null : setup.retrySideQuests,
+                      child: const Text('ลองโหลด Side Quest ใหม่')),
                 const SizedBox(height: 10),
               ],
               GradientButton(

@@ -17,10 +17,11 @@ class DailySideQuestPanel extends ConsumerWidget {
               children: [
                 const Text('Side Quest วันนี้'),
                 if (setup.dailyComplete)
-                  const Text('คุณทำ Side Quest ของวันนี้สำเร็จแล้ว'),
-                for (final q in setup.sideQuests)
-                  Text(
-                      '${q.title} · ${setup.isDone(q.instanceId) ? 'คุณสำเร็จภารกิจนี้แล้ว' : 'ทำได้ระหว่าง Session ที่ผูกไว้'}'),
+                  const Text('ทำภารกิจเสร็จสิ้น')
+                else
+                  for (final q in setup.sideQuests)
+                    Text(
+                        '${q.title} · ${setup.isDone(q.instanceId) ? 'ทำภารกิจเสร็จสิ้น' : 'ทำได้ระหว่าง Session ที่ผูกไว้'}'),
                 if (setup.errorMessage != null) Text(setup.errorMessage!),
               ],
             )));

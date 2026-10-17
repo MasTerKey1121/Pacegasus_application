@@ -4,14 +4,13 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/auth_provider.dart';
 import '../../providers/program_provider.dart';
-import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/progress_provider.dart';
+import '../../providers/run_setup_provider.dart';
 import '../../widgets/daily_quest_panel.dart';
 import '../../widgets/daily_side_quest_panel.dart';
 import '../../providers/daily_quest_provider.dart';
 import '../../providers/wellness_provider.dart';
-import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
 import '../friends/friends_screen.dart';
 import '../club/club_screen.dart';
@@ -26,6 +25,7 @@ import '../wellness/daily_wellness_screen.dart';
 import 'daily_missions_screen.dart';
 import 'home_avatar.dart';
 import 'avatar_layout.dart';
+import '../../navigation/home_route_observer.dart';
 
 const _background = Color(0xFF110E20);
 const _panel = Color(0xFF201A32);
@@ -40,7 +40,34 @@ class HomeScreen extends ConsumerStatefulWidget {
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends ConsumerState<HomeScreen> {
+class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
+  PageRoute<dynamic>? _route;
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _refreshOnEntry());
+  }
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final route = ModalRoute.of(context);
+    if (route is PageRoute<dynamic> && route != _route) {
+      homeRouteObserver.unsubscribe(this);
+      _route = route;
+      homeRouteObserver.subscribe(this, route);
+    }
+  }
+
+  void _refreshOnEntry() {
+    if (!mounted) return;
+    ref.read(dailyQuestProvider).refresh();
+    ref.invalidate(progressProvider);
+    ref.read(runSetupProvider).restoreDaily();
+  }
+
+  @override
+  void didPopNext() => _refreshOnEntry();
   final _sheet = DraggableScrollableController();
   bool _avatarOnly = false;
   bool _leftMenuOpen = false, _rightMenuOpen = false;
@@ -51,6 +78,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
   @override
   void dispose() {
+    homeRouteObserver.unsubscribe(this);
     _sheet.dispose();
     super.dispose();
   }
@@ -88,7 +116,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Refresh after returning from wellness, scheduling or a run.
     if (mounted && ref.read(programProvider).isRegistered) {
       await ref.read(programProvider).loadCurrentWeek();
-      if (mounted) ref.read(dailyQuestProvider).refresh();
     }
     if (mounted) await widget.onReturned?.call();
   }
@@ -134,27 +161,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
 
     final quest = ref.watch(dailyQuestProvider).quest;
     final done = quest?['status'] == 'completed';
-    final ready = wellness.completedToday;
     final label = program.isLoading
         ? 'กำลังโหลด…'
         : !wellness.completedToday
             ? 'เช็กอินก่อนวิ่ง'
             : 'เริ่มวิ่ง';
-    final title = program.isLoading
-        ? 'กำลังโหลดแผนวันนี้…'
-        : !wellness.completedToday
-            ? 'แผนวันนี้รอคุณอยู่'
-            : program.currentWeekErrorMessage != null
-                ? 'วิ่งอิสระ'
-                : !program.isRegistered
-                    ? 'วิ่งอิสระ'
-                    : !program.isScheduleSaved
-                        ? 'วิ่งอิสระ'
-                        : done
-                            ? 'คุณทำภารกิจประจำวันสำเร็จแล้ว'
-                            : quest == null
-                                ? 'วิ่งอิสระ'
-                                : _questLabel(quest);
     final hint = !wellness.completedToday
         ? 'เริ่มจากเช็กความพร้อมของวันนี้'
         : program.currentWeekErrorMessage != null
@@ -407,6 +418,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         controller: scrollController,
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                         children: [
+                          Text('วันนี้ของคุณ',
+                              style: AppText.heading(size: 19)),
+                          const SizedBox(height: 12),
                           const DailyQuestPanel(home: true),
                           const DailySideQuestPanel(),
                           if (progress.hasError)
@@ -414,44 +428,6 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 onPressed: () =>
                                     ref.invalidate(progressProvider),
                                 child: const Text('ลองโหลด coin / EXP ใหม่')),
-                          Text('วันนี้ของคุณ',
-                              style: AppText.heading(size: 19)),
-                          const SizedBox(height: 12),
-                          AppCard(
-                              child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  children: [
-                                Text(
-                                    quest == null
-                                        ? 'การวิ่งวันนี้'
-                                        : 'แผนวันนี้',
-                                    style:
-                                        AppText.body(size: 10, color: _accent)),
-                                const SizedBox(height: 8),
-                                Text(title, style: AppText.heading(size: 18)),
-                                if (quest != null &&
-                                    program.currentWeekErrorMessage == null)
-                                  Text(_dateLabel(quest),
-                                      style: AppText.body(
-                                          size: 12, color: _accent)),
-                                const SizedBox(height: 4),
-                                Text(hint,
-                                    style: AppText.body(
-                                        size: 12,
-                                        color: AppColors.textSecondary)),
-                                if (ready &&
-                                    !program.isLoading &&
-                                    program.currentWeekErrorMessage == null &&
-                                    quest != null) ...[
-                                  const SizedBox(height: 8),
-                                  Text(
-                                      done
-                                          ? 'สำเร็จแล้ว · ${_questLabel(quest)}'
-                                          : 'พร้อมแล้ว · เริ่มวิ่งได้เลย',
-                                      style:
-                                          AppText.body(size: 11, color: _lime)),
-                                ],
-                              ])),
                           const SizedBox(height: 16),
                           Text(
                               quest == null || done
@@ -646,23 +622,4 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
           subtitle: Text(subtitle,
               style: AppText.body(size: 11, color: AppColors.textSecondary)),
           trailing: Icon(icon, color: _accent, size: 21));
-
-  String _dateLabel(Map<String, dynamic> quest) {
-    final date = trainingDate(quest['scheduled_date']);
-    return date == null ? 'วันซ้อม' : '${date.day}/${date.month}';
-  }
-
-  String _questLabel(Map<String, dynamic> quest) {
-    final type = (quest['session_type'] ?? 'run').toString();
-    final title = switch (type) {
-      'easy' => 'Easy Run',
-      'tempo' => 'Tempo Run',
-      'vo2max' => 'VO2 Max',
-      'long_run' => 'Long Run',
-      _ => type,
-    };
-    final value = quest['planned_value'];
-    final unit = quest['unit'];
-    return value == null ? title : '$title · $value ${unit ?? ''}'.trim();
-  }
 }
