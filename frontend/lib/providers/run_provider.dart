@@ -9,18 +9,48 @@ import 'run_setup_provider.dart';
 
 /// Drives the running screen using elapsed time plus GPS distance updates.
 class RunSessionNotifier extends ChangeNotifier {
-  RunSessionNotifier(this._sessionApi, {this.ownerUserId});
+  RunSessionNotifier(this._sessionApi,
+      {this.ownerUserId, Duration Function()? elapsedClock})
+      : _elapsedClock = elapsedClock;
   final String? ownerUserId;
   String? finishError;
   int _generation = 0;
   bool _disposed = false;
   final RunningSessionApi _sessionApi;
+  final Duration Function()? _elapsedClock;
+  final Stopwatch _monotonicClock = Stopwatch()..start();
+  Duration _recordedTime = Duration.zero;
+  Duration? _activeSince;
+
+  Duration get _now => _elapsedClock?.call() ?? _monotonicClock.elapsed;
+  Duration get _elapsedTime {
+    final since = _activeSince;
+    if (since == null) return _recordedTime;
+    final active = _now - since;
+    return _recordedTime + (active.isNegative ? Duration.zero : active);
+  }
+
+  // Timer callbacks may be delayed while Android is drawing another app or
+  // the screen is locked. Elapsed time must not depend on callback counts.
+  int get elapsedSeconds => _elapsedTime.inSeconds;
+  set elapsedSeconds(int seconds) {
+    _recordedTime = Duration(seconds: seconds < 0 ? 0 : seconds);
+    if (_activeSince != null) _activeSince = _now;
+  }
+
+  void _freezeClock() {
+    _recordedTime = _elapsedTime;
+    _activeSince = null;
+  }
+
+  void refreshElapsedTime() {
+    if (!_disposed && isRunning) notifyListeners();
+  }
 
   Timer? _timer;
   bool isRunning = false;
   bool isPaused = false;
   bool isStopping = false;
-  int elapsedSeconds = 0;
   double distanceKm = 0;
   double speedKmh = 0;
 
@@ -33,16 +63,24 @@ class RunSessionNotifier extends ChangeNotifier {
     isPaused = false;
     elapsedSeconds = 0;
     distanceKm = 0;
+    speedKmh = 0;
+    _activeSince = _now;
     _timer?.cancel();
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
       if (isPaused) return;
-      elapsedSeconds += 1;
       notifyListeners();
     });
     notifyListeners();
   }
 
   void togglePause() {
+    if (!isRunning || isStopping) return;
+    if (isPaused) {
+      _activeSince = _now;
+    } else {
+      _freezeClock();
+      speedKmh = 0;
+    }
     isPaused = !isPaused;
     notifyListeners();
   }
@@ -76,8 +114,8 @@ class RunSessionNotifier extends ChangeNotifier {
         : null;
     isPaused = paused;
     speedKmh = 0;
+    _activeSince = isRunning && !isPaused ? _now : null;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (isRunning && !isPaused) elapsedSeconds += 1;
       notifyListeners();
     });
     notifyListeners();
@@ -85,6 +123,7 @@ class RunSessionNotifier extends ChangeNotifier {
 
   void prepareFinish() {
     _timer?.cancel();
+    _freezeClock();
     isRunning = false;
     speedKmh = 0;
     notifyListeners();
@@ -102,6 +141,7 @@ class RunSessionNotifier extends ChangeNotifier {
     } // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
     final generation = _generation;
     _timer?.cancel();
+    _freezeClock();
     isRunning = false;
     isStopping = true;
     finishError = null;
@@ -191,6 +231,7 @@ class RunSessionNotifier extends ChangeNotifier {
     finishError = null;
     _timer?.cancel();
     _timer = null;
+    _activeSince = null;
     isRunning = false;
     isPaused = false;
     isStopping = false;
@@ -206,6 +247,7 @@ class RunSessionNotifier extends ChangeNotifier {
     _disposed = true;
     _generation++;
     _timer?.cancel();
+    _monotonicClock.stop();
     super.dispose();
   }
 }

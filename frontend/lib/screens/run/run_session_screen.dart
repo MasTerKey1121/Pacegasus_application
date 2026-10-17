@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:io';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:geolocator/geolocator.dart';
@@ -14,6 +15,7 @@ import 'run_summary_screen.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../services/run_draft_store.dart';
 import '../../services/gistda_map_style.dart';
+import '../../services/run_background_support.dart';
 import '../../widgets/daily_quest_panel.dart';
 import '../../providers/daily_quest_provider.dart';
 
@@ -24,7 +26,8 @@ class RunSessionScreen extends ConsumerStatefulWidget {
   ConsumerState<RunSessionScreen> createState() => _RunSessionScreenState();
 }
 
-class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
+class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
+    with WidgetsBindingObserver {
   bool get _isTreadmill =>
       ref.read(runSetupProvider).environment == 'treadmill';
   final _treadmillDistanceController = TextEditingController();
@@ -32,10 +35,20 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   bool _draftClosed = false;
   bool _finishing = false;
   String? _storageError;
+  bool _appVisible = true;
+  bool _startingGps = false;
+  bool _resumeGpsWhenVisible = false;
+  bool _notificationPermissionChecked = false;
+
+  bool get _androidLocationService =>
+      !kIsWeb && defaultTargetPlatform == TargetPlatform.android;
 
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    _appVisible = WidgetsBinding.instance.lifecycleState == null ||
+        WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed;
     final restored = ref.read(runSetupProvider).restoredRoute;
     for (final point in restored) {
       _routePoints.add(_MapPoint(point['lat']!, point['lng']!));
@@ -52,20 +65,37 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) => _startTreadmill());
       return;
     }
-    _gistdaStyleFuture = _loadGistdaDarkStyle();
-    // Do not block GPS recording forever if the map provider cannot finish
-    // loading (for example, an unavailable network or invalid map key).
-    _mapLoadTimer = Timer(const Duration(seconds: 15), () {
-      debugPrint(
-        '[GISTDA Map] timeout after 15s: mapReady=$_mapReady, '
-        'gpsPermission=$_hasLocationPermission, '
-        'initialGps=$_hasInitialPosition',
-      );
-      _askToStartWithoutMap();
-    });
+    if (_mapCanLoad) {
+      _gistdaStyleFuture = _loadGistdaDarkStyle();
+      // Do not block GPS recording forever if the map provider cannot finish
+      // loading (for example, an unavailable network or invalid map key).
+      _mapLoadTimer = Timer(const Duration(seconds: 15), () {
+        debugPrint(
+          '[GISTDA Map] timeout after 15s: mapReady=$_mapReady, '
+          'gpsPermission=$_hasLocationPermission, '
+          'initialGps=$_hasInitialPosition',
+        );
+        _askToStartWithoutMap();
+      });
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       _startLocationTracking();
     });
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    _appVisible = state == AppLifecycleState.resumed;
+    // Keep recording on screen lock/app switch; only map rendering waits for
+    // the UI to become visible again. The location foreground service stays on.
+    ref.read(runProvider).refreshElapsedTime();
+    unawaited(_saveDraft());
+    if (_appVisible) {
+      if (_resumeGpsWhenVisible && !_isTreadmill) {
+        unawaited(_startLocationTracking());
+      }
+      _syncMap();
+    }
   }
 
   void _openMissionsSheet() {
@@ -107,7 +137,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   void _syncMap() {
     final controller = _mapController;
-    if (!_mapReady || controller == null) return;
+    if (!_appVisible || !_mapReady || controller == null) return;
     controller.animateCamera(
       CameraUpdate.newLatLng(_currentPosition.toMapLatLng()),
       duration: const Duration(milliseconds: 350),
@@ -117,7 +147,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
 
   Future<void> _syncMapOverlays() async {
     final controller = _mapController;
-    if (!_mapReady || controller == null) return;
+    if (!_appVisible || !_mapReady || controller == null) return;
     if (_syncingMapOverlays) {
       _mapOverlaySyncQueued = true;
       return;
@@ -305,12 +335,44 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   }
 
   Future<void> _startLocationTracking() async {
+    if (!mounted || _draftClosed || _startingGps || _positionSub != null) {
+      return;
+    }
+    final run = ref.read(runProvider);
+    // A restored run awaiting completion is frozen; it must not restart GPS
+    // or show an ongoing tracking notification while retrying a saved result.
+    if (!run.isRunning && run.finishError != null) return;
+    if (_androidLocationService && !_appVisible) {
+      _resumeGpsWhenVisible = true;
+      return;
+    }
+    _startingGps = true;
+    _resumeGpsWhenVisible = false;
+    try {
+      await _configureLocationTracking();
+    } catch (error) {
+      if (mounted && !_draftClosed) {
+        setState(() => _locationMessage =
+            'เริ่มติดตามตำแหน่งไม่สำเร็จ กรุณาตรวจสอบสิทธิ์และเปิด GPS');
+      }
+      debugPrint('[GPS] could not start tracking: $error');
+    } finally {
+      _startingGps = false;
+      if (mounted && _appVisible && _resumeGpsWhenVisible && !_draftClosed) {
+        scheduleMicrotask(_startLocationTracking);
+      }
+    }
+  }
+
+  Future<void> _configureLocationTracking() async {
     var permission = await Geolocator.checkPermission();
+    if (!mounted || _draftClosed) return;
     debugPrint('[GPS] initial permission: $permission');
     if (permission == LocationPermission.denied) {
       permission = await Geolocator.requestPermission();
       debugPrint('[GPS] permission after request: $permission');
     }
+    if (!mounted || _draftClosed) return;
     if (permission == LocationPermission.denied ||
         permission == LocationPermission.deniedForever) {
       if (mounted) {
@@ -320,11 +382,39 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       debugPrint('[GPS] location permission was denied');
       return;
     }
-    if (!await Geolocator.isLocationServiceEnabled()) {
+    final serviceEnabled = await Geolocator.isLocationServiceEnabled();
+    if (!mounted || _draftClosed) return;
+    if (!serviceEnabled) {
       if (mounted) {
         setState(() => _locationMessage = 'กรุณาเปิดบริการตำแหน่ง');
       }
       debugPrint('[GPS] location service is disabled');
+      return;
+    }
+
+    if (_androidLocationService && !_notificationPermissionChecked) {
+      if (!_appVisible) {
+        _resumeGpsWhenVisible = true;
+        return;
+      }
+      final allowed = await RunNotificationAccess.request();
+      _notificationPermissionChecked = true;
+      if (!mounted || _draftClosed) return;
+      if (!allowed) {
+        ScaffoldMessenger.of(context).showSnackBar(SnackBar(
+          content: const Text(
+              'การแจ้งเตือนการวิ่งยังถูกปิดอยู่ เปิดการแจ้งเตือนเพื่อเห็นสถานะเมื่อดับจอ'),
+          action: SnackBarAction(
+              label: 'เปิดตั้งค่า',
+              onPressed: RunNotificationAccess.openSettings),
+        ));
+      }
+    }
+    // Android 14 requires a location foreground service to be started while
+    // the app is visible. Never restart one from a delayed permission callback
+    // after the user has already locked the screen.
+    if (_androidLocationService && !_appVisible) {
+      _resumeGpsWhenVisible = true;
       return;
     }
 
@@ -336,10 +426,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _maybeStartCountdown();
 
     _positionSub = Geolocator.getPositionStream(
-      locationSettings: const LocationSettings(
-        accuracy: LocationAccuracy.high,
-        distanceFilter: 5,
-      ),
+      locationSettings: runLocationSettings(),
     ).listen((pos) {
       final latLng = _MapPoint(pos.latitude, pos.longitude);
       if (!mounted) return;
@@ -385,11 +472,18 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       _saveDraft();
       _syncMap();
       _maybeStartCountdown();
+    }, onError: (Object error) {
+      if (mounted && !_draftClosed) {
+        setState(() => _locationMessage =
+            'การติดตามตำแหน่งขัดข้อง กรุณาตรวจสอบ GPS และสิทธิ์ตำแหน่ง');
+      }
+      debugPrint('[GPS] position stream failed: $error');
     });
   }
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _positionSub?.cancel();
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
@@ -476,7 +570,12 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       if (session == null || owner == null) return;
       _draftTimer?.cancel();
       _draftClosed = true;
+      // Cancelling the stream also removes the ongoing notification and
+      // releases the location service's partial wake lock, even if saving fails.
+      final positions = _positionSub;
+      _positionSub = null;
       run.prepareFinish();
+      await positions?.cancel();
       try {
         // One final checkpoint is queued before sealing, with the intent to
         // finish persisted for recovery after process death or a lost response.
