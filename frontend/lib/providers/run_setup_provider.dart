@@ -87,16 +87,24 @@ class RunSetupNotifier extends ChangeNotifier {
   }
 
   Future<void> _writes = Future.value();
-  Set<String> get selectedInstanceIds => _daily
-      .where((q) => q['done'] != true && q['bound'] == null)
-      .map((q) => q['instanceId'].toString())
-      .toSet();
-  bool get dailyComplete =>
-      _daily.isNotEmpty && _daily.every((q) => q['done'] == true);
+  Set<String> get selectedInstanceIds => dailyComplete
+      ? <String>{}
+      : _daily
+          .where((q) => q['done'] != true && q['bound'] == null)
+          .map((q) => q['instanceId'].toString())
+          .toSet();
+  // One server-confirmed choice completes today's Side Quest for this place.
+  // Keep the other rows unchanged: their individual server status is pending.
+  bool get dailyComplete => _daily.any((q) => q['done'] == true);
+  List<SideQuest> get visibleSideQuests => dailyComplete
+      ? sideQuests.where((q) => isDone(q.instanceId)).toList()
+      : sideQuests;
+  bool get isCompletingAnyQuest => _completingIds.isNotEmpty;
   bool isDone(String id) =>
       _daily.any((q) => q['instanceId'] == id && q['done'] == true);
   bool isCompletingQuest(String id) => _completingIds.contains(id);
   bool canFinish(String id) =>
+      !dailyComplete &&
       _today() == _day &&
       sessionId != null &&
       (isRunning?.call() ?? true) &&
@@ -486,7 +494,7 @@ class RunSetupNotifier extends ChangeNotifier {
   }
 
   Future<void> completeSideQuest(String id) async {
-    if (!canFinish(id) || _completingIds.contains(id)) return;
+    if (!canFinish(id) || _completingIds.isNotEmpty) return;
     final day = _day;
     final session = sessionId!;
     final completingSet = _daily;

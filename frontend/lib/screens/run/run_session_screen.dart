@@ -574,11 +574,11 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   Widget build(BuildContext context) {
     final run = ref.watch(runProvider);
     final setup = ref.watch(runSetupProvider);
-    final quests = setup.activeSideQuests;
     final daily = ref.watch(dailyQuestProvider);
-    final totalMissions = quests.length + (daily.quest != null ? 1 : 0);
+    final totalMissions =
+        (setup.sideQuests.isNotEmpty ? 1 : 0) + (daily.quest != null ? 1 : 0);
     final completedMissions =
-        quests.where((q) => q.done).length + (daily.completed ? 1 : 0);
+        (setup.dailyComplete ? 1 : 0) + (daily.completed ? 1 : 0);
 
     return PopScope(
         canPop: !run.isRunning &&
@@ -1032,8 +1032,9 @@ class _MissionsMiniWindow extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final setup = ref.watch(runSetupProvider);
-    final quests =
-        setup.activeSideQuests.where((quest) => !quest.done).toList();
+    final quests = setup.dailyComplete
+        ? <ActiveSideQuest>[]
+        : setup.activeSideQuests.where((quest) => !quest.done).toList();
 
     return SafeArea(
       child: Container(
@@ -1067,7 +1068,7 @@ class _MissionsMiniWindow extends ConsumerWidget {
                 padding: const EdgeInsets.symmetric(vertical: 12),
                 child: Text(
                     setup.dailyComplete
-                        ? 'ทำภารกิจเสร็จสิ้น'
+                        ? 'ทำ Side Quest ของวันนี้เสร็จแล้ว'
                         : 'ไม่มี Side Quest ที่ยังไม่เสร็จสำหรับการวิ่งนี้',
                     style: AppText.body(
                         size: 12.5, color: AppColors.textSecondary)),
@@ -1133,6 +1134,7 @@ class _MissionActionButton extends ConsumerWidget {
     final loading = setup.isCompletingQuest(quest.sideQuestId);
     final available = ref.watch(runProvider).isRunning &&
         !ref.watch(runProvider).isStopping &&
+        !setup.isCompletingAnyQuest &&
         setup.canFinish(quest.sideQuestId);
 
     if (quest.done) {

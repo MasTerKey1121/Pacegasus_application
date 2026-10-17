@@ -169,8 +169,8 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         else ...[
                           Text(
                             setup.dailyComplete
-                                ? 'คุณทำ Side Quest ของวันนี้สำเร็จแล้ว'
-                                : 'ทำ Side Quest ระหว่างวิ่ง รับรางวัลเฉพาะภารกิจที่สำเร็จ',
+                                ? 'ทำ Side Quest ของวันนี้เสร็จแล้ว'
+                                : 'เลือกทำ Side Quest อันใดอันหนึ่งระหว่างวิ่ง เพื่อสำเร็จภารกิจของสถานที่นี้ในวันนี้',
                             style: AppText.body(
                                 size: 12, color: AppColors.textSecondary),
                           ),
@@ -181,11 +181,12 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                                 style: AppText.body(
                                     size: 12, color: AppColors.textSecondary))
                           else
-                            ...setup.sideQuests.map((q) => _SideQuestCard(
-                                quest: q,
-                                completed: setup.isDone(q.instanceId),
-                                notice:
-                                    setup.questSessionNotice(q.instanceId))),
+                            ...setup.visibleSideQuests.map((q) =>
+                                _SideQuestCard(
+                                    quest: q,
+                                    completed: setup.isDone(q.instanceId),
+                                    notice: setup
+                                        .questSessionNotice(q.instanceId))),
                         ],
                       ],
                       const DailyQuestPanel(),
