@@ -44,12 +44,12 @@ void main() {
       'http://127.0.0.1:1',
       'http://127.0.0.1:${server.port}',
     ])
-        ..getAccessToken = (() => token)
-        ..onUnauthorized = () async {
-          refreshes++;
-          token = 'new-token';
-          return true;
-        };
+      ..getAccessToken = (() => token)
+      ..onUnauthorized = () async {
+        refreshes++;
+        token = 'new-token';
+        return true;
+      };
     final user = await OwnProfileApi(client).uploadAvatar(ProfileImage(
         Uint8List.fromList(utf8.encode('image-content')),
         'image/png',
@@ -123,5 +123,37 @@ void main() {
         ),
       ),
     );
+  });
+  test(
+      'session/quest writes and generating GET never replay through address fallback',
+      () async {
+    final server = await HttpServer.bind(InternetAddress.loopbackIPv4, 0);
+    addTearDown(server.close);
+    var requests = 0;
+    server.listen((request) async {
+      requests++;
+      await request.drain<void>();
+      request.response.headers.contentType = ContentType.json;
+      request.response.write(jsonEncode({
+        'success': true,
+        'data': {'id': 's', 'user_id': 'a', 'status': 'in_progress'}
+      }));
+      await request.response.close();
+    });
+    final client = ApiClient(
+        baseUrls: ['http://127.0.0.1:1', 'http://127.0.0.1:${server.port}']);
+    await expectLater(
+        client.patch('/api/running-sessions/s/complete',
+            body: {'distanceKm': 1, 'durationSeconds': 600}),
+        throwsA(isA<ApiException>()));
+    await expectLater(client.patch('/api/programs/quests/q/complete'),
+        throwsA(isA<ApiException>()));
+    await expectLater(
+        client.get('/api/quests/side?environment=park&trainingType=easy'),
+        throwsA(isA<ApiException>()));
+    expect(requests, 0);
+    await client.get('/api/running-sessions/s');
+    expect(
+        requests, 1); // read-only reconciliation may discover the live address.
   });
 }

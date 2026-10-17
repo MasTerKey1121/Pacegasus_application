@@ -31,6 +31,7 @@ class ProgramNotifier extends ChangeNotifier {
   bool _isScheduleSaved = false;
   DateTime? _programStartDate;
   bool _hasRestored = false;
+  int _accountVersion = 0;
   String? _userProgramId;
 
   /// API 5.1 must only be called after the user explicitly registers a plan.
@@ -63,6 +64,7 @@ class ProgramNotifier extends ChangeNotifier {
 
   /// Clears all account-specific state before a different user signs in.
   void reset() {
+    _accountVersion++;
     quests = const [];
     templates = const [];
     isLoading = false;
@@ -86,6 +88,7 @@ class ProgramNotifier extends ChangeNotifier {
   Future<void> restore({bool force = false}) async {
     if ((_hasRestored && !force) || isLoading) return;
 
+    final version = _accountVersion;
     _hasRestored = true;
     isLoading = true;
     errorMessage = null;
@@ -94,9 +97,11 @@ class ProgramNotifier extends ChangeNotifier {
 
     try {
       final response = await _api.getCurrentWeek();
+      if (version != _accountVersion) return;
       _setQuests(response);
       _isRegistered = true;
     } on ApiException catch (error) {
+      if (version != _accountVersion) return;
       // A 404 means this user has not registered a program yet; it is not an
       // error state for the Home screen.
       if (error.statusCode == 404) {
@@ -110,6 +115,7 @@ class ProgramNotifier extends ChangeNotifier {
         currentWeekErrorMessage = error.message;
       }
     } catch (error) {
+      if (version != _accountVersion) return;
       errorMessage = error.toString();
       currentWeekErrorMessage = errorMessage;
     }
@@ -117,14 +123,18 @@ class ProgramNotifier extends ChangeNotifier {
     // The level is needed only when a completed-onboarding user registers a
     // program. Fetch it again because the in-memory provider is recreated on
     // every app launch.
+    if (version != _accountVersion) return;
     await _restoreOnboardingLevel();
+    if (version != _accountVersion) return;
     isLoading = false;
     notifyListeners();
   }
 
   Future<void> _restoreOnboardingLevel() async {
+    final version = _accountVersion;
     try {
       final response = await _onboardingApi.status();
+      if (version != _accountVersion) return;
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final level = data['runningExperienceLevel'] as String?;
       if (level != null && level.isNotEmpty) _onboardingLevel = level;
@@ -271,6 +281,7 @@ class ProgramNotifier extends ChangeNotifier {
   }
 
   Future<bool> loadCurrentWeek() async {
+    final version = _accountVersion;
     isLoading = true;
     errorMessage = null;
     currentWeekErrorMessage = null;
@@ -278,12 +289,14 @@ class ProgramNotifier extends ChangeNotifier {
 
     try {
       final response = await _api.getCurrentWeek();
+      if (version != _accountVersion) return false;
       _setQuests(response);
       _isRegistered = true;
       isLoading = false;
       notifyListeners();
       return true;
     } catch (error) {
+      if (version != _accountVersion) return false;
       errorMessage = error.toString();
       currentWeekErrorMessage = errorMessage;
       isLoading = false;
@@ -437,6 +450,12 @@ class ProgramNotifier extends ChangeNotifier {
         SessionType.vo2max => 'vo2max',
         _ => throw ArgumentError('Unsupported scheduled session: $type'),
       };
+
+  @override
+  void dispose() {
+    _accountVersion++;
+    super.dispose();
+  }
 
   String _dateOnly(DateTime value) =>
       '${value.year.toString().padLeft(4, '0')}-${value.month.toString().padLeft(2, '0')}-${value.day.toString().padLeft(2, '0')}';

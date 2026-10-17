@@ -3,9 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 class UserData extends ChangeNotifier {
   String username = 'UserName';
-  int level = 1;
-  int coin = 500;
-  int exp = 0;
   double totalKm = 0;
   int totalSessions = 0;
   int streak = 0;
@@ -13,19 +10,6 @@ class UserData extends ChangeNotifier {
 
   void setDisplayName(String name) {
     username = name;
-    notifyListeners();
-  }
-
-  void setCoinBalance(int balance) {
-    coin = balance;
-    notifyListeners();
-  }
-
-  void addReward({int coin = 0, int exp = 0}) {
-    this.coin += coin;
-    this.exp += exp;
-    // very small mock level-up curve: every 100 exp = 1 level.
-    level = 1 + (this.exp ~/ 100);
     notifyListeners();
   }
 

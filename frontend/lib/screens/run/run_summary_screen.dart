@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../models/run_result.dart';
 import '../../models/run_reward.dart';
-import '../../providers/wallet_provider.dart';
+import '../../providers/progress_provider.dart';
+import '../../providers/auth_provider.dart';
 import '../../providers/user_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
@@ -305,6 +306,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           result.hasInjury == null
                       ? null
                       : () async {
+                          if (_isSubmitting) return;
                           final sessionId =
                               ref.read(runSetupProvider).sessionId;
                           if (sessionId == null) {
@@ -323,26 +325,49 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                             return;
                           }
 
+                          final owner = ref.read(authProvider).user?['id'];
                           setState(() => _isSubmitting = true);
                           try {
-                            final response = await ref
-                                .read(rpeApiProvider)
-                                .logRunFeedback(
-                                  runningSessionId: sessionId,
-                                  durationMinutes: result.duration.inMinutes
-                                      .clamp(1, 1440)
-                                      .toInt(),
-                                  rpeScore: result.rpe!,
-                                  stressLevel:
-                                      result.stressLevel!.clamp(1, 10).toInt(),
-                                  mood: _apiMoods[
-                                      result.moodIndex!.clamp(0, 4).toInt()],
-                                  hasPain: result.hasInjury!,
-                                  painNote: painNote,
-                                );
-                            if (!context.mounted) return;
+                            final history = await ref
+                                .read(runningSessionApiProvider)
+                                .history();
+                            if (!mounted ||
+                                ref.read(authProvider).user?['id'] != owner) {
+                              return;
+                            }
+                            final sessions =
+                                ((history['data'] as Map)['sessions'] as List)
+                                    .whereType<Map>();
+                            final previous =
+                                sessions.where((s) => s['id'] == sessionId);
+                            final alreadySaved = previous.isNotEmpty &&
+                                (previous.first['rpe_logs'] as List? ?? [])
+                                    .isNotEmpty;
+                            Map<String, dynamic> response = {};
+                            if (!alreadySaved) {
+                              response = await ref
+                                  .read(rpeApiProvider)
+                                  .logRunFeedback(
+                                    runningSessionId: sessionId,
+                                    durationMinutes: result.duration.inMinutes
+                                        .clamp(1, 1440)
+                                        .toInt(),
+                                    rpeScore: result.rpe!,
+                                    stressLevel: result.stressLevel!
+                                        .clamp(1, 10)
+                                        .toInt(),
+                                    mood: _apiMoods[
+                                        result.moodIndex!.clamp(0, 4).toInt()],
+                                    hasPain: result.hasInjury!,
+                                    painNote: painNote,
+                                  );
+                            }
+                            if (!context.mounted ||
+                                ref.read(authProvider).user?['id'] != owner) {
+                              return;
+                            }
                             final reward = RunReward.fromFeedback(response);
-                            ref.invalidate(walletProvider);
+                            ref.invalidate(progressProvider);
                             ref.read(userProvider).addRunStats(
                                 km: result.distanceKm, sessions: 1);
                             ref.read(missionProvider).setDone('run', true);

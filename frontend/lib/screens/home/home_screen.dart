@@ -3,11 +3,13 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/auth_provider.dart';
-import '../../providers/mission_provider.dart';
 import '../../providers/program_provider.dart';
 import '../../models/training_date.dart';
 import '../../providers/user_provider.dart';
-import '../../providers/wallet_provider.dart';
+import '../../providers/progress_provider.dart';
+import '../../widgets/daily_quest_panel.dart';
+import '../../widgets/daily_side_quest_panel.dart';
+import '../../providers/daily_quest_provider.dart';
 import '../../providers/wellness_provider.dart';
 import '../../widgets/common.dart';
 import '../profile/profile_screen.dart';
@@ -31,8 +33,9 @@ const _accent = Color(0xFFC5A2FF);
 const _lime = Color(0xFFD6F5A6);
 
 class HomeScreen extends ConsumerStatefulWidget {
-  const HomeScreen({super.key, this.avatarRendererBuilder});
+  const HomeScreen({super.key, this.avatarRendererBuilder, this.onReturned});
   final WidgetBuilder? avatarRendererBuilder;
+  final Future<void> Function()? onReturned;
   @override
   ConsumerState<HomeScreen> createState() => _HomeScreenState();
 }
@@ -85,7 +88,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
     // Refresh after returning from wellness, scheduling or a run.
     if (mounted && ref.read(programProvider).isRegistered) {
       await ref.read(programProvider).loadCurrentWeek();
+      if (mounted) ref.read(dailyQuestProvider).refresh();
     }
+    if (mounted) await widget.onReturned?.call();
   }
 
   void _openPage(String title, Widget child) => _push(Scaffold(
@@ -116,7 +121,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     final user = ref.watch(userProvider);
-    final wallet = ref.watch(walletProvider);
+    final progress = ref.watch(progressProvider);
+    final actual = progress.asData?.value;
     final account = ref.watch(authProvider).user;
     final displayName = account?['displayName']?.toString().trim();
     final avatarUrl = account?['avatarUrl']?.toString().trim();
@@ -125,12 +131,8 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
         : displayName;
     final wellness = ref.watch(wellnessProvider);
     final program = ref.watch(programProvider);
-    final missions = ref.watch(missionProvider);
-    final quest = program.isRegistered &&
-            program.isScheduleSaved &&
-            program.currentWeekErrorMessage == null
-        ? program.todayQuest
-        : null;
+
+    final quest = ref.watch(dailyQuestProvider).quest;
     final done = quest?['status'] == 'completed';
     final ready = wellness.completedToday;
     final label = program.isLoading
@@ -149,7 +151,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                     : !program.isScheduleSaved
                         ? 'วิ่งอิสระ'
                         : done
-                            ? 'ทำแผนวันนี้สำเร็จ'
+                            ? 'คุณทำภารกิจประจำวันสำเร็จแล้ว'
                             : quest == null
                                 ? 'วิ่งอิสระ'
                                 : _questLabel(quest);
@@ -280,7 +282,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                   overflow: TextOverflow.ellipsis,
                                   style: AppText.heading(size: 14)),
                               Text(
-                                  'Lv.${user.level} · ${user.exp % 100} / 100 XP',
+                                  actual == null
+                                      ? (progress.hasError
+                                          ? 'โหลด EXP ไม่สำเร็จ'
+                                          : 'กำลังโหลด EXP…')
+                                      : 'Lv.${actual.level} · ${actual.exp} / ${actual.expToNext} XP',
                                   style: AppText.body(
                                       size: 10.5,
                                       color: AppColors.textSecondary)),
@@ -288,7 +294,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                               ClipRRect(
                                   borderRadius: BorderRadius.circular(4),
                                   child: LinearProgressIndicator(
-                                      value: (user.exp % 100) / 100,
+                                      value: actual?.fraction ?? 0,
                                       minHeight: 3,
                                       color: _accent,
                                       backgroundColor:
@@ -308,7 +314,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                           const Icon(Icons.toll_outlined,
                               color: AppColors.gold2, size: 18),
                           const SizedBox(width: 6),
-                          Text(wallet.valueOrNull?.toString() ?? '—',
+                          Text(actual?.coinBalance.toString() ?? '—',
                               style: AppText.body(
                                   size: 13, color: AppColors.gold2)),
                         ])),
@@ -401,6 +407,13 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                         controller: scrollController,
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 24),
                         children: [
+                          const DailyQuestPanel(home: true),
+                          const DailySideQuestPanel(),
+                          if (progress.hasError)
+                            TextButton(
+                                onPressed: () =>
+                                    ref.invalidate(progressProvider),
+                                child: const Text('ลองโหลด coin / EXP ใหม่')),
                           Text('วันนี้ของคุณ',
                               style: AppText.heading(size: 19)),
                           const SizedBox(height: 12),
@@ -451,11 +464,11 @@ class _HomeScreenState extends ConsumerState<HomeScreen> {
                                 'เช็กอินสุขภาพ',
                                 'เช็กความพร้อมก่อนวิ่ง',
                                 () => _push(const DailyWellnessScreen())),
-                          if (quest != null && !done)
+                          if (quest != null)
                             _taskRow(
                                 Icons.flag_outlined,
                                 'ภารกิจของฉัน',
-                                'ทำครบแล้ว ${missions.doneCount} / ${missions.missions.length}',
+                                'ดู Main Quest และ Side Quest วันนี้',
                                 () => _push(const DailyMissionsScreen())),
                           _taskRow(
                               Icons.calendar_month_outlined,

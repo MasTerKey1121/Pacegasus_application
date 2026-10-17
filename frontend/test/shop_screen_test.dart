@@ -12,7 +12,9 @@ import 'package:pacegasus/screens/shop/shop_screen.dart';
 import 'package:pacegasus/screens/home/avatar_layout.dart';
 import 'package:pacegasus/screens/home/home_avatar.dart';
 import 'package:pacegasus/providers/avatar_provider.dart';
-import 'package:pacegasus/providers/user_provider.dart';
+import 'package:pacegasus/providers/progress_provider.dart';
+import 'package:pacegasus/providers/auth_provider.dart';
+import 'run_quest_regression_test.dart' show TestAuth;
 
 class _Fonts extends Fake implements AssetManifest {
   @override
@@ -58,7 +60,12 @@ class _Client extends ApiClient {
     purchased.add(color);
     return {
       'data': {
-        'progress': {'coinBalance': coins}
+        'progress': {
+          'coinBalance': coins,
+          'level': 1,
+          'exp': 0,
+          'expToNext': 200
+        }
       }
     };
   }
@@ -82,7 +89,12 @@ class _Client extends ApiClient {
     if (fail) throw ApiException(503, 'เซิร์ฟเวอร์ไม่พร้อม');
     if (path.contains('/progress')) {
       return {
-        'data': {'coinBalance': paidShirts ? coins : 42}
+        'data': {
+          'coinBalance': paidShirts ? coins : 42,
+          'level': 1,
+          'exp': 0,
+          'expToNext': 200
+        }
       };
     }
     if (path.contains('/inventory')) {
@@ -212,6 +224,8 @@ void main() {
     await tester.pumpWidget(ProviderScope(
         overrides: [
           shopApiProvider.overrideWithValue(ShopApi(client)),
+          authProvider.overrideWith((ref) => TestAuth(client)..signIn('a')),
+          apiClientProvider.overrideWithValue(client),
           avatarOutfitProvider
               .overrideWith((ref) async => const AvatarOutfit({}))
         ],
@@ -349,7 +363,7 @@ void main() {
     expect(client.purchased, {'purple'});
     final container =
         ProviderScope.containerOf(tester.element(find.byType(ShopScreen)));
-    expect(container.read(userProvider).coin, 10);
+    expect(container.read(progressProvider).asData!.value.coinBalance, 10);
     expect(find.byType(HomeAvatar), findsNothing);
     expect(find.byKey(const Key('shop-buy')), findsNothing);
     await tester.ensureVisible(find.text('เสื้อวิ่งสีน้ำตาล'));

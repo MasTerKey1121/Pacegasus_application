@@ -32,6 +32,7 @@ class ActiveSideQuest {
   final String? icon;
   final int coinReward;
   bool done;
+  int? confirmedCoins;
 
   ActiveSideQuest({
     required this.sideQuestId,

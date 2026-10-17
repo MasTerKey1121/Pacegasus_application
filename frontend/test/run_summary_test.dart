@@ -45,7 +45,9 @@ class _Sessions extends RunningSessionApi {
   Future<Map<String, dynamic>> getDetail({required String sessionId}) async {
     fetchedId = sessionId;
     if (fail) throw ApiException(503, 'Offline');
-    return {'data': data};
+    return {
+      'data': {'id': sessionId, 'status': 'in_progress', ...data}
+    };
   }
 
   @override
@@ -56,7 +58,14 @@ class _Sessions extends RunningSessionApi {
           required double endLat,
           required double endLng,
           List<Map<String, double>> routePoints = const []}) async =>
-      {'data': {}};
+      {
+        'data': {
+          'id': sessionId,
+          'status': 'completed',
+          'distance_km': distanceKm,
+          'duration_seconds': durationSeconds
+        }
+      };
 }
 
 class _Feedback extends RpeApi {

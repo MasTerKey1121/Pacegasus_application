@@ -21,7 +21,7 @@ void main() {
     expect(draft?['sessionId'], 'session-a');
   });
 
-  test('clears a run draft when the authenticated user changes', () async {
+  test('preserves the owners run draft when another account signs in', () async {
     final store = RunDraftStore();
     await store.save({
       'ownerUserId': 'user-a',
@@ -29,7 +29,7 @@ void main() {
     });
 
     expect(await store.loadForUser('user-b'), isNull);
-    expect(await store.load(), isNull);
+    expect((await store.loadForUser('user-a'))?['sessionId'], 'session-a');
   });
 
   test('clears a legacy draft that has no owner', () async {

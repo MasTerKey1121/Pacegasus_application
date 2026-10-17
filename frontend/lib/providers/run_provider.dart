@@ -9,7 +9,11 @@ import 'run_setup_provider.dart';
 
 /// Drives the running screen using elapsed time plus GPS distance updates.
 class RunSessionNotifier extends ChangeNotifier {
-  RunSessionNotifier(this._sessionApi);
+  RunSessionNotifier(this._sessionApi, {this.ownerUserId});
+  final String? ownerUserId;
+  String? finishError;
+  int _generation = 0;
+  bool _disposed = false;
   final RunningSessionApi _sessionApi;
 
   Timer? _timer;
@@ -20,12 +24,11 @@ class RunSessionNotifier extends ChangeNotifier {
   double distanceKm = 0;
   double speedKmh = 0;
 
-  final double goalDistanceKm = 5.0;
-  final String goalPace = '7 min/km';
-
   RunResult? lastResult;
 
   void start() {
+    finishError = null;
+    lastResult = null;
     isRunning = true;
     isPaused = false;
     elapsedSeconds = 0;
@@ -62,17 +65,28 @@ class RunSessionNotifier extends ChangeNotifier {
     required int elapsed,
     required double distance,
     required bool paused,
+    bool pendingCompletion = false,
   }) {
     _timer?.cancel();
     elapsedSeconds = elapsed;
     distanceKm = distance;
-    isRunning = true;
+    isRunning = !pendingCompletion;
+    finishError = pendingCompletion
+        ? 'ยังไม่ทราบผลการบันทึก กรุณาลองบันทึกใหม่เพื่อตรวจสถานะ'
+        : null;
     isPaused = paused;
     speedKmh = 0;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) {
-      if (!isPaused) elapsedSeconds += 1;
+      if (isRunning && !isPaused) elapsedSeconds += 1;
       notifyListeners();
     });
+    notifyListeners();
+  }
+
+  void prepareFinish() {
+    _timer?.cancel();
+    isRunning = false;
+    speedKmh = 0;
     notifyListeners();
   }
 
@@ -83,22 +97,55 @@ class RunSessionNotifier extends ChangeNotifier {
     double? endLng,
     List<Map<String, double>> routePoints = const [],
   }) async {
-    if (isStopping) return null; // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
+    if (isStopping || lastResult != null) {
+      return lastResult;
+    } // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
+    final generation = _generation;
     _timer?.cancel();
     isRunning = false;
     isStopping = true;
+    finishError = null;
     notifyListeners();
 
     try {
-      await _sessionApi.complete(
-        sessionId: sessionId,
-        distanceKm: distanceKm,
-        durationSeconds: elapsedSeconds,
-        endLat: endLat ?? 13.7563,
-        endLng: endLng ?? 100.5018,
-        routePoints: routePoints,
-      );
+      Map? confirmed;
+      // Reconcile before completing, including a timeout whose write may
+      // have committed. A failed detail read must never cause another PATCH.
+      {
+        final response = await _sessionApi.getDetail(sessionId: sessionId);
+        if (_disposed || generation != _generation) return null;
+        confirmed = response['data'] as Map;
+        if (confirmed['id'] != sessionId ||
+            (ownerUserId != null &&
+                confirmed['user_id']?.toString() != ownerUserId)) {
+          throw StateError('ไม่สามารถยืนยันเจ้าของ Session');
+        }
+        if (confirmed['status'] != 'completed' &&
+            confirmed['status'] != 'in_progress') {
+          throw StateError('Session นี้ไม่สามารถบันทึกซ้ำได้');
+        }
+      }
+      if (confirmed['status'] != 'completed') {
+        final response = await _sessionApi.complete(
+          sessionId: sessionId,
+          distanceKm: distanceKm,
+          durationSeconds: elapsedSeconds,
+          endLat: endLat ?? 13.7563,
+          endLng: endLng ?? 100.5018,
+          routePoints: routePoints,
+        );
 
+        if (_disposed || generation != _generation) return null;
+        confirmed = response['data'] as Map?;
+      }
+      if (confirmed?['status'] != 'completed' ||
+          confirmed?['id'] != sessionId ||
+          (ownerUserId != null &&
+              confirmed?['user_id']?.toString() != ownerUserId)) {
+        throw StateError('ยังไม่ได้รับการยืนยันการบันทึก Session');
+      }
+      distanceKm = double.parse('${confirmed!['distance_km']}');
+      elapsedSeconds = int.parse('${confirmed['duration_seconds']}');
       // การจบวิ่งไม่ถือว่าทำ Side Quest สำเร็จ รางวัลให้เฉพาะภารกิจ
       // ที่ผู้ใช้กดทำสำเร็จผ่าน RunSetupNotifier.completeSideQuest เท่านั้น
 
@@ -121,11 +168,15 @@ class RunSessionNotifier extends ChangeNotifier {
 
       return lastResult;
     } catch (e) {
-      debugPrint(e.toString());
+      if (!_disposed && generation == _generation) {
+        finishError = 'บันทึกการวิ่งไม่สำเร็จ: $e';
+      }
       return null;
     } finally {
-      isStopping = false;
-      notifyListeners();
+      if (!_disposed && generation == _generation) {
+        isStopping = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -136,6 +187,8 @@ class RunSessionNotifier extends ChangeNotifier {
   }
 
   void reset() {
+    _generation++;
+    finishError = null;
     _timer?.cancel();
     _timer = null;
     isRunning = false;
@@ -150,17 +203,18 @@ class RunSessionNotifier extends ChangeNotifier {
 
   @override
   void dispose() {
+    _disposed = true;
+    _generation++;
     _timer?.cancel();
     super.dispose();
   }
 }
 
 final runProvider = ChangeNotifierProvider<RunSessionNotifier>((ref) {
+  final owner = ref.watch(authProvider.select((s) => s.user?['id']));
   final notifier = RunSessionNotifier(
     ref.read(runningSessionApiProvider),
+    ownerUserId: owner?.toString(),
   );
-  ref.listen<AuthState>(authProvider, (previous, next) {
-    if (previous?.user?['id'] != next.user?['id']) notifier.reset();
-  });
   return notifier;
 });

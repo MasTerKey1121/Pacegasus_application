@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/wellness_data.dart';
 import '../services/wellness_api.dart';
 import 'auth_provider.dart';
+import 'progress_provider.dart';
 
 final wellnessApiProvider = Provider<WellnessApi>(
   (ref) => WellnessApi(ref.read(apiClientProvider)),
@@ -11,7 +12,8 @@ final wellnessApiProvider = Provider<WellnessApi>(
 class WellnessNotifier extends ChangeNotifier {
   final WellnessApi api;
 
-  WellnessNotifier(this.api);
+  WellnessNotifier(this.api, {this.onSaved});
+  final VoidCallback? onSaved;
 
   WellnessEntry entry = WellnessEntry();
 
@@ -75,6 +77,7 @@ class WellnessNotifier extends ChangeNotifier {
 
       if (accountVersion != _accountVersion) return false;
       completedToday = true;
+      onSaved?.call();
       isSaving = false;
       notifyListeners();
 
@@ -134,7 +137,8 @@ class WellnessNotifier extends ChangeNotifier {
 
 final wellnessProvider = ChangeNotifierProvider<WellnessNotifier>(
   (ref) {
-    final notifier = WellnessNotifier(ref.read(wellnessApiProvider));
+    final notifier = WellnessNotifier(ref.read(wellnessApiProvider),
+        onSaved: () => ref.invalidate(progressProvider));
     ref.listen<AuthState>(authProvider, (previous, next) {
       final previousUserId = previous?.user?['id'];
       final nextUserId = next.user?['id'];

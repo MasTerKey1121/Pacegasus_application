@@ -29,13 +29,15 @@ class RewardScreen extends StatelessWidget {
                 Text(
                     coin == null || exp == null
                         ? 'บันทึกการวิ่งแล้ว!'
-                        : 'รับรางวัลแล้ว!',
+                        : coin == 0 && exp == 0
+                            ? 'บันทึกข้อมูลแล้ว'
+                            : 'รับรางวัลแล้ว!',
                     style: AppText.heading(size: 22)),
                 const SizedBox(height: 6),
                 Text(
                     coin == null || exp == null
                         ? 'ยังไม่มีข้อมูลรางวัลจากเซิร์ฟเวอร์'
-                        : 'จากการบันทึกหลังวิ่งครั้งนี้',
+                        : 'จาก feedback หลังวิ่งครั้งนี้ (server ยืนยัน)',
                     style:
                         AppText.body(size: 13, color: AppColors.textSecondary)),
                 const SizedBox(height: 30),

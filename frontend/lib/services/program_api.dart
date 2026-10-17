@@ -4,6 +4,10 @@ class ProgramApi {
   final ApiClient client;
   ProgramApi(this.client);
 
+  Future<Map<String, dynamic>> completeQuest(String questId) => client.patch(
+      '/api/programs/quests/${Uri.encodeComponent(questId)}/complete',
+      auth: true);
+
   /// API 5.0: retrieve the available training-program templates.
   Future<Map<String, dynamic>> getTemplates() =>
       client.get('/api/programs/templates', auth: true);
@@ -25,7 +29,8 @@ class ProgramApi {
 
   Future<Map<String, dynamic>> addQuestsBatch(
     List<Map<String, String>> quests,
-  ) => client.post(
+  ) =>
+      client.post(
         '/api/programs/quests/batch',
         body: {'quests': quests},
         auth: true,
@@ -35,7 +40,8 @@ class ProgramApi {
   Future<Map<String, dynamic>> replaceScheduleWeek({
     required String weekStart,
     required List<Map<String, String>> quests,
-  }) => client.put(
+  }) =>
+      client.put(
         '/api/programs/quests/week',
         body: {'weekStart': weekStart, 'quests': quests},
         auth: true,

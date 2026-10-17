@@ -2,7 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/wellness_provider.dart';
-import '../../providers/user_provider.dart';
+import '../../providers/progress_provider.dart';
 import '../../providers/mission_provider.dart';
 import '../../widgets/common.dart';
 
@@ -160,11 +160,7 @@ class DailyWellnessScreen extends ConsumerWidget {
 
                           if (ok) {
                             ref.read(missionProvider).setDone('wellness', true);
-                            if (state.awardedCoins > 0) {
-                              ref
-                                  .read(userProvider)
-                                  .addReward(coin: state.awardedCoins);
-                            }
+                            ref.invalidate(progressProvider);
                             Navigator.of(context).pop();
                           } else {
                             showAppToast(

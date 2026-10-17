@@ -9,7 +9,9 @@ import 'package:google_fonts/google_fonts.dart';
 // ignore: implementation_imports
 import 'package:google_fonts/src/google_fonts_base.dart' as fonts;
 import 'package:pacegasus/providers/auth_provider.dart';
-import 'package:pacegasus/providers/wallet_provider.dart';
+import 'package:pacegasus/providers/progress_provider.dart';
+import 'package:pacegasus/providers/daily_quest_provider.dart';
+import 'package:pacegasus/services/running_session_api.dart';
 import 'package:pacegasus/providers/program_provider.dart';
 import 'package:pacegasus/providers/wellness_provider.dart';
 import 'package:pacegasus/screens/home/home_screen.dart';
@@ -163,6 +165,10 @@ class _RegistrationApi extends ProgramApi {
       };
 }
 
+void screenTest(String name, WidgetTesterCallback body) =>
+    testWidgets(name, body,
+        variant: TargetPlatformVariant.only(TargetPlatform.windows));
+
 void main() {
   TestWidgetsFlutterBinding.ensureInitialized();
   test(
@@ -205,7 +211,14 @@ void main() {
     addTearDown(tester.view.resetDevicePixelRatio);
     await tester.pumpWidget(ProviderScope(
         overrides: [
-          walletProvider.overrideWith((ref) async => 42),
+          progressProvider
+              .overrideWith((ref) async => const GameProgress(42, 3, 45, 220)),
+          dailyQuestProvider.overrideWith((ref) => DailyQuestNotifier(
+              ProgramApi(ApiClient()),
+              RunningSessionApi(ApiClient()),
+              'a',
+              'today')
+            ..quest = (program ?? _Program()).todayQuest),
           authProvider.overrideWith((ref) => _Auth()),
           programProvider.overrideWith((ref) => program ?? _Program()),
           wellnessProvider.overrideWith((ref) => WellnessNotifier(
@@ -220,7 +233,7 @@ void main() {
     await tester.pumpAndSettle();
   }
 
-  testWidgets(
+  screenTest(
       'Home profile photo follows account changes and handles missing or failed images',
       (tester) async {
     await home(tester);
@@ -260,7 +273,7 @@ void main() {
       .controller!
       .size;
 
-  testWidgets(
+  screenTest(
       'a saved today quest offers start and shows today plan separately from schedule management',
       (tester) async {
     final program = ProgramNotifier(_CalendarApi(), _OnboardingApi());
@@ -279,7 +292,7 @@ void main() {
   });
 
   for (final existing in [false, true]) {
-    testWidgets('registration screen opens schedule (existing=$existing)',
+    screenTest('registration screen opens schedule (existing=$existing)',
         (tester) async {
       tester.view.physicalSize = const Size(800, 1200);
       tester.view.devicePixelRatio = 1;
@@ -309,7 +322,7 @@ void main() {
     });
   }
 
-  testWidgets('sheet collapses outside, opens at two levels, and drags down',
+  screenTest('sheet collapses outside, opens at two levels, and drags down',
       (tester) async {
     await home(tester);
     expect(extent(tester), closeTo(.4, .005));
@@ -329,7 +342,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('avatar hides controls and restores the sheet', (tester) async {
+  screenTest('avatar hides controls and restores the sheet', (tester) async {
     await home(tester);
     final avatar = find.byKey(const Key('home-avatar'));
     await tester.tapAt(tester.getTopLeft(avatar) + const Offset(110, 55));
@@ -343,7 +356,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets(
+  screenTest(
       'floating right menu closes with X, outside or back and has no drawer',
       (tester) async {
     await home(tester);
@@ -370,7 +383,7 @@ void main() {
     expect(find.byKey(const Key('home-menu')), findsNothing);
     expect(tester.takeException(), isNull);
   });
-  testWidgets(
+  screenTest(
       'compact left shortcuts scroll to collapse and switching sides closes the first menu',
       (tester) async {
     await home(tester, size: const Size(320, 568));
@@ -395,7 +408,7 @@ void main() {
     expect(find.byKey(const Key('home-menu-close')), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
-  testWidgets('primary action sends an unchecked runner to wellness',
+  screenTest('primary action sends an unchecked runner to wellness',
       (tester) async {
     // Destination screens predate this redesign; use a wide viewport for this
     // navigation assertion with Flutter's deliberately wide test font.
@@ -407,7 +420,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('ready runner reaches run selection', (tester) async {
+  screenTest('ready runner reaches run selection', (tester) async {
     await home(tester, checkedIn: true, size: const Size(800, 1000));
     await tester.tap(find.byKey(const Key('home-primary')));
     await tester.pumpAndSettle();
@@ -416,7 +429,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('wellness task disappears immediately after check-in',
+  screenTest('wellness task disappears immediately after check-in',
       (tester) async {
     await home(tester);
     await tester.tap(find.byKey(const Key('home-sheet-handle')));
@@ -432,7 +445,7 @@ void main() {
     expect(find.text('เริ่มวิ่ง'), findsOneWidget);
   });
 
-  testWidgets('unrelated registration error does not block a loaded plan',
+  screenTest('unrelated registration error does not block a loaded plan',
       (tester) async {
     final program = _Program()..errorMessage = 'registration error';
     await home(tester, checkedIn: true, program: program);
@@ -447,7 +460,7 @@ void main() {
     'completed',
     'unavailable'
   ]) {
-    testWidgets('runner can start without a daily quest ($mode)',
+    screenTest('runner can start without a daily quest ($mode)',
         (tester) async {
       final program = _Program();
       if (mode == 'unregistered') program.registered = false;
@@ -460,17 +473,20 @@ void main() {
       await home(tester,
           checkedIn: true, program: program, size: const Size(800, 1000));
       expect(find.text('เริ่มวิ่ง'), findsOneWidget);
-      expect(find.text('ภารกิจประจำวัน'), findsNothing);
-      expect(find.text('ภารกิจของฉัน'), findsNothing);
+      expect(find.text('ภารกิจประจำวัน'),
+          mode == 'unavailable' ? findsOneWidget : findsNothing);
+      if (mode == 'completed') {
+        expect(find.text('ภารกิจของฉัน'), findsOneWidget);
+      }
       await tester.tap(find.byKey(const Key('home-primary')));
       await tester.pumpAndSettle();
       expect(find.byType(RunTypeSelectScreen), findsOneWidget);
-      expect(find.text('Main Quest วันนี้'), findsNothing);
+      expect(find.text('Main Quest วันนี้'), findsOneWidget);
       expect(tester.takeException(), isNull);
     });
   }
 
-  testWidgets('profile displays and copies public UID, not database id',
+  screenTest('profile displays and copies public UID, not database id',
       (tester) async {
     String? copied;
     tester.binding.defaultBinaryMessenger
@@ -495,7 +511,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('missing UID has no fabricated value or copy action',
+  screenTest('missing UID has no fabricated value or copy action',
       (tester) async {
     await tester.pumpWidget(ProviderScope(
         overrides: [authProvider.overrideWith((ref) => _Auth(uid: null))],
@@ -506,7 +522,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('compact phone supports sheet and menu without overflow',
+  screenTest('compact phone supports sheet and menu without overflow',
       (tester) async {
     await home(tester, size: const Size(320, 568));
     await tester.tap(find.byKey(const Key('home-sheet-handle')));

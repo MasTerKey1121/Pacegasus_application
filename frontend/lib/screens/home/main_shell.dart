@@ -9,7 +9,8 @@ import '../../providers/auth_provider.dart';
 import 'home_screen.dart';
 
 import '../run/run_session_screen.dart';
-import '../run/run_summary_screen.dart';
+import '../../providers/progress_provider.dart';
+import '../../providers/daily_quest_provider.dart';
 import '../../providers/run_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../services/run_draft_store.dart';
@@ -24,6 +25,8 @@ class MainShell extends ConsumerStatefulWidget {
 class _MainShellState extends ConsumerState<MainShell> {
   bool _isRestoringWellness = true;
   bool _wellnessReady = false;
+  String? _draftError;
+  bool _checkingDraft = false;
 
   @override
   void initState() {
@@ -33,6 +36,7 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _restoreHome() async {
+    ref.invalidate(progressProvider);
     final programRestore = ref.read(programProvider).restore();
     final loaded = await ref.read(wellnessProvider).loadToday();
     if (!mounted) return;
@@ -50,62 +54,91 @@ class _MainShellState extends ConsumerState<MainShell> {
   }
 
   Future<void> _offerRunResume() async {
+    if (_checkingDraft) return;
     final userId = ref.read(authProvider).user?['id']?.toString();
-    final draft = await runDraftStore.loadForUser(userId);
-    if (!mounted || draft == null || draft['sessionId'] == null) return;
-    final continueRun = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('พบ Session การวิ่งที่ยังไม่เสร็จ'),
-        content: const Text('ต้องการวิ่งต่อจากเดิมหรือไม่?'),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, false),
-              child: const Text('จบ Session')),
-          TextButton(
-              onPressed: () => Navigator.pop(ctx, true),
-              child: const Text('วิ่งต่อ')),
-        ],
-      ),
-    );
-    if (!mounted) return;
-    ref.read(runSetupProvider).restoreDraft(draft);
-    ref.read(runProvider).restore(
+    if (userId == null) return;
+    _checkingDraft = true;
+    try {
+      final draft = await verifiedRunDraft(
+          runDraftStore, ref.read(runningSessionApiProvider), userId);
+      if (!mounted ||
+          ref.read(authProvider).user?['id']?.toString() != userId) {
+        return;
+      }
+      setState(() => _draftError = null);
+      if (draft == null) return;
+      final pending = draft['pendingCompletion'] == true;
+      final continueRun = await showDialog<bool>(
+          context: context,
+          builder: (ctx) => AlertDialog(
+                title: Text(pending
+                    ? 'พบการวิ่งที่รอยืนยันการบันทึก'
+                    : 'พบ Session การวิ่งที่ยังไม่เสร็จ'),
+                content: Text(pending
+                    ? 'เปิดเพื่อตรวจสถานะและลองบันทึกใหม่'
+                    : 'ต้องการวิ่งต่อจากเดิมหรือไม่?'),
+                actions: [
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, false),
+                      child: const Text('ไว้ภายหลัง')),
+                  TextButton(
+                      onPressed: () => Navigator.pop(ctx, true),
+                      child: Text(pending ? 'ตรวจและบันทึกใหม่' : 'วิ่งต่อ')),
+                ],
+              ));
+      if (mounted && continueRun != true) {
+        setState(
+            () => _draftError = 'มีข้อมูล Session ที่ยังไม่จบ เก็บไว้ให้แล้ว');
+      }
+      if (!mounted ||
+          continueRun != true ||
+          ref.read(authProvider).user?['id']?.toString() != userId) {
+        return;
+      }
+      ref.read(runSetupProvider).restoreDraft(draft);
+      ref.read(runProvider).restore(
           elapsed: (draft['elapsedSeconds'] as num?)?.toInt() ?? 0,
           distance: (draft['distanceKm'] as num?)?.toDouble() ?? 0,
           paused: draft['isPaused'] == true,
-        );
-    if (continueRun != true) {
-      final route = (draft['routePoints'] as List<dynamic>? ?? const [])
-          .whereType<Map>()
-          .map((point) => <String, double>{
-                'lat': (point['lat'] as num?)?.toDouble() ?? 13.7563,
-                'lng': (point['lng'] as num?)?.toDouble() ?? 100.5018,
-              })
-          .toList();
-      final result = await ref.read(runProvider).stop(
-            sessionId: ref.read(runSetupProvider).sessionId!,
-            sideQuests: ref.read(runSetupProvider).activeSideQuests,
-            routePoints: route,
-          );
-      if (mounted && result != null) {
-        await runDraftStore.clear();
-        if (!mounted) return;
-        Navigator.of(context).push(
-          MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
-        );
+          pendingCompletion: pending);
+      await Navigator.of(context)
+          .push(MaterialPageRoute(builder: (_) => const RunSessionScreen()));
+      if (mounted) ref.read(dailyQuestProvider).refresh();
+    } catch (error) {
+      if (mounted && ref.read(authProvider).user?['id']?.toString() == userId) {
+        setState(() => _draftError =
+            'ตรวจสถานะ Session ไม่สำเร็จ เก็บข้อมูลการวิ่งไว้แล้ว: $error');
       }
-      return;
+    } finally {
+      _checkingDraft = false;
     }
-    Navigator.of(context).push(
-      MaterialPageRoute(builder: (_) => const RunSessionScreen()),
-    );
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_wellnessReady) return const HomeScreen();
+    if (_wellnessReady) {
+      return Stack(children: [
+        HomeScreen(onReturned: _offerRunResume),
+        if (_draftError != null)
+          Positioned(
+              left: 12,
+              right: 12,
+              bottom: 20,
+              child: SafeArea(
+                  child: Material(
+                      color: Colors.black87,
+                      child: Padding(
+                          padding: const EdgeInsets.all(12),
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                            Text(_draftError!),
+                            TextButton(
+                                onPressed:
+                                    _checkingDraft ? null : _offerRunResume,
+                                child: const Text('ลองตรวจสถานะอีกครั้ง')),
+                          ]))))),
+      ]);
+    }
     return Scaffold(
       body: Center(
         child: _isRestoringWellness

@@ -2,9 +2,11 @@ import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
-import '../../providers/program_provider.dart';
+import '../../providers/daily_quest_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/common.dart';
+import '../../widgets/daily_quest_panel.dart';
+import '../../widgets/daily_side_quest_panel.dart';
 import '../home/main_shell.dart';
 import 'run_session_screen.dart';
 
@@ -95,14 +97,8 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
   @override
   Widget build(BuildContext context) {
     final setup = ref.watch(runSetupProvider);
-    final program = ref.watch(programProvider);
-    final scheduledQuest = program.isRegistered &&
-            program.isScheduleSaved &&
-            program.currentWeekErrorMessage == null
-        ? program.todayQuest
-        : null;
-    final todayQuest =
-        scheduledQuest?['status'] == 'completed' ? null : scheduledQuest;
+    final daily = ref.watch(dailyQuestProvider);
+    final todayQuest = daily.completed ? null : daily.quest;
     final sessionType = todayQuest?['session_type']?.toString();
 
     return Scaffold(
@@ -166,6 +162,7 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         const Center(child: CircularProgressIndicator())
                       else if (setup.environment != null) ...[
                         const SectionLabel(title: 'Side Quest วันนี้'),
+                        const DailySideQuestPanel(),
                         Text(
                           'ทุกภารกิจพร้อมให้ทำระหว่างวิ่ง ทำอันไหนสำเร็จ ก็รับรางวัลของอันนั้น ไม่จำเป็นต้องทำครบทุกอัน',
                           style: AppText.body(
@@ -194,7 +191,10 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                                           style: AppText.body(
                                               size: 11.5,
                                               color: AppColors.textSecondary)),
-                                      Text('รางวัล ${q.coinReward} เหรียญ',
+                                      Text(
+                                          setup.isDone(q.instanceId)
+                                              ? 'คุณสำเร็จภารกิจนี้แล้ว'
+                                              : 'รางวัลที่เสนอ ${q.coinReward} เหรียญ',
                                           style: AppText.body(
                                               size: 11,
                                               color: AppColors.gold1)),
@@ -205,15 +205,7 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                             );
                           }),
                       ],
-                      if (todayQuest != null) ...[
-                        const SectionLabel(title: 'Main Quest วันนี้'),
-                        AppCard(
-                          child: Text(
-                            '${todayQuest['session_type'] ?? ''} · ${todayQuest['planned_value'] ?? ''} ${todayQuest['unit'] ?? ''}',
-                            style: AppText.heading(size: 13.5),
-                          ),
-                        ),
-                      ],
+                      const DailyQuestPanel(),
                     ],
                   ),
                 ),

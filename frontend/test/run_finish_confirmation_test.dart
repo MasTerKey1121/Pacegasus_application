@@ -12,6 +12,9 @@ import 'package:pacegasus/providers/run_provider.dart';
 import 'package:pacegasus/providers/run_setup_provider.dart';
 import 'package:pacegasus/screens/run/run_session_screen.dart';
 import 'package:pacegasus/services/api_client.dart';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:pacegasus/providers/auth_provider.dart';
+import 'run_quest_regression_test.dart' show TestAuth;
 import 'package:pacegasus/services/quest_api.dart';
 import 'package:pacegasus/services/running_session_api.dart';
 
@@ -44,6 +47,7 @@ class _Run extends RunSessionNotifier {
 
 void main() {
   setUp(() {
+    FlutterSecureStorage.setMockInitialValues({});
     GoogleFonts.config.allowRuntimeFetching = false;
     fonts.assetManifest = _Fonts();
     TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
@@ -66,6 +70,7 @@ void main() {
       ..sessionId = 'run';
     await tester.pumpWidget(ProviderScope(
         overrides: [
+          authProvider.overrideWith((ref) => TestAuth(client)..signIn('a')),
           runProvider.overrideWith((ref) => run),
           runSetupProvider.overrideWith((ref) => setup)
         ],

@@ -97,19 +97,30 @@ class ApiClient {
     }
     final encodedBody = body != null ? jsonEncode(body) : null;
 
-    return _sendWithFallback((candidate) =>
-        _dispatch(method, Uri.parse('$candidate$path'), headers, encodedBody));
+    final guardedRunWrite = path == '/api/rpe' ||
+        path.startsWith('/api/running-sessions') ||
+        path.startsWith('/api/side-quests') ||
+        path.startsWith('/api/quests/') ||
+        (path.startsWith('/api/programs/quests/') &&
+            path.endsWith('/complete'));
+    return _sendWithFallback(
+        (candidate) => _dispatch(
+            method, Uri.parse('$candidate$path'), headers, encodedBody),
+        allowFallback: !guardedRunWrite ||
+            (method == 'GET' && !path.startsWith('/api/quests/side?')));
   }
 
   Future<http.Response> _sendWithFallback(
-      Future<http.Response> Function(String candidate) send) async {
+      Future<http.Response> Function(String candidate) send,
+      {bool allowFallback = true}) async {
     final candidates = <String>[
       if (_reachableBaseUrl != null) _reachableBaseUrl!,
       ..._baseUrls.where((url) => url != _reachableBaseUrl),
     ];
     Object? lastConnectionError;
 
-    for (final candidate in candidates) {
+    for (final candidate
+        in candidates.take(allowFallback ? candidates.length : 1)) {
       try {
         final response = await send(candidate).timeout(_requestTimeout);
         _reachableBaseUrl = candidate;
@@ -159,7 +170,12 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool auth = false,
   }) async {
+    final originalToken = getAccessToken?.call();
     var res = await _sendRaw(method, path, body, auth);
+    if (auth && originalToken != getAccessToken?.call()) {
+      throw ApiException(
+          0, 'บัญชีหรือข้อมูลเข้าสู่ระบบเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
+    }
 
     if (res.statusCode == 401 && auth && onUnauthorized != null) {
       final refreshed = await onUnauthorized!();

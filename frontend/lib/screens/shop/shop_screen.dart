@@ -5,8 +5,7 @@ import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/shop_api.dart';
 import '../../providers/avatar_provider.dart';
-import '../../providers/user_provider.dart';
-import '../../providers/wallet_provider.dart';
+import '../../providers/progress_provider.dart';
 import '../home/home_avatar.dart';
 import '../home/avatar_layout.dart';
 
@@ -59,7 +58,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
   final _sheet = DraggableScrollableController();
   double _sheetExtent = .5;
   late Future<List<ShopPage>> _catalog;
-  late Future<int> _balance;
   int? _selected;
   bool _expanded = false;
   bool _saving = false;
@@ -93,16 +91,14 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
     if (_buying || product == null || product.owned) return;
     setState(() => _buying = true);
     try {
-      final coins = await ref.read(shopApiProvider).purchase(product.id);
+      await ref.read(shopApiProvider).purchase(product.id);
       if (!mounted) return;
-      ref.read(userProvider).setCoinBalance(coins);
-      ref.invalidate(walletProvider);
+      ref.invalidate(progressProvider);
       ref.invalidate(avatarOutfitProvider);
       setState(() {
         _product = null;
         _tryOn = false;
         _reload();
-        _balance = Future.value(coins);
       });
       ScaffoldMessenger.of(context)
         ..removeCurrentSnackBar()
@@ -198,7 +194,6 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       }
       return pages;
     });
-    _balance = widget.wardrobe ? Future.value(0) : api.balance();
   }
 
   @override
@@ -315,10 +310,15 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
                     const Icon(Icons.toll, color: AppColors.gold2, size: 20),
                   const SizedBox(width: 8),
                   if (!widget.wardrobe)
-                    FutureBuilder<int>(
-                        future: _balance,
-                        builder: (_, snapshot) => Text(
-                            snapshot.hasData ? '${snapshot.data}' : '—',
+                    Consumer(
+                        builder: (_, ref, child) => Text(
+                            ref
+                                    .watch(progressProvider)
+                                    .asData
+                                    ?.value
+                                    .coinBalance
+                                    .toString() ??
+                                '—',
                             style: AppText.heading(
                                 size: 16, color: AppColors.gold2))),
                 ])),

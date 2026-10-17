@@ -14,6 +14,8 @@ import 'run_summary_screen.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../services/run_draft_store.dart';
 import '../../services/gistda_map_style.dart';
+import '../../widgets/daily_quest_panel.dart';
+import '../../providers/daily_quest_provider.dart';
 
 class RunSessionScreen extends ConsumerStatefulWidget {
   const RunSessionScreen({super.key});
@@ -27,10 +29,23 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       ref.read(runSetupProvider).environment == 'treadmill';
   final _treadmillDistanceController = TextEditingController();
   Timer? _draftTimer;
+  bool _draftClosed = false;
+  bool _finishing = false;
+  String? _storageError;
 
   @override
   void initState() {
     super.initState();
+    final restored = ref.read(runSetupProvider).restoredRoute;
+    for (final point in restored) {
+      _routePoints.add(_MapPoint(point['lat']!, point['lng']!));
+    }
+    if (_routePoints.isNotEmpty) _currentPosition = _routePoints.last;
+    if (ref.read(runProvider).isRunning ||
+        ref.read(runProvider).finishError != null) {
+      _countdownStarted = true;
+      _countdown = 0;
+    }
     _draftTimer =
         Timer.periodic(const Duration(seconds: 2), (_) => _saveDraft());
     if (_isTreadmill) {
@@ -219,7 +234,11 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   }
 
   void _maybeStartCountdown() {
-    if (ref.read(runProvider).isRunning) return;
+    if (_draftClosed ||
+        ref.read(runProvider).isRunning ||
+        ref.read(runProvider).finishError != null) {
+      return;
+    }
     if (_countdownStarted ||
         (!_isTreadmill && (!_hasLocationPermission || !_hasInitialPosition))) {
       return;
@@ -325,7 +344,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       final latLng = _MapPoint(pos.latitude, pos.longitude);
       if (!mounted) return;
       final run = ref.read(runProvider);
-      if (run.isRunning && !run.isPaused && _lastMeasuredPosition != null) {
+      if (!_draftClosed &&
+          run.isRunning &&
+          !run.isPaused &&
+          _lastMeasuredPosition != null) {
         final meters = Geolocator.distanceBetween(
           _lastMeasuredPosition!.latitude,
           _lastMeasuredPosition!.longitude,
@@ -345,14 +367,17 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
       setState(() {
         _hasInitialPosition = true;
         _currentPosition = latLng;
-        if (_routePoints.isEmpty ||
-            Geolocator.distanceBetween(
-                  _routePoints.last.latitude,
-                  _routePoints.last.longitude,
-                  latLng.latitude,
-                  latLng.longitude,
-                ) >=
-                5) {
+        if (!_draftClosed &&
+            run.isRunning &&
+            !run.isPaused &&
+            (_routePoints.isEmpty ||
+                Geolocator.distanceBetween(
+                      _routePoints.last.latitude,
+                      _routePoints.last.longitude,
+                      latLng.latitude,
+                      latLng.longitude,
+                    ) >=
+                    5)) {
           _routePoints.add(latLng);
         }
         _locationMessage = null;
@@ -368,6 +393,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     _positionSub?.cancel();
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
+    _draftClosed = true;
     _draftTimer?.cancel();
     _treadmillDistanceController.dispose();
     super.dispose();
@@ -439,49 +465,109 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
   }
 
   Future<void> _finishRun() async {
-    final result = await ref.read(runProvider).stop(
-          sessionId: ref.read(runSetupProvider).sessionId!,
-          sideQuests: ref.read(runSetupProvider).activeSideQuests,
-          endLat: _currentPosition.latitude,
-          endLng: _currentPosition.longitude,
-          routePoints: _routePoints
-              .map((point) => {'lat': point.latitude, 'lng': point.longitude})
-              .toList(),
-        );
-    if (!mounted || result == null) return;
-    await runDraftStore.clear();
-    if (!mounted) return;
-    Navigator.of(context).pushReplacement(
-      MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
-    );
+    if (_finishing) return;
+    _finishing = true;
+    try {
+      if (ref.read(runProvider).isStopping) return;
+      final owner = ref.read(authProvider).user?['id']?.toString();
+      final setup = ref.read(runSetupProvider);
+      final session = setup.sessionId;
+      final run = ref.read(runProvider);
+      if (session == null || owner == null) return;
+      _draftTimer?.cancel();
+      _draftClosed = true;
+      run.prepareFinish();
+      try {
+        // One final checkpoint is queued before sealing, with the intent to
+        // finish persisted for recovery after process death or a lost response.
+        await _saveDraft(finishing: true);
+        await runDraftStore.seal(owner, session);
+      } catch (error) {
+        if (mounted) {
+          setState(
+              () => _storageError = 'เก็บข้อมูลก่อนบันทึกไม่สำเร็จ: $error');
+        }
+        return;
+      }
+      if (!mounted ||
+          ref.read(authProvider).user?['id']?.toString() != owner ||
+          ref.read(runSetupProvider).sessionId != session) {
+        return;
+      }
+      setState(() => _storageError = null);
+      final result = await run.stop(
+        sessionId: session,
+        sideQuests: setup.activeSideQuests,
+        endLat: _currentPosition.latitude,
+        endLng: _currentPosition.longitude,
+        routePoints: _routePoints
+            .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+            .toList(),
+      );
+      if (!mounted ||
+          result == null ||
+          ref.read(authProvider).user?['id']?.toString() != owner) {
+        return;
+      }
+      await runDraftStore.clear(userId: owner);
+      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
+        return;
+      }
+      unawaited(ref.read(dailyQuestProvider).refresh());
+      if (!mounted) return;
+      Navigator.of(context).pushReplacement(
+        MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
+      );
+    } catch (error) {
+      if (mounted) {
+        setState(() => _storageError = 'บันทึกไม่สำเร็จ ลองใหม่ได้: $error');
+      }
+    } finally {
+      _finishing = false;
+    }
   }
 
-  Future<void> _saveDraft() async {
+  Future<void> _saveDraft({bool finishing = false}) async {
+    if (_draftClosed && !finishing) return;
     final run = ref.read(runProvider);
     final setup = ref.read(runSetupProvider);
     final ownerUserId = ref.read(authProvider).user?['id']?.toString();
-    if (setup.sessionId == null || ownerUserId == null) return;
-    await runDraftStore.save({
-      'ownerUserId': ownerUserId,
-      'sessionId': setup.sessionId,
-      'environment': setup.environment,
-      'elapsedSeconds': run.elapsedSeconds,
-      'distanceKm': run.distanceKm,
-      'isPaused': run.isPaused,
-      'routePoints': _routePoints
-          .map((point) => {'lat': point.latitude, 'lng': point.longitude})
-          .toList(),
-      'sideQuests': setup.activeSideQuests
-          .map((quest) => {
-                'id': quest.sideQuestId,
-                'title': quest.title,
-                'description': quest.description,
-                'icon': quest.icon,
-                'coinReward': quest.coinReward,
-                'done': quest.done,
-              })
-          .toList(),
-    });
+    if (setup.sessionId == null ||
+        ownerUserId == null ||
+        (!run.isRunning && !finishing)) {
+      return;
+    }
+    if (finishing) runDraftStore.reopen(ownerUserId, setup.sessionId!);
+    try {
+      await runDraftStore.save({
+        'sessionType': setup.sessionType,
+        'pendingCompletion': finishing,
+        'ownerUserId': ownerUserId,
+        'sessionId': setup.sessionId,
+        'environment': setup.environment,
+        'elapsedSeconds': run.elapsedSeconds,
+        'distanceKm': run.distanceKm,
+        'isPaused': run.isPaused,
+        'routePoints': _routePoints
+            .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+            .toList(),
+        'sideQuests': setup.activeSideQuests
+            .map((quest) => {
+                  'id': quest.sideQuestId,
+                  'title': quest.title,
+                  'description': quest.description,
+                  'icon': quest.icon,
+                  'coinReward': quest.coinReward,
+                  'done': quest.done,
+                })
+            .toList(),
+      });
+    } catch (error) {
+      if (finishing) rethrow;
+      if (mounted) {
+        setState(() => _storageError = 'เก็บข้อมูลการวิ่งไม่สำเร็จ: $error');
+      }
+    }
   }
 
   @override
@@ -492,7 +578,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
     final doneCount = quests.where((q) => q.done).length;
 
     return PopScope(
-        canPop: !run.isRunning && !run.isStopping && !_confirmingFinish,
+        canPop: !run.isRunning &&
+            !run.isStopping &&
+            !_confirmingFinish &&
+            !_finishing,
         onPopInvokedWithResult: (didPop, result) {
           if (!didPop) _handleBack();
         },
@@ -660,12 +749,11 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                           Column(
                             crossAxisAlignment: CrossAxisAlignment.start,
                             children: [
-                              Text('ระยะทางที่เหลือ',
+                              Text('ระยะรอบนี้',
                                   style: AppText.body(
                                       size: 11.5,
                                       color: AppColors.textTertiary)),
-                              Text(
-                                  '${run.distanceKm.toStringAsFixed(1)} / ${run.goalDistanceKm.toStringAsFixed(0)} km',
+                              Text('${run.distanceKm.toStringAsFixed(2)} km',
                                   style: AppText.heading(size: 13.5)),
                             ],
                           ),
@@ -714,17 +802,30 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen> {
                           const SizedBox(width: 12),
                           Expanded(
                             child: GradientButton(
-                              label: '■ จบการวิ่ง',
+                              label: run.finishError != null ||
+                                      (_draftClosed && _storageError != null)
+                                  ? 'ลองบันทึกใหม่'
+                                  : '■ จบการวิ่ง',
                               loading: run.isStopping,
                               gradient: LinearGradient(
                                   colors: [AppColors.red1, AppColors.red2]),
-                              onTap: !run.isRunning || run.isStopping
+                              onTap: run.isStopping
                                   ? null
-                                  : _requestFinish,
+                                  : run.finishError != null ||
+                                          (_draftClosed &&
+                                              _storageError != null)
+                                      ? _finishRun
+                                      : !run.isRunning
+                                          ? null
+                                          : _requestFinish,
                             ),
                           ),
                         ],
                       ),
+                      if (run.finishError != null || _storageError != null)
+                        Text(run.finishError ?? _storageError!,
+                            style:
+                                AppText.body(size: 12, color: AppColors.red1)),
                       const SizedBox(height: 6),
                       Text(
                         run.isPaused
@@ -929,7 +1030,8 @@ class _MissionsMiniWindow extends ConsumerWidget {
           borderRadius: BorderRadius.circular(22),
           border: Border.all(color: AppColors.border),
         ),
-        child: Column(
+        child: SingleChildScrollView(
+            child: Column(
           mainAxisSize: MainAxisSize.min,
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -943,6 +1045,11 @@ class _MissionsMiniWindow extends ConsumerWidget {
               ],
             ),
             const SizedBox(height: 12),
+            const DailyQuestPanel(duringRun: true),
+            const Text('Side Quest'),
+            if (setup.errorMessage != null) Text(setup.errorMessage!),
+            if (setup.dailyComplete)
+              const Text('คุณทำ Side Quest ของวันนี้สำเร็จแล้ว'),
             if (quests.isEmpty)
               Padding(
                 padding: const EdgeInsets.symmetric(vertical: 12),
@@ -973,7 +1080,10 @@ class _MissionsMiniWindow extends ConsumerWidget {
                                       style: AppText.body(
                                           size: 11.5,
                                           color: AppColors.textSecondary)),
-                                Text('+${q.coinReward} coin',
+                                Text(
+                                    q.done
+                                        ? 'คุณสำเร็จภารกิจนี้แล้ว${q.confirmedCoins == null ? '' : ' · Side Quest ${q.confirmedCoins} coin (server)'}'
+                                        : 'รางวัลที่เสนอ ${q.coinReward} coin',
                                     style: AppText.body(
                                         size: 11, color: AppColors.gold1)),
                               ],
@@ -986,7 +1096,7 @@ class _MissionsMiniWindow extends ConsumerWidget {
                     ),
                   )),
           ],
-        ),
+        )),
       ),
     );
   }
@@ -1014,8 +1124,12 @@ class _MissionActionButton extends ConsumerWidget {
     }
 
     return GestureDetector(
-      onTap: () =>
-          ref.read(runSetupProvider).completeSideQuest(quest.sideQuestId),
+      onTap: !ref.watch(runProvider).isRunning ||
+              ref.watch(runProvider).isStopping ||
+              !setup.canFinish(quest.sideQuestId)
+          ? null
+          : () =>
+              ref.read(runSetupProvider).completeSideQuest(quest.sideQuestId),
       child: Container(
         padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
         decoration: BoxDecoration(

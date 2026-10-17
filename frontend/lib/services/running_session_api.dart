@@ -4,6 +4,9 @@ class RunningSessionApi {
   final ApiClient client;
   RunningSessionApi(this.client);
 
+  Future<Map<String, dynamic>> history() => client
+      .get('/api/running-sessions/history?sortBy=date&order=desc', auth: true);
+
   /// API 7.1
   Future<Map<String, dynamic>> start({
     required String environment,

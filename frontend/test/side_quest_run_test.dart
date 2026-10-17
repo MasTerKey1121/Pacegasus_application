@@ -41,7 +41,7 @@ class TestQuests extends QuestApi {
     started = instanceIds;
     // Responses may return the same instances in a different order.
     return {
-      'data': instanceIds.reversed.map((id) => {'id': id}).toList()
+      'data': instanceIds.reversed.map((id) => {'id': id, 'runningSessionId': sessionId, 'status': 'in_progress'}).toList()
     };
   }
 
@@ -53,13 +53,15 @@ class TestQuests extends QuestApi {
   }) async {
     finished.add(sideQuestId);
     return {
-      'data': {'id': sideQuestId, 'status': 'completed'}
+      'data': {'id': sideQuestId, 'status': 'completed', 'runningSessionId': 'run-1', 'coinAwarded': 20}
     };
   }
 }
 
 class TestSessions extends RunningSessionApi {
   TestSessions() : super(ApiClient(baseUrl: 'http://localhost'));
+  @override
+  Future<Map<String,dynamic>> getDetail({required String sessionId}) async => {'data': {'id': sessionId, 'status': 'in_progress'}};
   int starts = 0;
   String? lastSessionType;
   int completions = 0;
@@ -92,7 +94,7 @@ class TestSessions extends RunningSessionApi {
   }) async {
     completions++;
     return {
-      'data': {'id': sessionId}
+      'data': {'id': sessionId, 'status': 'completed', 'distance_km': distanceKm, 'duration_seconds': durationSeconds}
     };
   }
 }
@@ -129,8 +131,8 @@ void main() {
     expect(await setup.startRun(mainQuestSessionType: 'easy'), isTrue);
     expect(quests.started, ['1', '2', '3']);
     expect(setup.activeSideQuests.map((q) => q.title),
-        ['Quest 3', 'Quest 2', 'Quest 1']);
-    expect(setup.activeSideQuests.map((q) => q.coinReward), [30, 20, 10]);
+        ['Quest 1', 'Quest 2', 'Quest 3']);
+    expect(setup.activeSideQuests.map((q) => q.coinReward), [10, 20, 30]);
 
     await setup.completeSideQuest('2');
     await setup.completeSideQuest('2');
