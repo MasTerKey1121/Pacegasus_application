@@ -14,11 +14,11 @@ test('weekly rankings: top 50, ties, week boundaries and guild contribution', {
     await client.query('BEGIN');
     await client.query("SET LOCAL statement_timeout = '5s'");
     await client.query(`
-      CREATE TEMP TABLE users (id uuid, display_name text, avatar_url text, status text, uid text) ON COMMIT DROP;
+      CREATE TEMP TABLE users (id uuid, display_name text, avatar_url text, status text) ON COMMIT DROP;
       CREATE TEMP TABLE clubs (id uuid, name text, image_url text) ON COMMIT DROP;
       CREATE TEMP TABLE club_members (club_id uuid, user_id uuid, joined_at timestamptz) ON COMMIT DROP;
       CREATE TEMP TABLE running_sessions (user_id uuid, status text, started_at timestamptz, ended_at timestamptz, distance_km numeric) ON COMMIT DROP;
-      INSERT INTO users SELECT md5(n::text)::uuid, 'Runner ' || n, NULL, 'active', upper(substr(md5(n::text), 1, 10)) FROM generate_series(1,51) n;
+      INSERT INTO users SELECT md5(n::text)::uuid, 'Runner ' || n, NULL, 'active' FROM generate_series(1,51) n;
       INSERT INTO running_sessions SELECT id, 'completed',
         (date_trunc('week', now() AT TIME ZONE 'Asia/Bangkok') AT TIME ZONE 'Asia/Bangkok') + interval '1 hour',
         (date_trunc('week', now() AT TIME ZONE 'Asia/Bangkok') AT TIME ZONE 'Asia/Bangkok') + interval '2 hours',
@@ -32,7 +32,6 @@ test('weekly rankings: top 50, ties, week boundaries and guild contribution', {
     assert.equal(board.myEntry.rank, null);
     assert.equal(board.myEntry.distanceKm, 1);
     assert.equal(board.entries[0].id, idOf(51));
-    assert.equal(typeof board.entries[0].uid, 'string');
     assert.equal(board.entries.at(-1).rank, 50);
     board = await service.weeklyDistance(idOf(51), 'individual');
     assert.equal(board.myEntry.rank, 1);

@@ -1,10 +1,9 @@
-const fs = require('node:fs/promises');
-const path = require('node:path');
 const { randomUUID } = require('node:crypto');
 const ApiError = require('../utils/ApiError');
+const db = require('../config/db');
 
 const MAX_IMAGE_BYTES = 2 * 1024 * 1024;
-const imageDirectory = path.resolve(process.env.CLUB_IMAGE_DIR || path.join(__dirname, '../../uploads/club-images'));
+const MIME_BY_EXTENSION = { png: 'image/png', jpg: 'image/jpeg', webp: 'image/webp' };
 
 function decodeImage(encoded) {
   if (typeof encoded !== 'string' || encoded.length === 0 ||
@@ -24,12 +23,22 @@ function decodeImage(encoded) {
   return { bytes, extension };
 }
 
-async function saveImage(encoded, directory = imageDirectory) {
+async function saveImage(encoded) {
   const { bytes, extension } = decodeImage(encoded);
-  const filename = `${randomUUID()}.${extension}`;
-  await fs.mkdir(directory, { recursive: true });
-  await fs.writeFile(path.join(directory, filename), bytes, { flag: 'wx' });
-  return filename;
+  const id = randomUUID();
+  await db.query(
+    'INSERT INTO club_images (id, content_type, image_data) VALUES ($1, $2, $3)',
+    [id, MIME_BY_EXTENSION[extension], bytes]
+  );
+  return id;
 }
 
-module.exports = { MAX_IMAGE_BYTES, imageDirectory, decodeImage, saveImage };
+async function getImage(id) {
+  const { rows } = await db.query(
+    'SELECT content_type, image_data FROM club_images WHERE id = $1', [id]
+  );
+  if (!rows[0]) throw new ApiError(404, 'ไม่พบรูปคลับ');
+  return rows[0];
+}
+
+module.exports = { MAX_IMAGE_BYTES, decodeImage, saveImage, getImage };
