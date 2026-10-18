@@ -43,6 +43,14 @@ class RunRewards extends ChangeNotifier {
   bool hasSource(String session, String source) =>
       receipts(session).any((r) => r.source == source);
   bool hasMissing(String session) => (_missing[session]?.isNotEmpty ?? false);
+  // A subtotal of acknowledged amounts, never a replacement for an unknown
+  // complete total. The UI must label it explicitly as partial.
+  int? confirmedTotal(String session, {bool exp = false}) {
+    final amounts =
+        receipts(session).map((r) => exp ? r.exp : r.coins).whereType<int>();
+    return amounts.isEmpty ? null : amounts.fold<int>(0, (sum, n) => sum + n);
+  }
+
   int? total(String session, {bool exp = false}) {
     final rows = receipts(session);
     if (rows.isEmpty ||
