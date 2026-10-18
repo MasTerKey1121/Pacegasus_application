@@ -13,6 +13,8 @@ import '../../widgets/run_route_map.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../providers/run_rewards_provider.dart';
 import '../../providers/daily_quest_provider.dart';
+import '../../providers/post_run_quest_provider.dart';
+import '../../providers/run_provider.dart';
 import '../../providers/rpe_provider.dart';
 import '../../services/api_client.dart';
 
@@ -34,6 +36,8 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   bool _routeFailed = false;
   bool _isTreadmill = false;
   final _painNoteController = TextEditingController();
+  String? _summarySession;
+  String? _gpsWarning;
 
   static const _apiMoods = [
     'exhausted',
@@ -46,6 +50,8 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   @override
   void initState() {
     super.initState();
+    _summarySession = ref.read(runSetupProvider).sessionId;
+    _gpsWarning = ref.read(runProvider).finishWarning;
 
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (mounted) _loadSession();
@@ -53,6 +59,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   }
 
   Future<void> _loadSession() async {
+    final owner = ref.read(authProvider).user?['id'];
     final setup = ref.read(runSetupProvider);
     final sessionId = setup.sessionId;
     setState(() {
@@ -68,7 +75,10 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
             .read(runningSessionApiProvider)
             .getDetail(sessionId: sessionId);
         final data = detail['data'];
-        if (mounted && data is Map) {
+        if (mounted &&
+            data is Map &&
+            ref.read(authProvider).user?['id'] == owner &&
+            ref.read(runSetupProvider).sessionId == sessionId) {
           // PostgreSQL returns snake_case while older API responses used
           // camelCase. Accept both so this screen always shows the session
           // the runner has just completed.
@@ -147,6 +157,19 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                     padding: const EdgeInsets.only(bottom: 20),
                     child: Column(
                       children: [
+                        if (_gpsWarning != null)
+                          Text(_gpsWarning!, textAlign: TextAlign.center),
+                        if (_summarySession != null)
+                          ref.watch(postRunQuestCheckProvider(_summarySession!)).when(
+                              data: (_) => const SizedBox.shrink(),
+                              loading: () => const Text(
+                                  'บันทึกผลวิ่งแล้ว กำลังตรวจสอบภารกิจและรางวัล'),
+                              error: (_, __) => TextButton(
+                                  onPressed: () => ref.invalidate(
+                                      postRunQuestCheckProvider(
+                                          _summarySession!)),
+                                  child: const Text(
+                                      'ผลวิ่งบันทึกแล้ว รางวัลรอตรวจสอบ · ลองใหม่'))),
                         RunRouteMap(
                             sessionId: ref.watch(runSetupProvider).sessionId,
                             points: result.routePoints,
@@ -369,11 +392,6 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 ref.read(authProvider).user?['id'] != owner) {
                               return;
                             }
-                            await ref.read(dailyQuestProvider).refresh();
-                            if (!mounted ||
-                                ref.read(authProvider).user?['id'] != owner) {
-                              return;
-                            }
                             final ledger = ref.read(runRewardsProvider);
                             await ledger.load(sessionId);
                             final reward = RunReward.fromFeedback(response);
@@ -422,6 +440,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                               MaterialPageRoute(
                                 builder: (_) => RewardScreen(
                                     sessionId: sessionId,
+                                    checkQuests: true,
                                     coin: reward?.coins,
                                     exp: reward?.exp,
                                     sideRewards: sideRewards),

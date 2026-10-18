@@ -4,6 +4,8 @@ class RunningSessionApi {
   final ApiClient client;
   RunningSessionApi(this.client);
 
+  Future<Map<String, dynamic>> health() => client.get('/api/health');
+
   Future<Map<String, dynamic>> history() => client
       .get('/api/running-sessions/history?sortBy=date&order=desc', auth: true);
 

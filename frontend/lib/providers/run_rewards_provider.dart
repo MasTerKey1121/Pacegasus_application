@@ -119,6 +119,14 @@ class RunRewards extends ChangeNotifier {
     await _save(session);
   }
 
+  Future<void> resolveCheck(String session, String source) async {
+    await load(session);
+    if (!_alive) return;
+    _missing[session]?.remove(source);
+    notifyListeners();
+    await _save(session);
+  }
+
   @override
   void dispose() {
     _alive = false;

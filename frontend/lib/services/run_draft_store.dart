@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'running_session_api.dart';
 
 /// Serializes writes/deletes. seal closes the writer before queued writes drain.
@@ -52,12 +53,31 @@ class RunDraftStore {
     if (_sealed.contains(_identity(draft))) return Future.value();
     final snapshot = jsonEncode(draft);
     final owner = draft['ownerUserId']?.toString();
-    return _enqueue(() => _storage.write(
-        key: owner == null ? _legacyKey : _key(owner), value: snapshot));
+    final identity = _identity(draft);
+    return _enqueue(() async {
+      // Skip obsolete queued timer snapshots after finish has sealed this run.
+      // An already executing write still drains before the final checkpoint.
+      if (_sealed.contains(identity)) return;
+      await _storage.write(
+          key: owner == null ? _legacyKey : _key(owner), value: snapshot);
+    });
   }
 
   void reopen(String owner, String session) =>
       _sealed.remove('$owner/$session');
+
+  /// Close periodic writers synchronously, then write the frozen finish
+  /// snapshot after all previously queued checkpoints. No reopen window.
+  Future<void> savePendingCompletion(Map<String, dynamic> draft) {
+    if (draft['ownerUserId'] == null || draft['sessionId'] == null) {
+      throw ArgumentError('Missing checkpoint identity');
+    }
+    _sealed.add(_identity(draft));
+    final snapshot = jsonEncode({...draft, 'pendingCompletion': true});
+    return _enqueue(() => _storage.write(
+        key: _key(draft['ownerUserId'].toString()), value: snapshot));
+  }
+
   Future<void> seal(String owner, String session) {
     _sealed.add('$owner/$session');
     return _tail;
@@ -115,3 +135,4 @@ Future<Map<String, dynamic>?> verifiedRunDraft(
 }
 
 final runDraftStore = RunDraftStore();
+final runDraftStoreProvider = Provider<RunDraftStore>((ref) => runDraftStore);

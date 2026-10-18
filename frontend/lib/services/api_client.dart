@@ -5,6 +5,7 @@ import 'dart:typed_data';
 
 import 'package:http/http.dart' as http;
 import '../config/api_config.dart';
+import 'run_finish_operation.dart';
 
 class ApiException implements Exception {
   final int statusCode;
@@ -130,7 +131,8 @@ class ApiClient {
         allowFallback:
             method == 'GET' && !path.startsWith('/api/quests/side?'));
     final result = await send();
-    if (method == 'GET' &&
+    if (RunFinishOperation.current == null &&
+        method == 'GET' &&
         !path.startsWith('/api/quests/side?') &&
         [502, 503, 504].contains(result.statusCode)) {
       await Future<void>.delayed(const Duration(milliseconds: 400));
@@ -152,8 +154,11 @@ class ApiClient {
     for (final candidate
         in candidates.take(allowFallback ? candidates.length : 1)) {
       try {
-        final response =
-            await send(candidate).timeout(timeout ?? requestTimeout);
+        final scope = RunFinishOperation.current;
+        final response = scope == null
+            ? await send(candidate).timeout(timeout ?? requestTimeout)
+            : await scope.wait(() => send(candidate),
+                cap: timeout ?? requestTimeout);
         _reachableBaseUrl = candidate;
         return response;
       } on TimeoutException catch (error) {
@@ -179,6 +184,7 @@ class ApiClient {
     Map<String, String> headers,
     String? encodedBody,
   ) {
+    RunFinishOperation.current?.check();
     switch (method) {
       case 'GET':
         return http.get(uri, headers: headers);
@@ -201,9 +207,12 @@ class ApiClient {
     Map<String, dynamic>? body,
     bool auth = false,
   }) async {
+    final scope = RunFinishOperation.current;
+    scope?.check();
     final originalToken = getAccessToken?.call();
     final originalIdentity = getSessionIdentity?.call();
     var res = await _sendRaw(method, path, body, auth);
+    if (res.statusCode == 401) scope?.log('auth_rejected', status: 401);
     bool changedAccount() => getSessionIdentity == null
         ? originalToken != getAccessToken?.call()
         : originalIdentity != getSessionIdentity?.call();
@@ -216,14 +225,22 @@ class ApiClient {
         auth &&
         onUnauthorized != null &&
         !(path == '/api/auth/me' && refreshingProfile)) {
-      final refreshed =
-          originalToken != getAccessToken?.call() || await onUnauthorized!();
+      scope?.stage('auth_refresh');
+      final refreshed = originalToken != getAccessToken?.call() ||
+          (scope == null
+              ? await onUnauthorized!()
+              : await scope.wait(() => onUnauthorized!()));
+      scope?.log('auth_refresh_result', status: refreshed ? 200 : null);
       if (getSessionIdentity != null &&
           originalIdentity != getSessionIdentity?.call()) {
         throw ApiException(0, 'บัญชีเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
       }
       if (refreshed) {
         res = await _sendRaw(method, path, body, auth); // retry ครั้งเดียว
+      } else if (scope != null && getAccessToken?.call() != null) {
+        // Refresh may have failed temporarily. Keep the current run and let
+        // its bounded read-only connection recovery continue.
+        throw ApiException(0, 'ยังต่ออายุการเชื่อมต่อไม่ได้ กรุณาลองใหม่');
       }
     }
 
@@ -233,6 +250,8 @@ class ApiClient {
       throw ApiException(0, 'บัญชีเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
     }
 
+    scope?.check();
+    scope?.log('http_response', status: res.statusCode);
     return _handle(res);
   }
 

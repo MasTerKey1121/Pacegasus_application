@@ -4,10 +4,12 @@ import '../../app_theme.dart';
 import '../../models/run_reward.dart';
 import '../../providers/progress_provider.dart';
 import '../../providers/run_rewards_provider.dart';
+import '../../providers/post_run_quest_provider.dart';
 import '../../widgets/common.dart';
 
 class RewardScreen extends ConsumerWidget {
   final String? sessionId;
+  final bool checkQuests;
   final int? coin;
   final int? exp;
   final List<SideQuestRewardReceipt> sideRewards;
@@ -16,7 +18,8 @@ class RewardScreen extends ConsumerWidget {
       required this.coin,
       required this.exp,
       this.sideRewards = const [],
-      this.sessionId});
+      this.sessionId,
+      this.checkQuests = false});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
@@ -36,6 +39,9 @@ class RewardScreen extends ConsumerWidget {
             ? null
             : ledger.confirmedTotal(sessionId!, exp: true));
     final progress = ref.watch(progressProvider);
+    final questCheck = checkQuests && sessionId != null
+        ? ref.watch(postRunQuestCheckProvider(sessionId!))
+        : null;
     return Scaffold(
       body: AppBackground(
         child: SafeArea(
@@ -118,6 +124,16 @@ class RewardScreen extends ConsumerWidget {
                     ]))),
                   ]),
                   const SizedBox(height: 18),
+                  if (questCheck != null)
+                    questCheck.when(
+                        data: (_) => const SizedBox.shrink(),
+                        loading: () => const Text('รางวัลภารกิจรอตรวจสอบ',
+                            textAlign: TextAlign.center),
+                        error: (_, __) => TextButton(
+                            onPressed: () => ref.invalidate(
+                                postRunQuestCheckProvider(sessionId!)),
+                            child:
+                                const Text('รางวัลภารกิจรอตรวจสอบ · ลองใหม่'))),
                   progress.when(
                     loading: () => const Padding(
                         padding: EdgeInsets.all(8),

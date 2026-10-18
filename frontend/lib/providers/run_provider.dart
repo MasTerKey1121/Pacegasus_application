@@ -4,15 +4,39 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/run_result.dart';
 import '../models/side_quest.dart';
 import '../services/running_session_api.dart';
+import '../services/api_client.dart';
+import '../services/run_finish_operation.dart';
 import 'auth_provider.dart';
 import 'run_setup_provider.dart';
 
 /// Drives the running screen using elapsed time plus GPS distance updates.
 class RunSessionNotifier extends ChangeNotifier {
   RunSessionNotifier(this._sessionApi,
-      {this.ownerUserId, Duration Function()? elapsedClock})
+      {this.ownerUserId,
+      Duration Function()? elapsedClock,
+      this.finishLimit = const Duration(seconds: 120),
+      this.localStepLimit = const Duration(seconds: 10),
+      this.gpsStopLimit = const Duration(seconds: 5),
+      this.recoveryDelay = const Duration(seconds: 2)})
       : _elapsedClock = elapsedClock;
   final String? ownerUserId;
+  final Duration finishLimit, localStepLimit, gpsStopLimit, recoveryDelay;
+  bool _preparingFinish = false;
+  bool get finishBusy => _preparingFinish || isStopping;
+  bool checkpointSaved = false;
+  String? finishStage;
+  String? finishReference;
+  String? finishWarning;
+  String get finishMessage => switch (finishStage) {
+        'confirmed' => 'บันทึกผลวิ่งแล้ว',
+        'gps_stop' => 'กำลังหยุดการติดตาม GPS',
+        'checkpoint' => 'กำลังเก็บข้อมูลการวิ่ง',
+        'connecting' => 'กำลังเชื่อมต่อเซิร์ฟเวอร์ ผลวิ่งยังเก็บไว้',
+        'auth_refresh' => 'กำลังต่ออายุการเชื่อมต่อ',
+        'session_detail' => 'กำลังตรวจสอบสถานะการวิ่ง',
+        'complete' => 'กำลังบันทึกผลการวิ่ง',
+        _ => 'กำลังเตรียมบันทึกผลการวิ่ง',
+      };
   String? finishError;
   int _generation = 0;
   bool _disposed = false;
@@ -57,6 +81,12 @@ class RunSessionNotifier extends ChangeNotifier {
   RunResult? lastResult;
 
   void start() {
+    _generation++;
+    _preparingFinish = false;
+    isStopping = false;
+    checkpointSaved = false;
+    finishStage = null;
+    finishWarning = null;
     finishError = null;
     lastResult = null;
     isRunning = true;
@@ -105,6 +135,10 @@ class RunSessionNotifier extends ChangeNotifier {
     required bool paused,
     bool pendingCompletion = false,
   }) {
+    _generation++;
+    _preparingFinish = false;
+    isStopping = false;
+    lastResult = null;
     _timer?.cancel();
     elapsedSeconds = elapsed;
     distanceKm = distance;
@@ -129,6 +163,121 @@ class RunSessionNotifier extends ChangeNotifier {
     notifyListeners();
   }
 
+  /// The entire finish attempt has one deadline, including work before HTTP.
+  /// The frozen checkpoint is persisted before waiting for GPS cancellation.
+  Future<RunResult?> finish({
+    required String sessionId,
+    required List<ActiveSideQuest> sideQuests,
+    required Future<void> Function() persistCheckpoint,
+    required Future<void> Function() stopGps,
+    required double endLat,
+    required double endLng,
+    List<Map<String, double>> routePoints = const [],
+  }) async {
+    if (finishBusy || _disposed) return null;
+    final generation = _generation;
+    _preparingFinish = true;
+    finishError = null;
+    finishWarning = null;
+    prepareFinish();
+    final operation = RunFinishOperation(
+        limit: finishLimit,
+        isCurrent: () => !_disposed && generation == _generation,
+        onStage: (stage) {
+          if (_disposed || generation != _generation) return;
+          finishStage = stage;
+          notifyListeners();
+        });
+    finishReference = operation.reference;
+    try {
+      operation.stage('confirm_finish');
+      operation.log('gps_stop_requested');
+      final gpsStopping = Future<void>.sync(stopGps);
+      // Observe an immediate native error while the checkpoint is being saved.
+      // The original future is still awaited below and remains retryable.
+      unawaited(
+          gpsStopping.then((_) {}, onError: (Object _, StackTrace __) {}));
+      operation.stage('checkpoint');
+      await operation.wait(persistCheckpoint, cap: localStepLimit);
+      checkpointSaved = true;
+      operation.log('checkpoint_saved');
+      operation.stage('gps_stop');
+      try {
+        await operation.wait(() => gpsStopping, cap: gpsStopLimit);
+        operation.log('gps_stopped');
+      } catch (_) {
+        operation.check();
+        // Time/distance/route are frozen and durable. A stuck native cleanup
+        // must not force restarting the app just to submit those same values.
+        operation.log('gps_stop_pending');
+        finishWarning =
+            'บันทึกผลวิ่งแล้ว แต่ระบบ GPS ยังไม่ยืนยันว่าหยุด กรุณาตรวจการแจ้งเตือนการวิ่ง';
+        notifyListeners();
+      }
+      return await operation.run(() => stop(
+          sessionId: sessionId,
+          sideQuests: sideQuests,
+          endLat: endLat,
+          endLng: endLng,
+          routePoints: routePoints));
+    } catch (_) {
+      if (!_disposed && generation == _generation) {
+        operation.log('preparation_failed');
+        finishError = checkpointSaved
+            ? 'ยังบันทึกไม่สำเร็จ ผลวิ่งเก็บไว้ในเครื่องแล้ว กรุณาลองบันทึกใหม่'
+            : 'เก็บผลวิ่งลงเครื่องยังไม่สำเร็จ ข้อมูลยังอยู่ในหน้านี้ กรุณาลองใหม่ก่อนปิดแอป';
+      }
+      return null;
+    } finally {
+      operation.close();
+      if (!_disposed && generation == _generation) {
+        _preparingFinish = false;
+        notifyListeners();
+      }
+    }
+  }
+
+  bool _transient(Object error) =>
+      error is TimeoutException ||
+      (error is ApiException &&
+          [0, 408, 429, 500, 502, 503, 504].contains(error.statusCode));
+
+  Future<Map<String, dynamic>> _readForFinish(
+      String sessionId, RunFinishOperation? operation) async {
+    Future<Map<String, dynamic>> read() async {
+      operation?.stage('session_detail');
+      return operation == null
+          ? _sessionApi.getDetail(sessionId: sessionId)
+          : operation.wait(() => _sessionApi.getDetail(sessionId: sessionId));
+    }
+
+    try {
+      return await read();
+    } catch (error) {
+      if (operation == null || !_transient(error)) rethrow;
+      operation.log('detail_unavailable',
+          status: error is ApiException ? error.statusCode : 0);
+    }
+    // This is active recovery only while finishing, never an app keepalive.
+    for (var attempt = 1; attempt <= 3; attempt++) {
+      operation.stage('connecting');
+      await operation.wait(() => Future<void>.delayed(recoveryDelay * attempt));
+      try {
+        final health = await operation.wait(_sessionApi.health);
+        if (health['success'] != true) {
+          throw ApiException(503, 'เซิร์ฟเวอร์ยังไม่พร้อม');
+        }
+        operation.log('health_ready');
+        return await read(); // Health never stands in for session ownership/status.
+      } catch (error) {
+        if (!_transient(error) || attempt == 3) rethrow;
+        operation.log('recovery_wait',
+            status: error is ApiException ? error.statusCode : 0);
+      }
+    }
+    throw StateError('ยังตรวจสถานะการวิ่งไม่ได้');
+  }
+
   Future<RunResult?> stop({
     required String sessionId,
     required List<ActiveSideQuest> sideQuests,
@@ -136,6 +285,7 @@ class RunSessionNotifier extends ChangeNotifier {
     double? endLng,
     List<Map<String, double>> routePoints = const [],
   }) async {
+    final operation = RunFinishOperation.current;
     if (isStopping || lastResult != null) {
       return lastResult;
     } // กันกดปุ่ม "จบการวิ่ง" ซ้ำ
@@ -152,7 +302,7 @@ class RunSessionNotifier extends ChangeNotifier {
       // Reconcile before completing, including a timeout whose write may
       // have committed. A failed detail read must never cause another PATCH.
       {
-        final response = await _sessionApi.getDetail(sessionId: sessionId);
+        final response = await _readForFinish(sessionId, operation);
         if (_disposed || generation != _generation) return null;
         confirmed = response['data'] as Map;
         if (confirmed['id'] != sessionId ||
@@ -166,14 +316,28 @@ class RunSessionNotifier extends ChangeNotifier {
         }
       }
       if (confirmed['status'] != 'completed') {
-        final response = await _sessionApi.complete(
-          sessionId: sessionId,
-          distanceKm: distanceKm,
-          durationSeconds: elapsedSeconds,
-          endLat: endLat ?? 13.7563,
-          endLng: endLng ?? 100.5018,
-          routePoints: routePoints,
-        );
+        operation?.stage('complete');
+        Future<Map<String, dynamic>> send() => _sessionApi.complete(
+              sessionId: sessionId,
+              distanceKm: distanceKm,
+              durationSeconds: elapsedSeconds,
+              endLat: endLat ?? 13.7563,
+              endLng: endLng ?? 100.5018,
+              routePoints: routePoints,
+            );
+
+        Map<String, dynamic> response;
+        try {
+          response =
+              operation == null ? await send() : await operation.wait(send);
+        } catch (error) {
+          if (operation == null || !_transient(error)) rethrow;
+          operation.log('complete_uncertain',
+              status: error is ApiException ? error.statusCode : 0);
+          // A write may have committed. Only read here; retrying the button
+          // starts another attempt with detail before any new PATCH.
+          response = await _readForFinish(sessionId, operation);
+        }
 
         if (_disposed || generation != _generation) return null;
         confirmed = response['data'] as Map?;
@@ -184,6 +348,7 @@ class RunSessionNotifier extends ChangeNotifier {
               confirmed?['user_id']?.toString() != ownerUserId)) {
         throw StateError('ยังไม่ได้รับการยืนยันการบันทึก Session');
       }
+      operation?.stage('confirmed');
       distanceKm = double.parse('${confirmed!['distance_km']}');
       elapsedSeconds = int.parse('${confirmed['duration_seconds']}');
       // การจบวิ่งไม่ถือว่าทำ Side Quest สำเร็จ รางวัลให้เฉพาะภารกิจ
@@ -203,13 +368,19 @@ class RunSessionNotifier extends ChangeNotifier {
         duration: duration,
         avgPace: distanceKm > 0 ? '$mm:$ss' : '--:--',
         calories: (distanceKm * 62).round(),
-        routePoints: RunRoutePoint.parse(routePoints),
+        routePoints: RunRoutePoint.parse(confirmed['route_points']).isNotEmpty
+            ? RunRoutePoint.parse(confirmed['route_points'])
+            : RunRoutePoint.parse(routePoints),
       );
 
       return lastResult;
     } catch (e) {
       if (!_disposed && generation == _generation) {
-        finishError = 'บันทึกการวิ่งไม่สำเร็จ: $e';
+        operation?.log('finish_pending',
+            status: e is ApiException ? e.statusCode : null);
+        finishError = operation == null
+            ? 'บันทึกการวิ่งไม่สำเร็จ: $e'
+            : 'ยังยืนยันผลบันทึกไม่ได้ ผลวิ่งเก็บไว้ในเครื่องแล้ว กรุณาลองบันทึกใหม่ ระบบจะตรวจสถานะก่อนส่งซ้ำ';
       }
       return null;
     } finally {
@@ -228,6 +399,10 @@ class RunSessionNotifier extends ChangeNotifier {
 
   void reset() {
     _generation++;
+    _preparingFinish = false;
+    checkpointSaved = false;
+    finishStage = null;
+    finishWarning = null;
     finishError = null;
     _timer?.cancel();
     _timer = null;

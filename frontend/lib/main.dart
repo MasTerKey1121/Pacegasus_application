@@ -6,11 +6,13 @@ import 'navigation/home_route_observer.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/auth_destination.dart';
+import 'services/app_orientation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await lockMobilePortrait();
   await dotenv.load(fileName: ".env");
-  runApp(const ProviderScope(child: PacegasusApp()));
+  runApp(const MobilePortraitLock(child: ProviderScope(child: PacegasusApp())));
 }
 
 class PacegasusApp extends StatelessWidget {

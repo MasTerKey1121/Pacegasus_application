@@ -18,7 +18,6 @@ import '../../services/gistda_map_style.dart';
 import '../../services/run_background_support.dart';
 import '../../widgets/daily_quest_panel.dart';
 import '../../providers/daily_quest_provider.dart';
-import '../../providers/run_rewards_provider.dart';
 
 class RunSessionScreen extends ConsumerStatefulWidget {
   const RunSessionScreen({super.key});
@@ -35,6 +34,8 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
   Timer? _draftTimer;
   bool _draftClosed = false;
   bool _finishing = false;
+  Map<String, dynamic>? _pendingFinishDraft;
+  Future<void>? _gpsStopFuture;
   String? _storageError;
   bool _appVisible = true;
   bool _startingGps = false;
@@ -485,7 +486,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
-    _positionSub?.cancel();
+    final positions = _positionSub;
+    _positionSub = null;
+    if (positions != null) {
+      unawaited(Future<void>.sync(positions.cancel).catchError((Object _) {
+        debugPrint('[RunFinish] stage=gps_cleanup_pending');
+      }));
+    }
     _countdownTimer?.cancel();
     _mapLoadTimer?.cancel();
     _draftClosed = true;
@@ -561,9 +568,9 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
 
   Future<void> _finishRun() async {
     if (_finishing) return;
-    _finishing = true;
+    setState(() => _finishing = true);
     try {
-      if (ref.read(runProvider).isStopping) return;
+      if (ref.read(runProvider).finishBusy) return;
       final owner = ref.read(authProvider).user?['id']?.toString();
       final setup = ref.read(runSetupProvider);
       final session = setup.sessionId;
@@ -571,37 +578,40 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
       if (session == null || owner == null) return;
       _draftTimer?.cancel();
       _draftClosed = true;
-      // Cancelling the stream also removes the ongoing notification and
-      // releases the location service's partial wake lock, even if saving fails.
-      final positions = _positionSub;
-      _positionSub = null;
       run.prepareFinish();
-      await positions?.cancel();
-      try {
-        // One final checkpoint is queued before sealing, with the intent to
-        // finish persisted for recovery after process death or a lost response.
-        await _saveDraft(finishing: true);
-        await runDraftStore.seal(owner, session);
-      } catch (error) {
-        if (mounted) {
-          setState(
-              () => _storageError = 'เก็บข้อมูลก่อนบันทึกไม่สำเร็จ: $error');
-        }
-        return;
-      }
-      if (!mounted ||
-          ref.read(authProvider).user?['id']?.toString() != owner ||
-          ref.read(runSetupProvider).sessionId != session) {
-        return;
-      }
+      _pendingFinishDraft ??= _draftSnapshot(finishing: true);
+      final store = ref.read(runDraftStoreProvider);
       setState(() => _storageError = null);
-      final result = await run.stop(
+      final result = await run.finish(
         sessionId: session,
         sideQuests: setup.activeSideQuests,
-        endLat: _currentPosition.latitude,
-        endLng: _currentPosition.longitude,
-        routePoints: _routePoints
-            .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+        persistCheckpoint: () =>
+            store.savePendingCompletion(_pendingFinishDraft!),
+        stopGps: () {
+          // Cancel once even if the native cancellation outlives an attempt.
+          if (_gpsStopFuture != null) return _gpsStopFuture!;
+          final positions = _positionSub;
+          _positionSub = null;
+          final stopping = Future<void>.sync(
+              () => positions?.cancel() ?? Future<void>.value());
+          _gpsStopFuture = stopping;
+          unawaited(stopping.then((_) {}, onError: (Object _, StackTrace __) {
+            // A failed native stop must not poison every later retry with the
+            // same rejected future. A still-pending stop is never duplicated.
+            if (identical(_gpsStopFuture, stopping)) {
+              _gpsStopFuture = null;
+              if (mounted) _positionSub ??= positions;
+            }
+          }));
+          return stopping;
+        },
+        endLat: (_pendingFinishDraft!['endLat'] as num).toDouble(),
+        endLng: (_pendingFinishDraft!['endLng'] as num).toDouble(),
+        routePoints: (_pendingFinishDraft!['routePoints'] as List)
+            .map((p) => <String, double>{
+                  'lat': (p['lat'] as num).toDouble(),
+                  'lng': (p['lng'] as num).toDouble()
+                })
             .toList(),
       );
       if (!mounted ||
@@ -609,34 +619,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
           ref.read(authProvider).user?['id']?.toString() != owner) {
         return;
       }
-      await runDraftStore.clearSession(owner, session);
-      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
-        return;
-      }
-      final daily = ref.read(dailyQuestProvider);
-      await daily.refresh();
-      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
-        return;
-      }
-      if (setup.mainQuestAtStart != null &&
-          daily.completed &&
-          daily.quest?['id']?.toString() == setup.mainQuestAtStart) {
-        try {
-          await ref
-              .read(runRewardsProvider)
-              .expectSource(session, 'Main Quest');
-        } catch (_) {
-          // Completion is already confirmed. Receipt storage must not strand
-          // the runner on a screen that says the run could not be saved.
-          if (mounted) {
-            showAppToast(
-                context, 'บันทึกการวิ่งแล้ว แต่ยังอ่านรายละเอียดรางวัลไม่ได้');
-          }
-        }
-      }
-      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
-        return;
-      }
+      // The saved run can be shown immediately. A delayed local delete or
+      // quest/reward request must not hold the runner on the finish button.
+      unawaited(store.clearSession(owner, session).catchError((Object _) {
+        debugPrint('[RunFinish] stage=checkpoint_clear_pending');
+      }));
+      debugPrint(
+          '[RunFinish] ref=${run.finishReference} stage=navigate_summary');
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
       );
@@ -645,7 +634,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
         setState(() => _storageError = 'บันทึกไม่สำเร็จ ลองใหม่ได้: $error');
       }
     } finally {
-      _finishing = false;
+      if (mounted) setState(() => _finishing = false);
     }
   }
 
@@ -659,38 +648,48 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
         (!run.isRunning && !finishing)) {
       return;
     }
-    if (finishing) runDraftStore.reopen(ownerUserId, setup.sessionId!);
     try {
-      await runDraftStore.save({
-        'sessionType': setup.sessionType,
-        'mainQuestAtStart': setup.mainQuestAtStart,
-        'pendingCompletion': finishing,
-        'ownerUserId': ownerUserId,
-        'sessionId': setup.sessionId,
-        'environment': setup.environment,
-        'elapsedSeconds': run.elapsedSeconds,
-        'distanceKm': run.distanceKm,
-        'isPaused': run.isPaused,
-        'routePoints': _routePoints
-            .map((point) => {'lat': point.latitude, 'lng': point.longitude})
-            .toList(),
-        'sideQuests': setup.activeSideQuests
-            .map((quest) => {
-                  'id': quest.sideQuestId,
-                  'title': quest.title,
-                  'description': quest.description,
-                  'icon': quest.icon,
-                  'coinReward': quest.coinReward,
-                  'done': quest.done,
-                })
-            .toList(),
-      });
+      await ref
+          .read(runDraftStoreProvider)
+          .save(_draftSnapshot(finishing: finishing));
     } catch (error) {
       if (finishing) rethrow;
       if (mounted) {
         setState(() => _storageError = 'เก็บข้อมูลการวิ่งไม่สำเร็จ: $error');
       }
     }
+  }
+
+  Map<String, dynamic> _draftSnapshot({bool finishing = false}) {
+    final run = ref.read(runProvider);
+    final setup = ref.read(runSetupProvider);
+    final ownerUserId = ref.read(authProvider).user?['id']?.toString();
+    return {
+      'sessionType': setup.sessionType,
+      'mainQuestAtStart': setup.mainQuestAtStart,
+      'pendingCompletion': finishing,
+      'endLat': _currentPosition.latitude,
+      'endLng': _currentPosition.longitude,
+      'ownerUserId': ownerUserId,
+      'sessionId': setup.sessionId,
+      'environment': setup.environment,
+      'elapsedSeconds': run.elapsedSeconds,
+      'distanceKm': run.distanceKm,
+      'isPaused': run.isPaused,
+      'routePoints': _routePoints
+          .map((point) => {'lat': point.latitude, 'lng': point.longitude})
+          .toList(),
+      'sideQuests': setup.activeSideQuests
+          .map((quest) => {
+                'id': quest.sideQuestId,
+                'title': quest.title,
+                'description': quest.description,
+                'icon': quest.icon,
+                'coinReward': quest.coinReward,
+                'done': quest.done,
+              })
+          .toList(),
+    };
   }
 
   @override
@@ -942,10 +941,10 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
                                       (_draftClosed && _storageError != null)
                                   ? 'ลองบันทึกใหม่'
                                   : '■ จบการวิ่ง',
-                              loading: run.isStopping,
+                              loading: run.finishBusy || _finishing,
                               gradient: LinearGradient(
                                   colors: [AppColors.red1, AppColors.red2]),
-                              onTap: run.isStopping
+                              onTap: run.finishBusy || _finishing
                                   ? null
                                   : run.finishError != null ||
                                           (_draftClosed &&
@@ -958,15 +957,24 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
                           ),
                         ],
                       ),
+                      if (run.finishBusy || _finishing)
+                        Semantics(
+                            liveRegion: true,
+                            child: Text(run.finishMessage,
+                                key: const Key('run-finish-status'),
+                                textAlign: TextAlign.center,
+                                style: AppText.body(size: 12))),
                       if (run.finishError != null || _storageError != null)
                         Text(run.finishError ?? _storageError!,
                             style:
                                 AppText.body(size: 12, color: AppColors.red1)),
                       const SizedBox(height: 6),
                       Text(
-                        run.isPaused
-                            ? 'หยุดชั่วคราว · ${run.elapsedLabel}'
-                            : 'กำลังวิ่ง · ${run.elapsedLabel}',
+                        _draftClosed
+                            ? 'จบการวิ่ง · ${run.elapsedLabel}'
+                            : run.isPaused
+                                ? 'หยุดชั่วคราว · ${run.elapsedLabel}'
+                                : 'กำลังวิ่ง · ${run.elapsedLabel}',
                         style: AppText.body(
                             size: 11.5, color: AppColors.textTertiary),
                       ),
