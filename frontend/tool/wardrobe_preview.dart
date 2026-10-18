@@ -84,6 +84,13 @@ class _DemoApi extends ShopApi {
   }
 
   @override
-  Future<void> saveOutfit(Map<String, ShopItem> changes) async =>
-      outfit.addAll(changes);
+  Future<void> saveOutfit(Map<String, ShopItem?> changes) async {
+    for (final entry in changes.entries) {
+      if (entry.value == null) {
+        outfit.remove(entry.key);
+      } else {
+        outfit[entry.key] = entry.value!;
+      }
+    }
+  }
 }

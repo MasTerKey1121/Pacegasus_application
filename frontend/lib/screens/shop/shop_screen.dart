@@ -18,7 +18,7 @@ const _categories = <({String name, String? slots, IconData icon})>[
   (name: 'หน้า', slots: 'face', icon: Icons.face_outlined),
   (name: 'เสื้อ', slots: 'inner_top,outer_top', icon: Icons.checkroom),
   (name: 'ปีก', slots: 'back', icon: Icons.air),
-  (name: 'ของถือ', slots: null, icon: Icons.work_outline),
+  (name: 'ของถือ', slots: 'handheld', icon: Icons.work_outline),
   (name: 'กางเกง', slots: 'pants', icon: Icons.accessibility_new),
   (name: 'รองเท้า', slots: 'shoes', icon: Icons.directions_run),
 ];
@@ -64,19 +64,28 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
   bool _buying = false;
   bool _tryOn = false;
   ShopItem? _product;
-  final Map<String, ShopItem> _changes = {};
-  final Map<String, String> _equippedIds = {};
-  final Map<String, ShopItem> _savedPreview = {};
+  // A present null means explicitly removed; an absent key means unchanged.
+  final Map<String, ShopItem?> _changes = {};
+  final Map<String, String?> _equippedIds = {};
+  final Map<String, ShopItem?> _savedPreview = {};
 
   void _choose(ShopItem item) {
     if (_saving || item.slot == null) return;
     setState(() {
-      final equipped = _equippedIds[item.slot!] == item.id ||
-          (!_equippedIds.containsKey(item.slot!) && item.equipped);
-      if (equipped) {
-        _changes.remove(item.slot!);
+      final slot = item.slot!;
+      final savedId = _equippedIds.containsKey(slot)
+          ? _equippedIds[slot]
+          : item.equipped
+              ? item.id
+              : null;
+      final selectedId =
+          _changes.containsKey(slot) ? _changes[slot]?.id : savedId;
+      final remove = selectedId == item.id && item.canUnequip;
+      final next = remove ? null : item;
+      if (next?.id == savedId) {
+        _changes.remove(slot);
       } else {
-        _changes[item.slot!] = item;
+        _changes[slot] = next;
       }
     });
   }
@@ -122,7 +131,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
       if (!mounted) return;
       _savedPreview.addAll(_changes);
       _equippedIds
-          .addAll(_changes.map((slot, item) => MapEntry(slot, item.id)));
+          .addAll(_changes.map((slot, item) => MapEntry(slot, item?.id)));
       _changes.clear();
       ref.invalidate(avatarOutfitProvider);
       var refreshed = false;
@@ -582,7 +591,7 @@ class _ShopScreenState extends ConsumerState<ShopScreen> {
 class ShopCategoryScreen extends ConsumerStatefulWidget {
   final int categoryIndex;
   final bool wardrobe;
-  final Map<String, ShopItem> selections;
+  final Map<String, ShopItem?> selections;
   const ShopCategoryScreen(
       {super.key,
       required this.categoryIndex,
