@@ -18,7 +18,8 @@ class ApiException implements Exception {
 /// - แนบ Authorization header อัตโนมัติเมื่อ auth: true
 /// - ถ้าเจอ 401 จะพยายาม refresh token แล้ว retry ให้ 1 ครั้ง
 class ApiClient {
-  static const _requestTimeout = Duration(seconds: 10);
+  final Duration requestTimeout;
+  final Duration authTimeout;
 
   final List<String> _baseUrls;
   String? _reachableBaseUrl;
@@ -27,11 +28,17 @@ class ApiClient {
 
   /// เอา accessToken ปัจจุบันจาก AuthProvider (set ตอน app start)
   String? Function()? getAccessToken;
+  Object? Function()? getSessionIdentity;
+  bool refreshingProfile = false;
 
   /// เรียกตอนเจอ 401 — คืน true ถ้า refresh สำเร็จ (ให้ retry request เดิม)
   Future<bool> Function()? onUnauthorized;
 
-  ApiClient({String? baseUrl, List<String>? baseUrls})
+  ApiClient(
+      {String? baseUrl,
+      List<String>? baseUrls,
+      this.requestTimeout = const Duration(seconds: 30),
+      this.authTimeout = const Duration(seconds: 75)})
       : assert(baseUrl == null || baseUrls == null),
         _baseUrls = baseUrls ??
             (baseUrl == null ? ApiConfig.baseUrls : <String>[baseUrl]);
@@ -63,7 +70,18 @@ class ApiClient {
     String field = 'avatar',
     bool auth = false,
   }) async {
+    final identity = getSessionIdentity?.call();
+    final originalToken = getAccessToken?.call();
+    void ensureSameAccount() {
+      if (auth &&
+          getSessionIdentity != null &&
+          identity != getSessionIdentity?.call()) {
+        throw ApiException(0, 'บัญชีเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
+      }
+    }
+
     Future<http.Response> send() => _sendWithFallback((candidate) async {
+          ensureSameAccount();
           // Multipart requests are single-use: rebuild for fallback and token retry.
           final request =
               http.MultipartRequest('PUT', Uri.parse('$candidate$path'));
@@ -76,9 +94,14 @@ class ApiClient {
           return http.Response.fromStream(await request.send());
         });
     var response = await send();
+    ensureSameAccount();
     if (response.statusCode == 401 && auth && onUnauthorized != null) {
-      if (await onUnauthorized!()) response = await send();
+      final refreshed =
+          originalToken != getAccessToken?.call() || await onUnauthorized!();
+      ensureSameAccount();
+      if (refreshed) response = await send();
     }
+    ensureSameAccount();
     return _handle(response);
   }
 
@@ -97,22 +120,29 @@ class ApiClient {
     }
     final encodedBody = body != null ? jsonEncode(body) : null;
 
-    final guardedRunWrite = path == '/api/rpe' ||
-        path.startsWith('/api/running-sessions') ||
-        path.startsWith('/api/side-quests') ||
-        path.startsWith('/api/quests/') ||
-        (path.startsWith('/api/programs/quests/') &&
-            path.endsWith('/complete'));
-    return _sendWithFallback(
+    Future<http.Response> send() => _sendWithFallback(
         (candidate) => _dispatch(
             method, Uri.parse('$candidate$path'), headers, encodedBody),
-        allowFallback: !guardedRunWrite ||
-            (method == 'GET' && !path.startsWith('/api/quests/side?')));
+        timeout: path.startsWith('/api/auth/') ? authTimeout : requestTimeout,
+        // A missing write response does not establish whether it committed.
+        // Only reads may switch addresses automatically; Side Quest GET
+        // creates instances, so it is treated as a write too.
+        allowFallback:
+            method == 'GET' && !path.startsWith('/api/quests/side?'));
+    final result = await send();
+    if (method == 'GET' &&
+        !path.startsWith('/api/quests/side?') &&
+        [502, 503, 504].contains(result.statusCode)) {
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+      return send(); // One read retry; mutating/generating requests never replay.
+    }
+    return result;
   }
 
   Future<http.Response> _sendWithFallback(
       Future<http.Response> Function(String candidate) send,
-      {bool allowFallback = true}) async {
+      {bool allowFallback = true,
+      Duration? timeout}) async {
     final candidates = <String>[
       if (_reachableBaseUrl != null) _reachableBaseUrl!,
       ..._baseUrls.where((url) => url != _reachableBaseUrl),
@@ -122,7 +152,8 @@ class ApiClient {
     for (final candidate
         in candidates.take(allowFallback ? candidates.length : 1)) {
       try {
-        final response = await send(candidate).timeout(_requestTimeout);
+        final response =
+            await send(candidate).timeout(timeout ?? requestTimeout);
         _reachableBaseUrl = candidate;
         return response;
       } on TimeoutException catch (error) {
@@ -171,17 +202,35 @@ class ApiClient {
     bool auth = false,
   }) async {
     final originalToken = getAccessToken?.call();
+    final originalIdentity = getSessionIdentity?.call();
     var res = await _sendRaw(method, path, body, auth);
-    if (auth && originalToken != getAccessToken?.call()) {
+    bool changedAccount() => getSessionIdentity == null
+        ? originalToken != getAccessToken?.call()
+        : originalIdentity != getSessionIdentity?.call();
+    if (auth && changedAccount()) {
       throw ApiException(
           0, 'บัญชีหรือข้อมูลเข้าสู่ระบบเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
     }
 
-    if (res.statusCode == 401 && auth && onUnauthorized != null) {
-      final refreshed = await onUnauthorized!();
+    if (res.statusCode == 401 &&
+        auth &&
+        onUnauthorized != null &&
+        !(path == '/api/auth/me' && refreshingProfile)) {
+      final refreshed =
+          originalToken != getAccessToken?.call() || await onUnauthorized!();
+      if (getSessionIdentity != null &&
+          originalIdentity != getSessionIdentity?.call()) {
+        throw ApiException(0, 'บัญชีเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
+      }
       if (refreshed) {
         res = await _sendRaw(method, path, body, auth); // retry ครั้งเดียว
       }
+    }
+
+    if (auth &&
+        getSessionIdentity != null &&
+        originalIdentity != getSessionIdentity?.call()) {
+      throw ApiException(0, 'บัญชีเปลี่ยนระหว่างคำขอ กรุณาลองใหม่');
     }
 
     return _handle(res);

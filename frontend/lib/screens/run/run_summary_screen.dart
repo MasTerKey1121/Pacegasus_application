@@ -11,6 +11,8 @@ import '../../widgets/common.dart';
 import 'reward_screen.dart';
 import '../../widgets/run_route_map.dart';
 import '../../providers/run_setup_provider.dart';
+import '../../providers/run_rewards_provider.dart';
+import '../../providers/daily_quest_provider.dart';
 import '../../providers/rpe_provider.dart';
 import '../../services/api_client.dart';
 
@@ -27,6 +29,7 @@ class RunSummaryScreen extends ConsumerStatefulWidget {
 class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
   late RunResult result = widget.result;
   bool _isSubmitting = false;
+  bool _submitted = false;
   bool _routeLoading = false;
   bool _routeFailed = false;
   bool _isTreadmill = false;
@@ -145,7 +148,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                     child: Column(
                       children: [
                         RunRouteMap(
-                            key: ValueKey(result.routePoints),
+                            sessionId: ref.watch(runSetupProvider).sessionId,
                             points: result.routePoints,
                             loading: _routeLoading,
                             loadFailed: _routeFailed,
@@ -306,7 +309,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                           result.hasInjury == null
                       ? null
                       : () async {
-                          if (_isSubmitting) return;
+                          if (_isSubmitting || _submitted) return;
                           final sessionId =
                               ref.read(runSetupProvider).sessionId;
                           if (sessionId == null) {
@@ -366,7 +369,46 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 ref.read(authProvider).user?['id'] != owner) {
                               return;
                             }
+                            await ref.read(dailyQuestProvider).refresh();
+                            if (!mounted ||
+                                ref.read(authProvider).user?['id'] != owner) {
+                              return;
+                            }
+                            final ledger = ref.read(runRewardsProvider);
+                            await ledger.load(sessionId);
                             final reward = RunReward.fromFeedback(response);
+                            if (reward != null && response['data'] is Map) {
+                              final id = response['data']['id']?.toString() ??
+                                  sessionId;
+                              await ledger.record(RewardReceipt(
+                                  'แบบสอบถามหลังวิ่ง',
+                                  id,
+                                  sessionId,
+                                  reward.coins,
+                                  reward.exp));
+                            } else if (!ledger.hasSource(
+                                sessionId, 'แบบสอบถามหลังวิ่ง')) {
+                              await ledger.expectSource(
+                                  sessionId, 'แบบสอบถามหลังวิ่ง');
+                            }
+                            final currentSetup = ref.read(runSetupProvider);
+                            for (final side
+                                in currentSetup.rewardsForSession(sessionId)) {
+                              await ledger.record(RewardReceipt('Side Quest',
+                                  side.questId, sessionId, side.coins, null));
+                            }
+                            final daily = ref.read(dailyQuestProvider);
+                            if (currentSetup.mainQuestAtStart != null &&
+                                daily.completed &&
+                                daily.quest?['id']?.toString() ==
+                                    currentSetup.mainQuestAtStart) {
+                              await ledger.expectSource(
+                                  sessionId, 'Main Quest');
+                            }
+                            if (!mounted ||
+                                ref.read(authProvider).user?['id'] != owner) {
+                              return;
+                            }
                             ref.invalidate(progressProvider);
                             ref.read(userProvider).addRunStats(
                                 km: result.distanceKm, sessions: 1);
@@ -375,9 +417,11 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                                 .read(runSetupProvider)
                                 .rewardsForSession(sessionId);
                             ref.read(runSetupProvider).reset();
+                            _submitted = true;
                             Navigator.of(context).pushReplacement(
                               MaterialPageRoute(
                                 builder: (_) => RewardScreen(
+                                    sessionId: sessionId,
                                     coin: reward?.coins,
                                     exp: reward?.exp,
                                     sideRewards: sideRewards),
@@ -387,18 +431,20 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                             if (context.mounted) {
                               showAppToast(
                                 context,
-                                'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ: ${error.message}',
+                                'ยังตรวจผลบันทึกหลังวิ่งไม่ได้ กรุณาลองใหม่: ${error.message}',
                               );
                             }
                           } catch (_) {
                             if (context.mounted) {
                               showAppToast(
                                 context,
-                                'บันทึกข้อมูลหลังวิ่งไม่สำเร็จ กรุณาลองอีกครั้ง',
+                                'ตรวจหรือเก็บรายละเอียดรางวัลไม่สำเร็จ กรุณาลองใหม่ ระบบจะตรวจสถานะก่อนส่งอีกครั้ง',
                               );
                             }
                           } finally {
-                            if (mounted) setState(() => _isSubmitting = false);
+                            if (mounted && !_submitted) {
+                              setState(() => _isSubmitting = false);
+                            }
                           }
                         },
                 ),

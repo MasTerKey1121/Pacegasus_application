@@ -10,6 +10,7 @@ import 'program_provider.dart';
 import 'run_setup_provider.dart';
 import 'progress_provider.dart';
 import 'training_day_provider.dart';
+import 'run_rewards_provider.dart';
 
 double? questNumber(Object? value) {
   final n = double.tryParse('$value');
@@ -49,12 +50,14 @@ double savedQuestValue(Map quest, Iterable<Map> sessions, String day) {
 
 class DailyQuestNotifier extends ChangeNotifier {
   DailyQuestNotifier(this.api, this.sessions, this.owner, this.day,
-      {this.onConfirmed, String Function()? currentDay})
+      {this.onConfirmed, this.onRewardReceipt, String Function()? currentDay})
       : _currentDay = currentDay;
   final ProgramApi api;
   final RunningSessionApi sessions;
   final String owner, day;
   final VoidCallback? onConfirmed;
+  final Future<void> Function(RewardReceipt receipt)? onRewardReceipt;
+  Future<void>? _refreshing;
   final String Function()? _currentDay;
   Map<String, dynamic>? quest;
   Map? reward;
@@ -77,7 +80,17 @@ class DailyQuestNotifier extends ChangeNotifier {
     return api.getQuestsInRange(from: day, to: tomorrow);
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (_refreshing != null) return _refreshing!;
+    final future = _refresh();
+    _refreshing = future;
+    future.whenComplete(() {
+      if (identical(_refreshing, future)) _refreshing = null;
+    });
+    return future;
+  }
+
+  Future<void> _refresh() async {
     if (loading || !_alive) return;
     loading = true;
     error = null;
@@ -166,6 +179,27 @@ class DailyQuestNotifier extends ChangeNotifier {
         }
         quest = Map<String, dynamic>.from(confirmed);
         reward = data['reward'] is Map ? data['reward'] as Map : null;
+        if (reward?['awarded'] == true && onRewardReceipt != null) {
+          final eligible = details
+              .where((r) => savedQuestValue(quest!, [r], day) > 0)
+              .toList()
+            ..sort((a, b) => '${b['ended_at']}'.compareTo('${a['ended_at']}'));
+          final session = quest!['running_session_id']?.toString() ??
+              (eligible.isEmpty ? null : eligible.first['id']?.toString());
+          if (session != null) {
+            try {
+              await onRewardReceipt!(RewardReceipt(
+                  'Main Quest',
+                  quest!['id'].toString(),
+                  session,
+                  RewardReceipt.amount(reward!['coins']),
+                  RewardReceipt.amount(reward!['exp'])));
+            } catch (_) {
+              error =
+                  'server ยืนยันภารกิจแล้ว แต่เก็บใบยืนยันรางวัลในเครื่องไม่สำเร็จ';
+            }
+          }
+        }
         onConfirmed?.call();
         // Keep confirmed state even if a subsequent read is unavailable.
         try {
@@ -202,6 +236,8 @@ final dailyQuestProvider = ChangeNotifierProvider<DailyQuestNotifier>((ref) {
   final notifier = DailyQuestNotifier(ref.read(programApiProvider),
       ref.read(runningSessionApiProvider), owner, day,
       currentDay: () => trainingDateKey(trainingToday())!,
+      onRewardReceipt: (receipt) =>
+          ref.read(runRewardsProvider).record(receipt),
       onConfirmed: () {
         ref.invalidate(progressProvider);
       });

@@ -3,9 +3,11 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../models/run_reward.dart';
 import '../../providers/progress_provider.dart';
+import '../../providers/run_rewards_provider.dart';
 import '../../widgets/common.dart';
 
 class RewardScreen extends ConsumerWidget {
+  final String? sessionId;
   final int? coin;
   final int? exp;
   final List<SideQuestRewardReceipt> sideRewards;
@@ -13,14 +15,23 @@ class RewardScreen extends ConsumerWidget {
       {super.key,
       required this.coin,
       required this.exp,
-      this.sideRewards = const []});
+      this.sideRewards = const [],
+      this.sessionId});
 
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final sideCoins =
         sideRewards.fold<int>(0, (sum, receipt) => sum + receipt.coins);
-    final totalCoins =
-        coin == null && sideRewards.isEmpty ? null : (coin ?? 0) + sideCoins;
+    final ledger = ref.watch(runRewardsProvider);
+    final receipts =
+        sessionId == null ? <RewardReceipt>[] : ledger.receipts(sessionId!);
+    final totalCoins = sessionId != null
+        ? ledger.total(sessionId!)
+        : (coin == null && sideRewards.isEmpty
+            ? null
+            : (coin ?? 0) + sideCoins);
+    final totalExp =
+        sessionId != null ? ledger.total(sessionId!, exp: true) : exp;
     final progress = ref.watch(progressProvider);
     return Scaffold(
       body: AppBackground(
@@ -44,21 +55,27 @@ class RewardScreen extends ConsumerWidget {
                       child: const Text('🏅', style: TextStyle(fontSize: 44))),
                   const SizedBox(height: 22),
                   Text(
-                      sideRewards.isNotEmpty
-                          ? 'รางวัลการวิ่งรอบนี้'
-                          : coin == null || exp == null
-                              ? 'บันทึกการวิ่งแล้ว!'
-                              : coin == 0 && exp == 0
-                                  ? 'บันทึกข้อมูลแล้ว'
-                                  : 'รับรางวัลแล้ว!',
+                      sessionId != null
+                          ? (totalCoins == null || totalExp == null
+                              ? 'ยังยืนยันรางวัลรวมไม่ได้'
+                              : 'รางวัลการวิ่งรอบนี้')
+                          : sideRewards.isNotEmpty
+                              ? 'รางวัลการวิ่งรอบนี้'
+                              : coin == null || exp == null
+                                  ? 'บันทึกการวิ่งแล้ว!'
+                                  : coin == 0 && exp == 0
+                                      ? 'บันทึกข้อมูลแล้ว'
+                                      : 'รับรางวัลแล้ว!',
                       style: AppText.heading(size: 22)),
                   const SizedBox(height: 6),
                   Text(
-                      sideRewards.isNotEmpty
-                          ? 'รวมเหรียญที่ยืนยันแล้วจาก Side Quest และแบบสอบถาม'
-                          : coin == null || exp == null
-                              ? 'ยังไม่มีข้อมูลรางวัลจากเซิร์ฟเวอร์'
-                              : 'จาก feedback หลังวิ่งครั้งนี้ (server ยืนยัน)',
+                      sessionId != null
+                          ? 'รายการรางวัลที่เซิร์ฟเวอร์ยืนยันสำหรับรอบนี้'
+                          : sideRewards.isNotEmpty
+                              ? 'รวมเหรียญที่ยืนยันแล้วจาก Side Quest และแบบสอบถาม'
+                              : coin == null || exp == null
+                                  ? 'ยังไม่มีข้อมูลรางวัลจากเซิร์ฟเวอร์'
+                                  : 'จาก feedback หลังวิ่งครั้งนี้ (server ยืนยัน)',
                       textAlign: TextAlign.center,
                       style: AppText.body(
                           size: 13, color: AppColors.textSecondary)),
@@ -79,17 +96,47 @@ class RewardScreen extends ConsumerWidget {
                     Expanded(
                         child: AppCard(
                             child: Column(children: [
-                      Text('${exp == null ? '—' : '+$exp'} ⭐',
+                      Text('${totalExp == null ? '—' : '+$totalExp'} ⭐',
                           style: AppText.heading(
                               size: 22, color: AppColors.purple2)),
                       const SizedBox(height: 4),
-                      Text(sideRewards.isEmpty ? 'EXP' : 'EXP แบบสอบถาม',
+                      Text(
+                          sessionId != null || sideRewards.isEmpty
+                              ? 'EXP'
+                              : 'EXP แบบสอบถาม',
                           textAlign: TextAlign.center,
                           style: AppText.body(
                               size: 11.5, color: AppColors.textSecondary)),
                     ]))),
                   ]),
-                  if (sideRewards.isNotEmpty) ...[
+                  if (sessionId != null) ...[
+                    const SizedBox(height: 12),
+                    for (final row in receipts)
+                      Text(
+                          '${row.source}: ${row.coins == null ? 'ยังไม่ทราบเหรียญ' : '+${row.coins} เหรียญ'} · ${row.exp == null ? 'ยังไม่ทราบ EXP' : '+${row.exp} EXP'}',
+                          textAlign: TextAlign.center,
+                          style: AppText.body(size: 12)),
+                    if (totalCoins == null || totalExp == null) ...[
+                      const Text(
+                          'รายละเอียดรางวัลบางส่วนยังยืนยันไม่ได้ ยอดบัญชีจริงอยู่ด้านล่าง',
+                          textAlign: TextAlign.center),
+                      TextButton(
+                          onPressed: () async {
+                            try {
+                              await ref.read(rewardReloadProvider)(sessionId!);
+                              ref.invalidate(progressProvider);
+                            } catch (_) {
+                              if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                    const SnackBar(
+                                        content: Text(
+                                            'ยังโหลดผลยืนยันรางวัลไม่ได้ กรุณาลองใหม่')));
+                              }
+                            }
+                          },
+                          child: const Text('ลองโหลดรายละเอียดรางวัลใหม่')),
+                    ],
+                  ] else if (sideRewards.isNotEmpty) ...[
                     const SizedBox(height: 12),
                     Text(
                         'Side Quest (${sideRewards.length} ภารกิจ): +$sideCoins เหรียญ',

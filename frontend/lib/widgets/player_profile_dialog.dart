@@ -8,6 +8,7 @@ import '../services/club_api.dart';
 import '../services/friend_api.dart';
 import '../services/player_profile_api.dart';
 import '../screens/home/home_avatar.dart';
+import 'profile_avatar_image.dart';
 
 Future<bool?> showPlayerProfile(BuildContext context, String identifier) =>
     showDialog<bool>(
@@ -155,17 +156,13 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                               radius: 32,
                               backgroundColor: AppColors.cardHi,
                               child: ClipOval(
-                                  child: data['user']['avatarUrl'] == null
-                                      ? const Icon(Icons.person,
-                                          size: 38, color: AppColors.purple2)
-                                      : Image.network(
-                                          data['user']['avatarUrl'] as String,
-                                          width: 64,
-                                          height: 64,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(Icons.person,
-                                                  size: 38)))),
+                                  child: ProfileAvatarImage(
+                                      url: data['user']['avatarUrl'] as String?,
+                                      uid: data['user']['uid'] as String?,
+                                      size: 64,
+                                      fallback: const Icon(Icons.person,
+                                          size: 38,
+                                          color: AppColors.purple2)))),
                           const SizedBox(width: 12),
                           Expanded(
                               child: Column(

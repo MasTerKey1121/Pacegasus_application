@@ -36,16 +36,13 @@ class ProgramApi {
         auth: true,
       );
 
-  /// Atomically replace the pending quests in one current/future week.
+  /// The current backend exposes no atomic replacement route for saved weeks.
   Future<Map<String, dynamic>> replaceScheduleWeek({
     required String weekStart,
     required List<Map<String, String>> quests,
-  }) =>
-      client.put(
-        '/api/programs/quests/week',
-        body: {'weekStart': weekStart, 'quests': quests},
-        auth: true,
-      );
+  }) async =>
+      throw UnsupportedError(
+          'API ปัจจุบันยังไม่มีการแทนที่ตารางสัปดาห์อย่างปลอดภัย');
 
   /// Retrieve every main quest already saved between [from] and [to]
   /// (yyyy-MM-dd), used to resync the local schedule builder with what the

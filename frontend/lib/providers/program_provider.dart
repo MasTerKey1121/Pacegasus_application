@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -13,7 +15,46 @@ final programApiProvider = Provider<ProgramApi>(
 );
 
 class ProgramNotifier extends ChangeNotifier {
-  ProgramNotifier(this._api, this._onboardingApi);
+  ProgramNotifier(this._api, this._onboardingApi,
+      {String? Function()? owner,
+      FlutterSecureStorage storage = const FlutterSecureStorage()})
+      : _owner = owner,
+        _selectionStorage = storage;
+  final String? Function()? _owner;
+  final FlutterSecureStorage _selectionStorage;
+  int? selectedPlanWeeks;
+  String? get userProgramId => _userProgramId;
+  String? get _selectionKey {
+    final owner = _owner?.call();
+    return owner == null || _userProgramId == null
+        ? null
+        : 'program_selection_v1_${owner}_$_userProgramId';
+  }
+
+  Future<void> rememberPlanWeeks(int weeks) async {
+    selectedPlanWeeks = weeks;
+    final key = _selectionKey;
+    if (key == null) return;
+    await _selectionStorage.write(
+        key: key,
+        value: jsonEncode({
+          'weeks': weeks,
+          'startDate': _programStartDate?.toIso8601String(),
+          'level': selectedTemplateLevel,
+        }));
+  }
+
+  Future<void> restorePlanSelection() async {
+    final key = _selectionKey;
+    final version = _accountVersion;
+    if (key == null) return;
+    final raw = await _selectionStorage.read(key: key);
+    if (version != _accountVersion || raw == null) return;
+    final data = jsonDecode(raw) as Map;
+    selectedPlanWeeks ??= int.tryParse('${data['weeks']}');
+    _programStartDate ??= trainingDate(data['startDate']);
+    selectedTemplateLevel ??= data['level']?.toString();
+  }
 
   final ProgramApi _api;
   final OnboardingApi _onboardingApi;
@@ -78,6 +119,7 @@ class ProgramNotifier extends ChangeNotifier {
     _isRegistered = false;
     _isScheduleSaved = false;
     _programStartDate = null;
+    selectedPlanWeeks = null;
     _hasRestored = false;
     _userProgramId = null;
     notifyListeners();
@@ -297,8 +339,19 @@ class ProgramNotifier extends ChangeNotifier {
       return true;
     } catch (error) {
       if (version != _accountVersion) return false;
-      errorMessage = error.toString();
-      currentWeekErrorMessage = errorMessage;
+      if (error is ApiException && error.statusCode == 404) {
+        _isRegistered = false;
+        _isScheduleSaved = false;
+        _programStartDate = null;
+        _userProgramId = null;
+        selectedPlanWeeks = null;
+        quests = [];
+        errorMessage = null;
+        currentWeekErrorMessage = null;
+      } else {
+        errorMessage = error.toString();
+        currentWeekErrorMessage = errorMessage;
+      }
       isLoading = false;
       notifyListeners();
       return false;
@@ -405,11 +458,13 @@ class ProgramNotifier extends ChangeNotifier {
     required DateTime from,
     required DateTime to,
   }) async {
+    final version = _accountVersion;
     try {
       final response = await _api.getQuestsInRange(
         from: _dateOnly(from),
         to: _dateOnly(to),
       );
+      if (version != _accountVersion) throw StateError('บัญชีเปลี่ยนแล้ว');
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final rawQuests = data['quests'] as List<dynamic>? ?? const [];
       return rawQuests
@@ -417,21 +472,31 @@ class ProgramNotifier extends ChangeNotifier {
           .map((quest) => Map<String, dynamic>.from(quest))
           .toList(growable: false);
     } catch (_) {
-      return const [];
+      rethrow;
     }
   }
 
   void _setQuests(Map<String, dynamic> response) {
     final data = response['data'] as Map<String, dynamic>? ?? const {};
     final programId = data['userProgramId']?.toString();
+    if (programId != _userProgramId) {
+      _programStartDate = null;
+      selectedPlanWeeks = null;
+    }
     final wasSaved = programId == _userProgramId && _isScheduleSaved;
     _userProgramId = programId;
     final templateLevel = data['templateLevel']?.toString();
     if (templateLevel != null && templateLevel.isNotEmpty) {
       selectedTemplateLevel = templateLevel;
     }
-    final startDate = trainingDate(data['startDate']);
+    final weekStart = trainingDate(data['weekStart']);
+    final weekNumber = int.tryParse('${data['weekNumber']}');
+    final startDate = trainingDate(data['startDate']) ??
+        (weekStart != null && weekNumber != null && weekNumber >= 1
+            ? weekStart.subtract(Duration(days: (weekNumber - 1) * 7))
+            : null);
     if (startDate != null) _programStartDate = startDate;
+    selectedPlanWeeks ??= int.tryParse('${data['durationWeeks']}');
     final rawQuests = data['quests'] as List<dynamic>? ?? const [];
     quests = rawQuests
         .whereType<Map>()
@@ -465,6 +530,7 @@ final programProvider = ChangeNotifierProvider<ProgramNotifier>((ref) {
   final notifier = ProgramNotifier(
     ref.read(programApiProvider),
     ref.read(onboardingApiProvider),
+    owner: () => ref.read(authProvider).user?['id']?.toString(),
   );
 
   // Riverpod keeps this provider alive while the app remains open. Reset it

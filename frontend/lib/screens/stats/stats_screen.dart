@@ -329,6 +329,7 @@ class _RunDetailState extends ConsumerState<_RunDetail> {
                       FutureBuilder<Map<String, dynamic>>(
                           future: _detail,
                           builder: (_, snap) => RunRouteMap(
+                              sessionId: run.id,
                               points: RunRoutePoint.parse(
                                   snap.data?['route_points']),
                               loading:

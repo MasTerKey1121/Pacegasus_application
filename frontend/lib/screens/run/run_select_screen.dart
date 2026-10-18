@@ -216,6 +216,8 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         setup.isStarting
                     ? null
                     : () async {
+                        ref.read(runSetupProvider).mainQuestAtStart =
+                            todayQuest?['id']?.toString();
                         final ok = await ref
                             .read(runSetupProvider)
                             .startRun(mainQuestSessionType: sessionType);

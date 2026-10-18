@@ -21,11 +21,37 @@ class TrainingScheduleScreen extends ConsumerStatefulWidget {
 class _TrainingScheduleScreenState
     extends ConsumerState<TrainingScheduleScreen> {
   String? _configuredTemplateLevel;
+  String? _syncError;
+  bool _syncing = false;
+  bool _loadingMetadata = true;
 
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => ref.read(programProvider).loadTemplates());
+    Future.microtask(_reloadMetadata);
+  }
+
+  Future<void> _reloadMetadata() async {
+    if (mounted) setState(() => _loadingMetadata = true);
+    final program = ref.read(programProvider);
+    if (program.programStartDate == null ||
+        program.currentWeekErrorMessage != null) {
+      await program.loadCurrentWeek();
+    }
+    try {
+      await program.restorePlanSelection();
+    } catch (_) {
+      if (mounted) {
+        setState(() => _syncError = 'อ่านแผนที่เก็บไว้ไม่สำเร็จ กรุณาลองใหม่');
+      }
+    }
+    await program.loadTemplates();
+    if (mounted) {
+      setState(() {
+        _configuredTemplateLevel = null;
+        _loadingMetadata = false;
+      });
+    }
   }
 
   @override
@@ -68,9 +94,21 @@ class _TrainingScheduleScreenState
                 const SizedBox(height: 18),
                 // A refresh after saving must keep the submitter mounted so
                 // its callback can navigate Home once the request finishes.
-                if (program.isLoading && !program.isRegistered)
+                if (_loadingMetadata ||
+                    (program.isLoading && !program.isRegistered))
                   const Expanded(
                       child: Center(child: CircularProgressIndicator()))
+                else if (program.currentWeekErrorMessage != null ||
+                    (program.isRegistered && template == null))
+                  Expanded(
+                      child: Center(
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                    const Text('โหลดข้อมูลแผนซ้อมไม่สำเร็จ'),
+                    TextButton(
+                        onPressed: _reloadMetadata,
+                        child: const Text('ลองโหลดตารางใหม่')),
+                  ])))
                 else if (!program.isRegistered)
                   Expanded(
                     child: Center(
@@ -80,6 +118,23 @@ class _TrainingScheduleScreenState
                       ),
                     ),
                   )
+                else if (program.programStartDate == null || _syncError != null)
+                  Expanded(
+                      child: Center(
+                          child:
+                              Column(mainAxisSize: MainAxisSize.min, children: [
+                    Text(_syncError ??
+                        'ยังโหลดวันเริ่มต้นแผนไม่ได้ กรุณาลองใหม่'),
+                    TextButton(
+                        onPressed: () {
+                          setState(() => _syncError = null);
+                          _reloadMetadata();
+                        },
+                        child: const Text('ลองโหลดตารางใหม่')),
+                  ])))
+                else if (_syncing)
+                  const Expanded(
+                      child: Center(child: CircularProgressIndicator()))
                 else
                   Expanded(
                     child: _ScheduleBuilder(
@@ -104,12 +159,18 @@ class _TrainingScheduleScreenState
   }
 
   void _configurePlan(Map<String, dynamic>? template) {
+    if (_loadingMetadata ||
+        ref.read(programProvider).programStartDate == null) {
+      return;
+    }
     final level = template?['level']?.toString();
-    if (template == null || level == _configuredTemplateLevel) return;
+    final configKey = '$level/${ref.read(programProvider).programStartDate}';
+    if (template == null || configKey == _configuredTemplateLevel) return;
     final min = _weekValue(template['duration_weeks_min']);
     final max = _weekValue(template['duration_weeks_max']);
     if (min == null || max == null || max < min) return;
-    _configuredTemplateLevel = level;
+    _configuredTemplateLevel = configKey;
+    _syncing = true;
     WidgetsBinding.instance.addPostFrameCallback((_) async {
       if (!mounted) return;
       final plan = ref.read(trainingPlanProvider);
@@ -118,6 +179,12 @@ class _TrainingScheduleScreenState
         maxWeeks: max,
         hasPhases: _mapList(template['programPhases']).isNotEmpty,
       );
+      final selected = ref.read(programProvider).selectedPlanWeeks;
+      if (selected != null &&
+          plan.availablePlanLengths.contains(selected) &&
+          plan.planWeeks != selected) {
+        plan.setPlanWeeks(selected);
+      }
       await _syncSavedSchedule(plan);
     });
   }
@@ -128,12 +195,20 @@ class _TrainingScheduleScreenState
   Future<void> _syncSavedSchedule(TrainingPlanNotifier plan) async {
     final startDate = ref.read(programProvider).programStartDate;
     if (startDate == null) return;
-    final quests = await ref.read(programProvider).loadQuestsRange(
+    setState(() {
+      _syncing = true;
+      _syncError = null;
+    });
+    try {
+      final quests = await ref.read(programProvider).loadQuestsRange(
           from: startDate,
-          to: startDate.add(Duration(days: plan.planWeeks * 7 - 1)),
-        );
-    if (!mounted) return;
-    plan.syncFromServer(startDate: startDate, quests: quests);
+          to: startDate.add(Duration(days: plan.planWeeks * 7 - 1)));
+      if (mounted) plan.syncFromServer(startDate: startDate, quests: quests);
+    } catch (_) {
+      if (mounted) _syncError = 'โหลดตารางที่บันทึกไว้ไม่สำเร็จ กรุณาลองใหม่';
+    } finally {
+      if (mounted) setState(() => _syncing = false);
+    }
   }
 }
 
@@ -141,16 +216,30 @@ class _TrainingScheduleScreenState
 /// must be re-synced against the backend or already-saved weeks would look
 /// unsaved (and re-saving them would collide with the weekly cap).
 Future<void> _changePlanWeeks(WidgetRef ref, int weeks) async {
-  ref.read(trainingPlanProvider).setPlanWeeks(weeks);
-  final startDate = ref.read(programProvider).programStartDate;
-  if (startDate == null) return;
-  final quests = await ref.read(programProvider).loadQuestsRange(
-        from: startDate,
-        to: startDate.add(Duration(days: weeks * 7 - 1)),
-      );
-  ref
-      .read(trainingPlanProvider)
-      .syncFromServer(startDate: startDate, quests: quests);
+  final context = ref.context;
+  final plan = ref.read(trainingPlanProvider);
+  final program = ref.read(programProvider);
+  if (plan.isChangingDuration || program.programStartDate == null) return;
+  final start = program.programStartDate!;
+  plan.setChangingDuration(true);
+  try {
+    // Preserve the old grid if a range read fails. An unavailable response
+    // must never masquerade as an empty, editable saved schedule.
+    final quests = await program.loadQuestsRange(
+        from: start, to: start.add(Duration(days: weeks * 7 - 1)));
+    if (!context.mounted) return;
+    await program.rememberPlanWeeks(weeks);
+    if (!context.mounted) return;
+    plan.setPlanWeeks(weeks);
+    plan.syncFromServer(startDate: start, quests: quests);
+  } catch (_) {
+    if (context.mounted) {
+      showAppToast(
+          context, 'โหลดตารางไม่สำเร็จ เก็บตารางเดิมไว้แล้ว กรุณาลองใหม่');
+    }
+  } finally {
+    plan.setChangingDuration(false, notify: context.mounted);
+  }
 }
 
 class _ScheduleBuilder extends ConsumerWidget {
@@ -174,8 +263,9 @@ class _ScheduleBuilder extends ConsumerWidget {
         .toList();
     final isCurrentWeekComplete = plan.isWeekComplete(plan.currentWeek);
     final isCurrentWeekSaved = plan.isWeekSaved(plan.currentWeek);
-    final isCurrentWeekEditable =
-        startDate != null && plan.isWeekEditable(plan.currentWeek, startDate!);
+    final isCurrentWeekEditable = startDate != null &&
+        !isCurrentWeekSaved &&
+        plan.isWeekEditable(plan.currentWeek, startDate!);
     final hasPhases = _mapList(template?['programPhases']).isNotEmpty;
     final progress =
         plan.planWeeks == 0 ? 0.0 : plan.overallDoneCount / plan.planWeeks;
@@ -297,7 +387,7 @@ class _ScheduleBuilder extends ConsumerWidget {
           Text(
             !isCurrentWeekEditable
                 ? isCurrentWeekSaved
-                    ? 'มีรายการที่เริ่มหรือทำเสร็จแล้ว จึงแก้ไขสัปดาห์นี้ไม่ได้'
+                    ? 'บันทึกสัปดาห์นี้แล้ว สามารถเลือกดูหรือจัดสัปดาห์ถัดไปได้'
                     : 'สัปดาห์ที่ผ่านมาแก้ไขไม่ได้'
                 : isCurrentWeekSaved
                     ? 'แก้ไขได้เฉพาะรายการที่ยังไม่เริ่มทำ แล้วกดบันทึกการแก้ไข'
@@ -370,7 +460,9 @@ class _ScheduleBuilder extends ConsumerWidget {
           const SizedBox(height: 20),
           GradientButton(
             label: !isCurrentWeekEditable
-                ? 'สัปดาห์นี้แก้ไขไม่ได้'
+                ? (isCurrentWeekSaved
+                    ? 'บันทึกสัปดาห์นี้แล้ว'
+                    : 'สัปดาห์นี้แก้ไขไม่ได้')
                 : isCurrentWeekSaved
                     ? 'บันทึกการแก้ไขสัปดาห์นี้'
                     : 'บันทึกตารางสัปดาห์',
@@ -378,6 +470,16 @@ class _ScheduleBuilder extends ConsumerWidget {
             onTap: isCurrentWeekEditable && isCurrentWeekComplete
                 ? () async {
                     final program = ref.read(programProvider);
+                    try {
+                      await program.rememberPlanWeeks(plan.planWeeks);
+                    } catch (_) {
+                      if (context.mounted) {
+                        showAppToast(context,
+                            'เก็บจำนวนสัปดาห์ในเครื่องไม่สำเร็จ กรุณาลองใหม่');
+                      }
+                      return;
+                    }
+                    if (!context.mounted) return;
                     final ok = isCurrentWeekSaved
                         ? await program.replaceManualScheduleWeek(
                             weekIndex: plan.currentWeek,

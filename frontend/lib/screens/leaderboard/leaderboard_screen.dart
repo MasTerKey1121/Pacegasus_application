@@ -4,6 +4,7 @@ import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/leaderboard_api.dart';
 import '../../widgets/player_profile_dialog.dart';
+import '../../widgets/profile_avatar_image.dart';
 
 const _accent = Color(0xFFC5A2FF);
 const _diamond = Color(0xFF7BDFFF);
@@ -341,14 +342,13 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
               width: size,
               height: size,
               color: _panel,
-              child: entry.imageUrl == null || entry.imageUrl!.isEmpty
-                  ? Icon(_scope == 'guild' ? Icons.groups : Icons.person,
-                      color: _accent)
-                  : Image.network(entry.imageUrl!,
-                      fit: BoxFit.cover,
-                      errorBuilder: (_, __, ___) => Icon(
-                          _scope == 'guild' ? Icons.groups : Icons.person,
-                          color: _accent)))));
+              child: ProfileAvatarImage(
+                  url: entry.imageUrl,
+                  uid: _scope == 'individual' ? entry.uid : null,
+                  size: size,
+                  fallback: Icon(
+                      _scope == 'guild' ? Icons.groups : Icons.person,
+                      color: _accent)))));
 
   Widget _row(RankingEntry entry,
           {bool special = false, bool mine = false, bool current = false}) =>

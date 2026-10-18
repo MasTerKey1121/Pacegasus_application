@@ -18,6 +18,7 @@ import '../../services/gistda_map_style.dart';
 import '../../services/run_background_support.dart';
 import '../../widgets/daily_quest_panel.dart';
 import '../../providers/daily_quest_provider.dart';
+import '../../providers/run_rewards_provider.dart';
 
 class RunSessionScreen extends ConsumerStatefulWidget {
   const RunSessionScreen({super.key});
@@ -612,8 +613,30 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
       if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
         return;
       }
-      unawaited(ref.read(dailyQuestProvider).refresh());
-      if (!mounted) return;
+      final daily = ref.read(dailyQuestProvider);
+      await daily.refresh();
+      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
+        return;
+      }
+      if (setup.mainQuestAtStart != null &&
+          daily.completed &&
+          daily.quest?['id']?.toString() == setup.mainQuestAtStart) {
+        try {
+          await ref
+              .read(runRewardsProvider)
+              .expectSource(session, 'Main Quest');
+        } catch (_) {
+          // Completion is already confirmed. Receipt storage must not strand
+          // the runner on a screen that says the run could not be saved.
+          if (mounted) {
+            showAppToast(
+                context, 'บันทึกการวิ่งแล้ว แต่ยังอ่านรายละเอียดรางวัลไม่ได้');
+          }
+        }
+      }
+      if (!mounted || ref.read(authProvider).user?['id']?.toString() != owner) {
+        return;
+      }
       Navigator.of(context).pushReplacement(
         MaterialPageRoute(builder: (_) => RunSummaryScreen(result: result)),
       );
@@ -640,6 +663,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
     try {
       await runDraftStore.save({
         'sessionType': setup.sessionType,
+        'mainQuestAtStart': setup.mainQuestAtStart,
         'pendingCompletion': finishing,
         'ownerUserId': ownerUserId,
         'sessionId': setup.sessionId,
