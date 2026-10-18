@@ -6,6 +6,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:pacegasus/services/api_client.dart';
 import 'package:pacegasus/services/shop_api.dart';
 import 'package:pacegasus/providers/avatar_provider.dart';
+import 'package:pacegasus/providers/progress_provider.dart';
 import 'package:pacegasus/navigation/home_route_observer.dart';
 import 'package:pacegasus/screens/shop/shop_screen.dart';
 
@@ -21,6 +22,8 @@ Future<void> main() async {
   runApp(ProviderScope(
       overrides: [
         shopApiProvider.overrideWithValue(store),
+        progressProvider
+            .overrideWith((ref) async => GameProgress(store.coins, 1, 0, 200)),
         avatarOutfitProvider
             .overrideWith((ref) async => AvatarOutfit(Map.of(store.outfit))),
       ],
@@ -69,17 +72,17 @@ class _Store extends ShopApi {
       listings.add(ShopItem(
           id: e['listingId'],
           code: e['code'],
-          slot: 'inner_top',
+          slot: e['slot'] ?? 'inner_top',
           name: e['name'],
           image: 'asset:assets/models/items/${e['code']}.png',
-          description: 'เสื้อวิ่ง โลโก้สีทอง',
+          description: e['description'] ?? 'ไอเทมทดลอง',
           rarity: 'common',
           price: e['price'],
           owned: false,
           renderData: Map<String, dynamic>.from(e['render'])));
     }
   }
-  int coins = 30;
+  int coins = 150;
   final actualIds = <String, String>{};
   final listings = <ShopItem>[];
   final owned = <String, ShopItem>{};

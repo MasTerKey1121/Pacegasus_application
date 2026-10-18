@@ -9,6 +9,10 @@ class AvatarOutfit {
       AvatarOutfit({...equipment, ...changes});
   String? get variant =>
       equipment['inner_top']?.renderData['variant'] as String?;
+  String get assetPath =>
+      (equipment['back']?.renderData['avatarAsset'] as String?)
+          ?.replaceFirst('asset:', '') ??
+      'assets/models/pacegasus_starter_v9.glb';
 }
 
 final avatarOutfitProvider = FutureProvider<AvatarOutfit>((ref) async {

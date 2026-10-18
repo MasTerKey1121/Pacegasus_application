@@ -5,6 +5,9 @@
     "listingId": "30000000-0000-4000-8000-000000000001",
     "name": "เสื้อวิ่งสีม่วง",
     "price": 20,
+    "slot": "inner_top",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "description": "เสื้อวิ่งทรงเริ่มต้น โลโก้สีทอง",
     "render": {
       "family": "pacegasus_starter_v9",
       "variant": "shop_tee_purple",
@@ -17,10 +20,28 @@
     "listingId": "30000000-0000-4000-8000-000000000002",
     "name": "เสื้อวิ่งสีน้ำตาล",
     "price": 1000,
+    "slot": "inner_top",
+    "asset": "asset:assets/models/pacegasus_starter_v9.glb",
+    "description": "เสื้อวิ่งทรงเริ่มต้น โลโก้สีทอง",
     "render": {
       "family": "pacegasus_starter_v9",
       "variant": "shop_tee_brown",
       "productAsset": "asset:assets/models/product_running_tee.glb"
+    }
+  },
+  {
+    "id": "20000000-0000-4000-8000-000000000003",
+    "code": "shop_golden_wings",
+    "listingId": "30000000-0000-4000-8000-000000000003",
+    "name": "ปีกขนนกสีทอง",
+    "slot": "back",
+    "price": 100,
+    "description": "ปีกสีทอง ขนปีกเชื่อมเป็นชิ้นเดียว ติดตามหลังอวตาร",
+    "asset": "asset:assets/models/product_golden_wings.glb",
+    "render": {
+      "family": "pacegasus_starter_v9",
+      "productAsset": "asset:assets/models/product_golden_wings.glb",
+      "avatarAsset": "asset:assets/models/pacegasus_golden_wings.glb"
     }
   }
 ]
