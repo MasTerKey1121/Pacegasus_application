@@ -180,7 +180,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                 const SizedBox(height: 4),
                 Align(
                   alignment: Alignment.centerLeft,
-                  child: Text('เลือกอย่างน้อย 1 อย่าง จากด้านสุขภาพ หรือ ด้านระยะทาง',
+                  child: Text('เลือก 1 อย่าง จากเป้าหมายด้านสุขภาพ และ ด้านระยะทาง',
                       style: AppText.body(size: 13, color: AppColors.textSecondary)),
                 ),
                 Expanded(
