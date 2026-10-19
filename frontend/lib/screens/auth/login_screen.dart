@@ -109,7 +109,7 @@ class _LoginScreenState extends ConsumerState<LoginScreen> {
                 const SizedBox(height: 32),
                 AppTextField(
                   label: 'Email',
-                  hint: 'you@email.com',
+                  hint: 'your@email.com',
                   controller: _emailController,
                   keyboardType: TextInputType.emailAddress,
                 ),
