@@ -37,7 +37,7 @@ app.get('/api/club-images/:id', asyncHandler(async (req, res) => {
   return res.send(image.image_data);
 }));
 app.get('/api/user-avatars/:id', asyncHandler(async (req, res) => {
-  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
     return res.status(404).json({ success: false, message: 'ไม่พบรูปโปรไฟล์' });
   }
   const image = await getAvatar(req.params.id);
