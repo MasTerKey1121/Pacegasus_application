@@ -1,22 +1,16 @@
-const fs = require('fs');
 const path = require('path');
 const multer = require('multer');
 const ApiError = require('../utils/ApiError');
 
 const AVATAR_DIR = path.join(__dirname, '..', '..', 'uploads', 'avatars');
 const MAX_SIZE_BYTES = 5 * 1024 * 1024;
-const EXT_BY_MIME = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/webp': '.webp' };
-
-fs.mkdirSync(AVATAR_DIR, { recursive: true });
+const ALLOWED_MIME = new Set(['image/jpeg', 'image/png', 'image/webp']);
 
 const upload = multer({
-  storage: multer.diskStorage({
-    destination: (req, file, cb) => cb(null, AVATAR_DIR),
-    filename: (req, file, cb) => cb(null, `${req.user.id}-${Date.now()}${EXT_BY_MIME[file.mimetype]}`),
-  }),
+  storage: multer.memoryStorage(),
   limits: { fileSize: MAX_SIZE_BYTES, files: 1 },
   fileFilter: (req, file, cb) => {
-    if (!EXT_BY_MIME[file.mimetype]) {
+    if (!ALLOWED_MIME.has(file.mimetype)) {
       return cb(new ApiError(400, 'รองรับเฉพาะไฟล์รูป JPEG, PNG หรือ WebP'));
     }
     return cb(null, true);
@@ -38,4 +32,4 @@ function uploadAvatar(req, res, next) {
   });
 }
 
-module.exports = { uploadAvatar, AVATAR_DIR };
+module.exports = { uploadAvatar, MAX_SIZE_BYTES, AVATAR_DIR };

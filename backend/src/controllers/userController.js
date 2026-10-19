@@ -6,6 +6,7 @@ const profileService = require('../services/profileService');
 const { uidSchema } = require('../utils/friendValidators');
 const env = require('../config/env');
 const userService = require('../services/userService');
+const avatarImageService = require('../services/avatarImageService');
 const { updateProfileSchema } = require('../utils/validators');
 
 // GET /api/users/me/full -> profile + all onboarding data, handy for the app's home screen
@@ -129,14 +130,16 @@ const updateMe = asyncHandler(async (req, res) => {
 const uploadAvatar = asyncHandler(async (req, res) => {
   if (!req.file) throw new ApiError(400, 'กรุณาแนบไฟล์รูปใน field "avatar"');
 
-  const baseUrl = (env.publicBaseUrl || `${req.protocol}://${req.get('host')}`).replace(/\/$/, '');
-  const user = await userService.setAvatar(req.user.id, `${baseUrl}${userService.AVATAR_URL_PREFIX}${req.file.filename}`);
+  const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0].trim();
+  const protocol = forwardedProto === 'https' || env.nodeEnv === 'production' ? 'https' : req.protocol;
+  const baseUrl = (env.publicBaseUrl || `${protocol}://${req.get('host')}`).replace(/\/$/, '');
+  const user = await avatarImageService.saveAvatar(req.user.id, req.file, baseUrl);
   res.status(200).json({ success: true, message: 'อัปโหลดรูปโปรไฟล์สำเร็จ', data: { user } });
 });
 
 // DELETE /api/users/me/avatar
 const deleteAvatar = asyncHandler(async (req, res) => {
-  const user = await userService.deleteAvatar(req.user.id);
+  const user = await avatarImageService.deleteAvatar(req.user.id);
   res.status(200).json({ success: true, message: 'ลบรูปโปรไฟล์สำเร็จ', data: { user } });
 });
 
