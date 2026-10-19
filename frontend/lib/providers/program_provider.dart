@@ -55,8 +55,17 @@ class ProgramNotifier extends ChangeNotifier {
       return;
     }
     final data = jsonDecode(raw) as Map;
-    selectedPlanWeeks ??= int.tryParse('${data['weeks']}');
-    _programStartDate ??= trainingDate(data['startDate']);
+    final cachedStart = trainingDate(data['startDate']);
+    if (cachedStart != null &&
+        _programStartDate != null &&
+        cachedStart != _programStartDate) {
+      return;
+    }
+    final weeks = int.tryParse('${data['weeks']}');
+    if (weeks != null && weeks >= 1 && weeks <= 520) {
+      selectedPlanWeeks ??= weeks;
+    }
+    _programStartDate ??= cachedStart;
     selectedTemplateLevel ??= data['level']?.toString();
   }
 
@@ -363,6 +372,9 @@ class ProgramNotifier extends ChangeNotifier {
         errorMessage = null;
         currentWeekErrorMessage = null;
       } else {
+        debugPrint('[ProgramRestore] failed: '
+            '${error is FormatException ? error.message : error.runtimeType}'
+            '${error is ApiException ? ' (HTTP ${error.statusCode})' : ''}');
         errorMessage = error.toString();
         currentWeekErrorMessage = errorMessage;
       }
@@ -538,6 +550,15 @@ class ProgramNotifier extends ChangeNotifier {
             : null);
     if (startDate != null) _programStartDate = startDate;
     selectedPlanWeeks ??= int.tryParse('${data['durationWeeks']}');
+    // Restore only metadata scoped to this account and this program. It is
+    // never used as proof that the server saved a schedule.
+    try {
+      await restorePlanSelection();
+    } catch (_) {
+      debugPrint(
+          '[ProgramRestore] local selection unavailable; checking server');
+    }
+    if (version != _accountVersion || readVersion != _readVersion) return;
     final rawQuests = data['quests'] as List<dynamic>? ?? const [];
     quests = rawQuests
         .whereType<Map>()
@@ -553,56 +574,97 @@ class ProgramNotifier extends ChangeNotifier {
       if (start == null) {
         throw const FormatException('ไม่พบวันเริ่มโปรแกรมสำหรับตรวจตารางซ้อม');
       }
-      var weeks = int.tryParse('${data['durationWeeks']}');
-      if (weeks == null || weeks < 1) {
-        if (templates.isEmpty) {
-          final response = await _api.getTemplates();
-          if (version != _accountVersion || readVersion != _readVersion) return;
-          final rows = response['data'];
-          if (rows is! List) {
-            throw const FormatException('ตรวจช่วงโปรแกรมไม่ได้');
+      // Existing quest rows from the authenticated current-program endpoint
+      // already prove a schedule exists, even when older responses omit its
+      // template metadata. Do not require a template match just to run again.
+      if (_containsSavedQuest(quests, start)) {
+        saved = true;
+      } else {
+        var weeks =
+            int.tryParse('${data['durationWeeks']}') ?? selectedPlanWeeks;
+        if (weeks == null || weeks < 1) {
+          if (templates.isEmpty) {
+            final response = await _api.getTemplates();
+            if (version != _accountVersion || readVersion != _readVersion) {
+              return;
+            }
+            final rows = response['data'];
+            if (rows is! List) {
+              throw const FormatException('ตรวจช่วงโปรแกรมไม่ได้');
+            }
+            templates = rows
+                .whereType<Map>()
+                .map((r) => Map<String, dynamic>.from(r))
+                .toList();
           }
-          templates = rows
-              .whereType<Map>()
-              .map((r) => Map<String, dynamic>.from(r))
-              .toList();
+          final matches = templates.where((t) =>
+              data['programTemplateId'] != null
+                  ? t['id'] == data['programTemplateId']
+                  : selectedTemplateLevel != null &&
+                      t['level'] == selectedTemplateLevel);
+          if (matches.isEmpty) {
+            // A new week may be empty although an earlier week was saved. Read
+            // that program's existing history without guessing its plan level.
+            final through = trainingDate(data['weekEnd']) ??
+                weekStart?.add(const Duration(days: 6)) ??
+                trainingToday();
+            saved = await _readSavedSchedule(
+                programId,
+                start,
+                through.isBefore(start) ? start : through,
+                version,
+                readVersion);
+            if (version != _accountVersion || readVersion != _readVersion) {
+              return;
+            }
+            if (!saved) {
+              throw const FormatException(
+                  'ข้อมูลแผนจากเซิร์ฟเวอร์ยังไม่พอสำหรับตรวจตารางซ้อม กรุณาลองใหม่');
+            }
+            _isScheduleSaved = true;
+            _programConfirmed = true;
+            return;
+          }
+          selectedTemplateLevel = matches.first['level']?.toString();
+          weeks = int.tryParse('${matches.first['duration_weeks_max']}');
         }
-        final matches = templates.where((t) =>
-            (data['programTemplateId'] != null &&
-                t['id'] == data['programTemplateId']) ||
-            (selectedTemplateLevel != null &&
-                t['level'] == selectedTemplateLevel));
-        if (matches.isEmpty) {
-          throw const FormatException('ไม่พบช่วงเวลาของโปรแกรมปัจจุบัน');
+        if (weeks == null || weeks < 1 || weeks > 520) {
+          throw const FormatException('ไม่สามารถยืนยันช่วงโปรแกรมซ้อมได้');
         }
-        weeks = int.tryParse('${matches.first['duration_weeks_max']}');
+        final end = start.add(Duration(days: weeks * 7 - 1));
+        saved = await _readSavedSchedule(
+            programId, start, end, version, readVersion);
       }
-      if (weeks == null || weeks < 1 || weeks > 520) {
-        throw const FormatException('ไม่สามารถยืนยันช่วงโปรแกรมซ้อมได้');
-      }
-      final end = start.add(Duration(days: weeks * 7 - 1));
-      final response = await _api.getQuestsInRange(
-          from: _dateOnly(start), to: _dateOnly(end));
-      if (version != _accountVersion || readVersion != _readVersion) return;
-      final range = response['data'];
-      if (range is! Map ||
-          range['userProgramId']?.toString() != programId ||
-          range['quests'] is! List) {
-        throw const FormatException(
-            'ไม่สามารถยืนยันตารางของโปรแกรมปัจจุบันได้');
-      }
-      saved = (range['quests'] as List).whereType<Map>().any((q) {
-        final date = trainingDate(q['scheduled_date']);
-        return date != null &&
-            !date.isBefore(start) &&
-            !date.isAfter(end) &&
-            q['id'] != null &&
-            q['session_type'] != null;
-      });
     }
     if (version != _accountVersion || readVersion != _readVersion) return;
     _isScheduleSaved = saved;
     _programConfirmed = true;
+  }
+
+  bool _containsSavedQuest(Iterable<Map> rows, DateTime start,
+          [DateTime? end]) =>
+      rows.any((q) {
+        final date = trainingDate(q['scheduled_date']);
+        return date != null &&
+            !date.isBefore(start) &&
+            (end == null || !date.isAfter(end)) &&
+            q['id'] != null &&
+            q['session_type'] != null;
+      });
+
+  Future<bool> _readSavedSchedule(String programId, DateTime start,
+      DateTime end, int version, int readVersion) async {
+    final response =
+        await _api.getQuestsInRange(from: _dateOnly(start), to: _dateOnly(end));
+    if (version != _accountVersion || readVersion != _readVersion) return false;
+    final range = response['data'];
+    if (range is! Map ||
+        range['userProgramId']?.toString() != programId ||
+        range['quests'] is! List) {
+      throw const FormatException('ไม่สามารถยืนยันตารางของโปรแกรมปัจจุบันได้');
+    }
+    return _containsSavedQuest(
+        (range['quests'] as List).whereType<Map>(), start, end);
   }
 
   String _sessionTypeValue(SessionType type) => switch (type) {
