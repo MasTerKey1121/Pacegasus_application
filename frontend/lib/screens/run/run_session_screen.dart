@@ -539,25 +539,13 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
       final session = setup.sessionId;
       final run = ref.read(runProvider);
       if (session == null || owner == null) return;
+      final store = ref.read(runDraftStoreProvider);
       _draftTimer?.cancel();
       _draftClosed = true;
-      // Cancelling the stream also removes the ongoing notification and
-      // releases the location service's partial wake lock, even if saving fails.
-      final positions = _positionSub;
-      _positionSub = null;
       run.prepareFinish();
-      try {
-        // One final checkpoint is queued before sealing, with the intent to
-        // finish persisted for recovery after process death or a lost response.
-        await _saveDraft(finishing: true);
-        await runDraftStore.seal(owner, session);
-      } catch (error) {
-        if (mounted) {
-          setState(
-              () => _storageError = 'เก็บข้อมูลก่อนบันทึกไม่สำเร็จ: $error');
-        }
-        return;
-      }
+      // Keep the same frozen values across retries. finish persists this
+      // checkpoint and stops GPS within its bounded preparation flow.
+      _pendingFinishDraft ??= _draftSnapshot(finishing: true);
       if (!mounted ||
           ref.read(authProvider).user?['id']?.toString() != owner ||
           ref.read(runSetupProvider).sessionId != session) {
