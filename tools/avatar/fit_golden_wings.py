@@ -5,7 +5,11 @@ Approval source stays unchanged; generated GLBs are bundled for the shop.
 import bpy
 from pathlib import Path
 from mathutils import Vector
-import json, struct, copy
+import json, struct, copy, sys
+
+def render_preview():
+    if '--no-renders' not in sys.argv:
+        bpy.ops.render.render(write_still=True)
 
 ROOT = Path(__file__).resolve().parents[2]
 ART = Path('C:/Users/User/.codex/visualizations/2026/09/19/01a0b9c9-449e-76a3-b522-f0b05440c573')
@@ -72,14 +76,14 @@ bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'golden_wings_connected.blend'))
 scene=bpy.context.scene
 scene.cycles.samples=24
 scene.render.filepath=str(OUT/'golden_wings_connected.png')
-bpy.ops.render.render(write_still=True)
+render_preview()
 scene.render.resolution_x=384;scene.render.resolution_y=384
 scene.render.film_transparent=True
 scene.camera.data.ortho_scale=7
 for obj in scene.objects:
     if obj.name.startswith('Preview backdrop'):obj.hide_render=True
 scene.render.filepath=str(ASSETS/'items/shop_golden_wings.png')
-bpy.ops.render.render(write_still=True)
+render_preview()
 
 # Transfer connected geometry into the original rig scene, not a new lookalike.
 wing_data=[(o.name,o.data.copy()) for o in wings]
@@ -97,13 +101,13 @@ bone=rig.data.bones.get('Attach_Back')
 assert bone is not None,'Inspect chest/spine attachment bone'
 for obj in dst.objects:
     bpy.context.collection.objects.link(obj)
-    # Double the first wearable size around each root, not world origin.
-    # Keep the roots together and move them to the marked upper-back area.
+    # 1.25 times the previous .46 fit, scaled around each root.
+    # Keep the requested upper-back attachment position unchanged.
     side = -1 if obj.name.endswith('L') else 1
     for v in obj.data.vertices:
         p=v.co.copy()
-        v.co=((p.x-side*.24)*.92+side*.11,
-              .56-p.y*.92, 1.93+(p.z-.30)*.92)
+        v.co=((p.x-side*.24)*.575+side*.11,
+              .56-p.y*.575, 1.93+(p.z-.30)*.575)
     obj.location=(0,0,0)
     obj.rotation_euler=(0,0,0)
     obj.scale=(1,1,1)
@@ -120,11 +124,11 @@ scene.render.resolution_percentage=100;scene.cycles.samples=24
 scene.render.film_transparent=False
 camera=scene.camera
 center=Vector((0,0,2.2))
-camera.data.type='ORTHO';camera.data.ortho_scale=5.8
+camera.data.type='ORTHO';camera.data.ortho_scale=4.7
 for name,location in [('avatar_front',(0,-10,2.6)),('avatar_back',(0,10,2.6)),('avatar_side',(8,5,2.6))]:
     camera.location=location;camera.rotation_euler=(center-camera.location).to_track_quat('-Z','Y').to_euler()
     scene.render.filepath=str(OUT/(name+'.png'))
-    bpy.ops.render.render(write_still=True)
+    render_preview()
 bpy.ops.wm.save_as_mainfile(filepath=str(OUT/'pacegasus_golden_wings.blend'))
 bpy.ops.object.select_all(action='DESELECT')
 for obj in scene.objects:

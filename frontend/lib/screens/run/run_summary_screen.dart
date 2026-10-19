@@ -200,7 +200,7 @@ class _RunSummaryScreenState extends ConsumerState<RunSummaryScreen> {
                         ]),
                         const SizedBox(height: 24),
                         LabeledSlider(
-                          label: 'ความหนัก RPE',
+                          label: 'ความหนัก ของการวิ่งครั้งนี้ (RPE)',
                           value: (result.rpe ?? 1).toDouble(),
                           min: 1,
                           max: 10,

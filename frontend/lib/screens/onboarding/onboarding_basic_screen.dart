@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../providers/onboarding_provider.dart';
+import '../../providers/avatar_provider.dart';
 import '../../widgets/common.dart';
 import 'onboarding_injury_screen.dart';
 import '../../services/onboarding_api.dart';
@@ -123,7 +124,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
                           Row(children: [
                             Expanded(
                                 child: _DateBox(
-                                    hint: 'DD',
+                                    hint: 'วันที่',
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(2),
@@ -133,7 +134,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
                             const SizedBox(width: 10),
                             Expanded(
                                 child: _DateBox(
-                                    hint: 'MM',
+                                    hint: 'เดือน',
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(2),
@@ -144,7 +145,7 @@ class OnboardingBasicScreen extends ConsumerWidget {
                             Expanded(
                                 flex: 2,
                                 child: _DateBox(
-                                    hint: 'YYYY',
+                                    hint: 'ปี(ค.ศ.)',
                                     inputFormatters: [
                                       FilteringTextInputFormatter.digitsOnly,
                                       LengthLimitingTextInputFormatter(4),
@@ -240,12 +241,16 @@ class OnboardingBasicScreen extends ConsumerWidget {
                   invalid: hasStarted && !canProceed,
                   onTap: canProceed
                       ? () async {
+                          if (notifier.isSubmitting) return;
                           final ok = await notifier.submitStep(
                             () => ref
                                 .read(onboardingApiProvider)
                                 .step1(_buildBody(data)),
                           );
                           if (ok && context.mounted) {
+                            // Re-read the server's equipped starter after the
+                            // confirmed gender changes, including back edits.
+                            ref.invalidate(avatarOutfitProvider);
                             Navigator.of(context).push(MaterialPageRoute(
                                 builder: (_) =>
                                     const OnboardingInjuryScreen()));

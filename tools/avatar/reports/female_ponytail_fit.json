@@ -1,0 +1,392 @@
+[
+  {
+    "action": "Idle_Loop",
+    "frame": 1.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 13.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 25.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 37.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 49.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 61.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 73.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 85.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 97.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 109.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 121.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 133.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Idle_Loop",
+    "frame": 145.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 1.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 5.42,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 9.83,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 14.25,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 18.67,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 23.08,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 27.5,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 31.92,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 36.33,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 40.75,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 45.17,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 49.58,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  },
+  {
+    "action": "Wave_Greeting",
+    "frame": 54.0,
+    "intersections": {
+      "Base_Head": 0,
+      "Base_Ear.L": 0,
+      "Base_Ear.R": 0,
+      "Top_RunningTee": 0,
+      "Visible_ArmHand.L": 0,
+      "Visible_ArmHand.R": 0,
+      "Face_Eye.L": 0,
+      "Face_Eye.R": 0,
+      "Face_Nose": 0
+    }
+  }
+]

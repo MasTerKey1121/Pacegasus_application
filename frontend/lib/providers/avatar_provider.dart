@@ -41,10 +41,19 @@ class AvatarOutfit {
 
   String? get variant =>
       equipment['inner_top']?.renderData['variant'] as String?;
-  String get assetPath =>
-      (equipment['back']?.renderData['avatarAsset'] as String?)
-          ?.replaceFirst('asset:', '') ??
-      'assets/models/pacegasus_starter_v9.glb';
+  String get assetPath {
+    final hair = equipment['hair']?.renderData;
+    if (hair?['hairStyle'] == 'ponytail') {
+      final key = equipment['back']?.code == 'shop_golden_wings'
+          ? 'avatarWithWingsAsset'
+          : 'avatarAsset';
+      final asset = hair?[key] as String?;
+      if (asset != null) return asset.replaceFirst('asset:', '');
+    }
+    return (equipment['back']?.renderData['avatarAsset'] as String?)
+            ?.replaceFirst('asset:', '') ??
+        'assets/models/pacegasus_starter_v9.glb';
+  }
 }
 
 final avatarOutfitProvider = FutureProvider<AvatarOutfit>((ref) async {

@@ -195,7 +195,7 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
       ProgramAccess.unregistered => 'ลงทะเบียนตารางซ้อม',
       ProgramAccess.unscheduled => 'จัดตารางซ้อม',
       ProgramAccess.ready =>
-        wellness.completedToday ? 'เริ่มวิ่ง' : 'เช็กอินก่อนวิ่ง',
+        wellness.completedToday ? 'เริ่มวิ่ง' : 'Daily Wellness',
     };
     final hint = switch (program.access) {
       ProgramAccess.checking => 'กำลังตรวจสอบแผนและตารางซ้อม',
