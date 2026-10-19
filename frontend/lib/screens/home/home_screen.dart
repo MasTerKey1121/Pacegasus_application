@@ -58,11 +58,14 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     }
   }
 
-  void _refreshOnEntry() {
+  void _refreshOnEntry() async {
     if (!mounted || _route?.isCurrent != true) return;
-    ref.read(dailyQuestProvider).refresh();
     ref.invalidate(progressProvider);
     ref.read(runSetupProvider).restoreDaily();
+    await ref.read(programProvider).restore(force: true);
+    if (mounted && ref.read(programProvider).access == ProgramAccess.ready) {
+      ref.read(dailyQuestProvider).refresh();
+    }
   }
 
   @override
@@ -135,17 +138,33 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
 
   void _schedule() {
     final program = ref.read(programProvider);
-    if (program.isLoading) return;
-    if (!ref.read(wellnessProvider).completedToday) {
-      _push(const DailyWellnessScreen());
-    } else {
-      _push(program.isRegistered
-          ? const TrainingScheduleScreen()
-          : const TrainingRegistrationScreen());
+    if (program.access == ProgramAccess.checking) return;
+    if (program.access == ProgramAccess.failed) {
+      program.restore(force: true);
+      return;
     }
+    _push(program.isRegistered
+        ? const TrainingScheduleScreen()
+        : const TrainingRegistrationScreen());
   }
 
   void _primaryAction() {
+    final program = ref.read(programProvider);
+    switch (program.access) {
+      case ProgramAccess.checking:
+        return;
+      case ProgramAccess.failed:
+        program.restore(force: true);
+        return;
+      case ProgramAccess.unregistered:
+        _push(const TrainingRegistrationScreen());
+        return;
+      case ProgramAccess.unscheduled:
+        _push(const TrainingScheduleScreen());
+        return;
+      case ProgramAccess.ready:
+        break;
+    }
     if (!ref.read(wellnessProvider).completedToday) {
       _push(const DailyWellnessScreen());
     } else {
@@ -167,26 +186,37 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
     final wellness = ref.watch(wellnessProvider);
     final program = ref.watch(programProvider);
 
-    final quest = ref.watch(dailyQuestProvider).quest;
+    final daily = ref.watch(dailyQuestProvider);
+    final quest = daily.quest;
     final done = quest?['status'] == 'completed';
-    final label = program.isLoading
-        ? 'กำลังโหลด…'
-        : !wellness.completedToday
-            ? 'เช็กอินก่อนวิ่ง'
-            : 'เริ่มวิ่ง';
-    final hint = !wellness.completedToday
-        ? 'เริ่มจากเช็กความพร้อมของวันนี้'
-        : program.currentWeekErrorMessage != null
-            ? 'โหลดแผนไม่สำเร็จ แต่ยังเริ่มวิ่งอิสระได้'
-            : !program.isRegistered
-                ? 'เริ่มวิ่งได้โดยไม่ต้องลงแผนซ้อม'
-                : !program.isScheduleSaved
-                    ? 'เริ่มวิ่งได้โดยไม่ต้องลงตารางซ้อม'
-                    : done
-                        ? 'วันนี้ทำสำเร็จแล้ว สามารถวิ่งอิสระต่อได้'
-                        : quest == null
-                            ? 'วันนี้ไม่มีภารกิจตามแผน เริ่มวิ่งอิสระได้'
-                            : 'พร้อมออกไปทำเป้าหมายวันนี้';
+    final label = switch (program.access) {
+      ProgramAccess.checking => 'กำลังตรวจสอบ…',
+      ProgramAccess.failed => 'ลองใหม่',
+      ProgramAccess.unregistered => 'ลงทะเบียนตารางซ้อม',
+      ProgramAccess.unscheduled => 'จัดตารางซ้อม',
+      ProgramAccess.ready =>
+        wellness.completedToday ? 'เริ่มวิ่ง' : 'เช็กอินก่อนวิ่ง',
+    };
+    final hint = switch (program.access) {
+      ProgramAccess.checking => 'กำลังตรวจสอบแผนและตารางซ้อม',
+      ProgramAccess.failed => 'ตรวจสอบสถานะแผนซ้อมไม่สำเร็จ กรุณาลองใหม่',
+      ProgramAccess.unregistered => 'กรุณาลงทะเบียนตารางซ้อมก่อน',
+      ProgramAccess.unscheduled => 'กรุณาจัดและบันทึกตารางซ้อมก่อน',
+      ProgramAccess.ready => !wellness.completedToday
+          ? 'เริ่มจากเช็กความพร้อมของวันนี้'
+          : daily.loading ||
+                  (!daily.hasLoaded &&
+                      daily.quest == null &&
+                      daily.error == null)
+              ? 'กำลังโหลดภารกิจวันนี้…'
+              : daily.error != null
+                  ? 'โหลดสถานะภารกิจไม่สำเร็จ กรุณาลองใหม่'
+                  : done
+                      ? 'วันนี้ทำสำเร็จแล้ว สามารถวิ่งอิสระต่อได้'
+                      : quest == null
+                          ? 'วันนี้ไม่มีภารกิจตามแผน เริ่มวิ่งอิสระได้'
+                          : 'พร้อมออกไปทำเป้าหมายวันนี้',
+    };
 
     return PopScope(
       canPop: !_avatarOnly && !_leftMenuOpen && !_rightMenuOpen,
@@ -354,7 +384,9 @@ class _HomeScreenState extends ConsumerState<HomeScreen> with RouteAware {
                     const SizedBox(height: 8),
                     FilledButton(
                         key: const Key('home-primary'),
-                        onPressed: program.isLoading ? null : _primaryAction,
+                        onPressed: program.access == ProgramAccess.checking
+                            ? null
+                            : _primaryAction,
                         style: FilledButton.styleFrom(
                             backgroundColor: _lime,
                             foregroundColor: const Color(0xFF202C16),

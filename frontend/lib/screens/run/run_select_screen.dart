@@ -1,13 +1,12 @@
-import 'package:geolocator/geolocator.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../models/side_quest.dart';
 import '../../providers/daily_quest_provider.dart';
+import '../../providers/program_provider.dart';
 import '../../providers/run_setup_provider.dart';
 import '../../widgets/common.dart';
 import '../../widgets/daily_quest_panel.dart';
-import '../home/main_shell.dart';
 import 'run_session_screen.dart';
 
 const _environments = [
@@ -30,74 +29,14 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
   @override
   void initState() {
     super.initState();
-    // Comment out ไว้ก่อน เพราะกด "อนุญาต" GPS ทุกครั้งตอนเทสมันยุ่งยาก
-    // WidgetsBinding.instance.addPostFrameCallback((_) async {
-    //   await _requestGpsAccess(context);
-    // });
-  }
-
-  Future<bool> _requestGpsAccess(BuildContext context) async {
-    final accepted = await showDialog<bool>(
-      context: context,
-      barrierDismissible: false,
-      builder: (dialogContext) => AlertDialog(
-        title: const Text('อนุญาตการเข้าถึง GPS'),
-        content: const Text(
-          'Pacegasus ต้องใช้ตำแหน่งของคุณเพื่อบันทึกระยะทางและเส้นทางการวิ่ง',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(false),
-            child: const Text('ไม่อนุญาต'),
-          ),
-          TextButton(
-            onPressed: () => Navigator.of(dialogContext).pop(true),
-            child: const Text('อนุญาต'),
-          ),
-        ],
-      ),
-    );
-
-    if (accepted != true) {
-      if (context.mounted) {
-        _returnToHome(context);
-      }
-      return false;
-    }
-
-    try {
-      final serviceEnabled = await Geolocator.isLocationServiceEnabled();
-      var permission = await Geolocator.checkPermission();
-      if (permission == LocationPermission.denied) {
-        permission = await Geolocator.requestPermission();
-      }
-
-      if (serviceEnabled &&
-          permission != LocationPermission.denied &&
-          permission != LocationPermission.deniedForever) {
-        return true;
-      }
-    } catch (_) {
-      // Treat a platform/location-service failure like unavailable GPS.
-    }
-
-    if (context.mounted) {
-      _returnToHome(context);
-    }
-    return false;
-  }
-
-  void _returnToHome(BuildContext context) {
-    Navigator.of(context).pushAndRemoveUntil(
-      MaterialPageRoute(builder: (_) => const MainShell()),
-      (route) => false,
-    );
+    Future.microtask(() => ref.read(programProvider).restore(force: true));
   }
 
   @override
   Widget build(BuildContext context) {
     final setup = ref.watch(runSetupProvider);
     final daily = ref.watch(dailyQuestProvider);
+    final eligible = ref.watch(programProvider).access == ProgramAccess.ready;
     final todayQuest = daily.completed ? null : daily.quest;
     final sessionType = todayQuest?['session_type']?.toString();
 
@@ -128,8 +67,11 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                         children: _environments.map((e) {
                           final active = setup.environment == e['key'];
                           return GestureDetector(
-                            onTap: () =>
-                                ref.read(runSetupProvider).selectEnvironment(
+                            onTap: !eligible
+                                ? null
+                                : () => ref
+                                    .read(runSetupProvider)
+                                    .selectEnvironment(
                                       env: e['key']!,
                                       mainQuestSessionType: sessionType,
                                     ),
@@ -138,7 +80,7 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                               padding: const EdgeInsets.symmetric(vertical: 14),
                               decoration: BoxDecoration(
                                 color: active
-                                    ? AppColors.purple2.withOpacity(.18)
+                                    ? AppColors.purple2.withValues(alpha: .18)
                                     : AppColors.card,
                                 border: Border.all(
                                     color: active
@@ -160,7 +102,7 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
                       const SizedBox(height: 20),
                       if (setup.isLoadingQuests)
                         const Center(child: CircularProgressIndicator())
-                      else if (setup.environment != null) ...[
+                      else if (eligible && setup.environment != null) ...[
                         const SectionLabel(title: 'Side Quest วันนี้'),
                         if (setup.noSideQuestsMessage != null)
                           Text(setup.noSideQuestsMessage!,
@@ -211,7 +153,8 @@ class _RunTypeSelectScreenState extends ConsumerState<RunTypeSelectScreen> {
               GradientButton(
                 label: setup.isStarting ? 'กำลังเริ่ม...' : 'เริ่มต้นการวิ่ง',
                 loading: setup.isStarting,
-                onTap: setup.environment == null ||
+                onTap: !eligible ||
+                        setup.environment == null ||
                         setup.isLoadingQuests ||
                         setup.isStarting
                     ? null

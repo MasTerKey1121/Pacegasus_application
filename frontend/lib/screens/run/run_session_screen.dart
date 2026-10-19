@@ -255,7 +255,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
   bool get _mapCanLoad => !Platform.isWindows && _gistdaApiKey.isNotEmpty;
 
   void _startTreadmill() {
-    if (!mounted) return;
+    if (!mounted || ref.read(runSetupProvider).sessionId == null) return;
     setState(() {
       _hasLocationPermission = true;
       _hasInitialPosition = true;
@@ -337,6 +337,7 @@ class _RunSessionScreenState extends ConsumerState<RunSessionScreen>
   }
 
   Future<void> _startLocationTracking() async {
+    if (ref.read(runSetupProvider).sessionId == null) return;
     if (!mounted || _draftClosed || _startingGps || _positionSub != null) {
       return;
     }

@@ -57,6 +57,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
   int? _selectedMinute;
   bool _skipTime = false;
   String? _paceError;
+  bool _showValidation = false;
 
   @override
   void initState() {
@@ -95,6 +96,23 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
       _healthGoalTypeMap.containsKey(data.healthGoal) &&
       _distanceKm.containsKey(data.distanceGoal) &&
       (_skipTime || _currentPace(data.distanceGoal) != null);
+
+  String? _validationMessage(OnboardingData data) {
+    final missingHealth = !_healthGoalTypeMap.containsKey(data.healthGoal);
+    final missingDistance = !_distanceKm.containsKey(data.distanceGoal);
+    if (missingHealth && missingDistance) {
+      return 'กรุณากรอกเป้าหมายด้านสุขภาพและด้านระยะทาง';
+    }
+    if (missingHealth) return 'กรุณากรอกเป้าหมายด้านสุขภาพ';
+    if (missingDistance) return 'กรุณากรอกเป้าหมายด้านระยะทาง';
+    if (!_skipTime && (_selectedHour == null || _selectedMinute == null)) {
+      return 'กรุณาระบุเวลาจบให้ครบ หรือเลือกไม่สนใจเวลาจบ';
+    }
+    if (!_skipTime && _currentPace(data.distanceGoal) == null) {
+      return _paceError ?? 'กรุณาระบุเวลาจบให้ถูกต้อง';
+    }
+    return null;
+  }
 
   void _recalculate(OnboardingNotifier notifier, String? distanceGoal) {
     final h = _selectedHour;
@@ -149,6 +167,7 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
     final data = ob.data;
 
     final canProceed = _hasValidSelection(data) && !ob.isSubmitting;
+    final validationMessage = _validationMessage(data);
 
     return Scaffold(
       body: AppBackground(
@@ -343,6 +362,16 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                     ),
                   ),
                 ),
+                if (_showValidation && validationMessage != null) ...[
+                  Semantics(
+                    liveRegion: true,
+                    child: Text(validationMessage,
+                        key: const Key('goal-required-message'),
+                        textAlign: TextAlign.center,
+                        style: AppText.body(size: 12.5, color: AppColors.red1)),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 Row(children: [
                   Expanded(
                       child: OutlineButton(
@@ -350,28 +379,37 @@ class _OnboardingGoalScreenState extends ConsumerState<OnboardingGoalScreen> {
                           onTap: () => Navigator.of(context).pop())),
                   const SizedBox(width: 12),
                   Expanded(
-                    child: GradientButton(
-                      label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ถัดไป',
-                      onTap: canProceed
-                          ? () async {
-                              if (notifier.isSubmitting ||
-                                  !_hasValidSelection(notifier.data)) {
-                                return;
+                    // Keep the submit button disabled, but let a tap on its
+                    // area explain missing fields without sending a request.
+                    child: GestureDetector(
+                      behavior: HitTestBehavior.opaque,
+                      onTap: canProceed || ob.isSubmitting
+                          ? null
+                          : () => setState(() => _showValidation = true),
+                      child: GradientButton(
+                        label: ob.isSubmitting ? 'กำลังบันทึก...' : 'ถัดไป',
+                        onTap: canProceed
+                            ? () async {
+                                if (notifier.isSubmitting) return;
+                                if (!_hasValidSelection(notifier.data)) {
+                                  setState(() => _showValidation = true);
+                                  return;
+                                }
+                                _recalculate(
+                                    notifier, notifier.data.distanceGoal);
+                                final ok = await notifier.submitStep(
+                                  () => ref
+                                      .read(onboardingApiProvider)
+                                      .step3(_buildBody(notifier.data)),
+                                );
+                                if (ok && context.mounted) {
+                                  Navigator.of(context).push(MaterialPageRoute(
+                                      builder: (_) =>
+                                          const OnboardingHistoryScreen()));
+                                }
                               }
-                              _recalculate(
-                                  notifier, notifier.data.distanceGoal);
-                              final ok = await notifier.submitStep(
-                                () => ref
-                                    .read(onboardingApiProvider)
-                                    .step3(_buildBody(notifier.data)),
-                              );
-                              if (ok && context.mounted) {
-                                Navigator.of(context).push(MaterialPageRoute(
-                                    builder: (_) =>
-                                        const OnboardingHistoryScreen()));
-                              }
-                            }
-                          : null,
+                            : null,
+                      ),
                     ),
                   ),
                 ]),

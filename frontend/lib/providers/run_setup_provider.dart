@@ -14,6 +14,7 @@ import 'progress_provider.dart';
 import 'training_day_provider.dart';
 import 'run_provider.dart';
 import 'run_rewards_provider.dart';
+import 'program_provider.dart';
 
 final questApiProvider =
     Provider<QuestApi>((ref) => QuestApi(ref.read(apiClientProvider)));
@@ -33,6 +34,8 @@ class RunSetupNotifier extends ChangeNotifier {
       this.onReward,
       this.onRewardReceipt,
       this.isRunning,
+      this.canPrepareNewSession,
+      this.authorizeNewSession,
       String Function()? day})
       : _today = day ?? (() => trainingDateKey(trainingToday())!) {
     _day = _today();
@@ -45,6 +48,8 @@ class RunSetupNotifier extends ChangeNotifier {
   final Future<void> Function(RewardReceipt receipt)? onRewardReceipt;
   String? mainQuestAtStart;
   final bool Function()? isRunning;
+  final bool Function()? canPrepareNewSession;
+  final Future<bool> Function()? authorizeNewSession;
   final String Function() _today;
   late String _day;
   bool _alive = true;
@@ -282,6 +287,11 @@ class RunSetupNotifier extends ChangeNotifier {
     if (!_alive || isLoadingQuests || isStarting || _completingIds.isNotEmpty) {
       return;
     }
+    if (sessionId == null && canPrepareNewSession?.call() != true) {
+      errorMessage = 'กรุณายืนยันการลงทะเบียนและบันทึกตารางซ้อมก่อน';
+      notifyListeners();
+      return;
+    }
     checkDay();
     _rememberPlace();
     final day = _day;
@@ -336,9 +346,11 @@ class RunSetupNotifier extends ChangeNotifier {
       // An old empty placeholder has neither a response nor an outstanding
       // request. Fetch it too; confirmed emptiness/uncertainty returned above.
       if (_daily.isEmpty) {
+        if (canPrepareNewSession?.call() != true) return;
         _generationUnknown = true;
         _lastQuestErrorStatus = null;
         await _persist();
+        if (!_alive || canPrepareNewSession?.call() != true) return;
         _retryUnsentGeneration = false;
         sent = true;
         final response = await _questApi.getTodaySideQuests(
@@ -424,6 +436,12 @@ class RunSetupNotifier extends ChangeNotifier {
     sessionType = mainQuestSessionType ?? 'easy';
     notifyListeners();
     try {
+      if (canPrepareNewSession?.call() != true ||
+          await authorizeNewSession?.call() != true ||
+          !_alive) {
+        throw StateError(
+            'ต้องลงทะเบียนและบันทึกตารางซ้อมของโปรแกรมปัจจุบันก่อน กรุณาตรวจสอบสถานะอีกครั้ง');
+      }
       if (owner != null) {
         final draft =
             await verifiedRunDraft(runDraftStore, _sessionApi, owner!);
@@ -433,6 +451,7 @@ class RunSetupNotifier extends ChangeNotifier {
               'มี Session ที่ยังไม่จบ กรุณากลับหน้าหลักและเปิดการวิ่งเดิมก่อน');
         }
       }
+      if (!_alive || canPrepareNewSession?.call() != true) return false;
       final res = await _sessionApi.start(
           environment: environment!,
           sessionType: sessionType!,
@@ -632,7 +651,11 @@ final runSetupProvider = ChangeNotifierProvider<RunSetupNotifier>((ref) {
       onRewardReceipt: (receipt) =>
           ref.read(runRewardsProvider).record(receipt),
       isRunning: () =>
-          ref.read(runProvider).isRunning && !ref.read(runProvider).isStopping);
+          ref.read(runProvider).isRunning && !ref.read(runProvider).isStopping,
+      canPrepareNewSession: () =>
+          ref.read(programProvider).access == ProgramAccess.ready,
+      authorizeNewSession: () =>
+          ref.read(programProvider).authorizeNewSession());
   scheduleMicrotask(notifier.restoreDaily);
   ref.listen<String>(trainingDayProvider, (_, __) => notifier.checkDay());
   return notifier;

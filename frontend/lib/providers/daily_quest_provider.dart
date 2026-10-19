@@ -3,7 +3,6 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/training_date.dart';
 import '../services/program_api.dart';
-import '../services/api_client.dart';
 import '../services/running_session_api.dart';
 import 'auth_provider.dart';
 import 'program_provider.dart';
@@ -63,6 +62,7 @@ class DailyQuestNotifier extends ChangeNotifier {
   Map? reward;
   double saved = 0;
   bool loading = false;
+  bool hasLoaded = false;
   String? error;
   bool _alive = true;
   bool get completed => quest?['status'] == 'completed';
@@ -102,6 +102,7 @@ class DailyQuestNotifier extends ChangeNotifier {
       if (!_alive) return;
       final list =
           ((response['data'] as Map)['quests'] as List).whereType<Map>();
+      hasLoaded = true;
       final previousQuestId = quest?['id'];
       quest = null;
       for (final item in list) {
@@ -209,9 +210,7 @@ class DailyQuestNotifier extends ChangeNotifier {
         if (_alive) error = 'ครบเป้าหมายแล้ว แต่ยังบันทึกภารกิจไม่สำเร็จ: $e';
       }
     } catch (e) {
-      if (_alive && e is ApiException && e.statusCode == 404) {
-        quest = null;
-      } else if (_alive) {
+      if (_alive) {
         error = 'โหลดสถานะภารกิจไม่สำเร็จ: $e';
       }
     } finally {
@@ -230,6 +229,7 @@ class DailyQuestNotifier extends ChangeNotifier {
 }
 
 final dailyQuestProvider = ChangeNotifierProvider<DailyQuestNotifier>((ref) {
+  ref.watch(programProvider.select((p) => p.userProgramId));
   final owner =
       ref.watch(authProvider.select((s) => s.user?['id']))?.toString() ?? '';
   final day = ref.watch(trainingDayProvider);
@@ -241,6 +241,14 @@ final dailyQuestProvider = ChangeNotifierProvider<DailyQuestNotifier>((ref) {
       onConfirmed: () {
         ref.invalidate(progressProvider);
       });
-  if (owner.isNotEmpty) scheduleMicrotask(notifier.refresh);
+  if (owner.isNotEmpty &&
+      ref.read(programProvider).access == ProgramAccess.ready) {
+    scheduleMicrotask(notifier.refresh);
+  }
+  ref.listen(programProvider.select((p) => p.access), (_, next) {
+    if (owner.isNotEmpty && next == ProgramAccess.ready) {
+      scheduleMicrotask(notifier.refresh);
+    }
+  });
   return notifier;
 });
