@@ -90,22 +90,41 @@ class _SettingsScreenState extends ConsumerState<SettingsScreen> {
       final confirmed = await _confirmAccountAction(
         title: 'ลบบัญชีถาวร?',
         message:
-            'ข้อมูลทั้งหมดของคุณ (โปรไฟล์ ประวัติการวิ่ง เควส คอยน์) จะถูกลบและกู้คืนไม่ได้',
+            'คุณจะไม่สามารถใช้งานบัญชีเดิมได้ และบัญชีจะไม่ปรากฏในรายชื่อเพื่อนและอันดับเมื่อโหลดข้อมูลใหม่',
         confirmLabel: 'ลบบัญชี',
       );
       if (!confirmed || !mounted) return;
       final finalConfirmed = await _confirmAccountAction(
         title: 'ยืนยันลบบัญชีอีกครั้ง',
         message:
-            'นี่คือการยืนยันครั้งสุดท้าย บัญชีและข้อมูลทั้งหมดของคุณจะถูกลบถาวร และไม่สามารถกู้คืนได้ ต้องการดำเนินการต่อหรือไม่?',
+            'หากเป็นสมาชิก จะออกจากคลับก่อนลบบัญชี หากเป็นหัวหน้า คลับจะถูกยุบและสมาชิกทั้งหมดจะออกจากคลับ การออกหรือยุบคลับจะไม่ย้อนกลับ แม้การลบบัญชีภายหลังไม่สำเร็จ ต้องการดำเนินการต่อหรือไม่?',
         confirmLabel: 'ยืนยันลบถาวร',
       );
       if (!finalConfirmed || !mounted) return;
       setState(() => _deleting = true);
+      final owner = ref.read(authProvider).user?['id']?.toString();
+      final client = ref.read(apiClientProvider);
+      final identity = client.getSessionIdentity?.call();
+      bool sameAccount() =>
+          ref.read(authProvider).user?['id']?.toString() == owner &&
+          client.getSessionIdentity?.call() == identity;
+      final draftStore = ref.read(runDraftStoreProvider);
       final authApi = ref.read(authApiProvider);
       await authApi.deleteAccount();
+      if (!mounted || !sameAccount()) return;
       // The deleted account must not leave a resumable run on this device.
-      await runDraftStore.clear();
+      try {
+        if (owner != null) await draftStore.clear(userId: owner);
+        await draftStore.clear();
+      } catch (_) {
+        // Server deletion is already confirmed; a local storage failure must
+        // not keep the deleted account signed in or imply deletion failed.
+        if (mounted && sameAccount()) {
+          showAppToast(context,
+              'ลบบัญชีแล้ว แต่ล้างข้อมูลการวิ่งในเครื่องไม่สำเร็จ');
+        }
+      }
+      if (!mounted || !sameAccount()) return;
       // ลบสำเร็จฝั่ง server แล้ว เคลียร์ session ฝั่ง clientต่อ
       await ref.read(authProvider.notifier).logout();
       if (!mounted) return;

@@ -32,6 +32,7 @@ flutter:
 
   assets:
     - assets/images/
+    - assets/terms/
     - assets/models/
     - assets/models/items/
     - .env

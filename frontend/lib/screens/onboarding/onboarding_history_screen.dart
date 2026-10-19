@@ -6,7 +6,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/onboarding_api.dart';
 import '../../providers/program_provider.dart';
 import '../../widgets/common.dart';
-import '../home/main_shell.dart';
+import '../training/training_registration_screen.dart';
 import '../../models/onboarding_data.dart';
 
 const _durationOptions = ['น้อยกว่า 1 เดือน', '1-3 เดือน', '3-6 เดือน', '6-12 เดือน', '1-3 ปี', '3 ปีขึ้นไป'];
@@ -232,6 +232,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                   gradient: AppColors.greenGradient,
                   onTap: canProceed
                       ? () async {
+                          if (notifier.isSubmitting) return;
                           final ok = await notifier.submitStep(
                             () async {
                               final onboardingResponse = await ref
@@ -248,8 +249,8 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                               }
 
                               // Keep the derived level locally for the plan
-                              // registration step.  Do not call API 5.1 here:
-                              // the user registers the plan after Daily Wellness.
+                              // registration step. API 5.1 runs only after the
+                              // user confirms a plan on the next screen.
                               ref.read(programProvider).setOnboardingLevel(level);
                               final user = ref.read(authProvider).user;
                               if (user != null &&
@@ -264,7 +265,7 @@ class OnboardingHistoryScreen extends ConsumerWidget {
                           );
                           if (ok && context.mounted) {
                             Navigator.of(context).pushAndRemoveUntil(
-                              MaterialPageRoute(builder: (_) => const MainShell()),
+                              MaterialPageRoute(builder: (_) => const TrainingRegistrationScreen()),
                               (route) => false,
                             );
                           }

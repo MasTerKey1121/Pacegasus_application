@@ -71,11 +71,6 @@ class _TrainingScheduleScreenState
               children: [
                 Row(
                   children: [
-                    RoundIconButton(
-                      icon: Icons.arrow_back,
-                      onTap: () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 14),
                     Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [

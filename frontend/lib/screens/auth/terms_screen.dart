@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../widgets/common.dart';
@@ -36,8 +37,12 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
   bool _agreedChecked = false;
   bool _loading = false;
 
-  static const String _policyVersion =
-      '2026-07'; // TODO: ย้ายไป config ถ้ามีการอัปเดตนโยบายบ่อย
+  static const String _policyVersion = '1.0.0.1';
+
+  void _showTerms() => showDialog<void>(
+        context: context,
+        builder: (_) => const _TermsDocumentDialog(),
+      );
 
   Future<void> _onAgree() async {
     if (!_agreedChecked || _loading) return;
@@ -146,44 +151,25 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
                         ),
                       ),
                       const SizedBox(height: 24),
-                      AppCard(
-                        padding: const EdgeInsets.all(18),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            _termSection(
-                              icon: Icons.description_outlined,
-                              title: 'ข้อตกลงการใช้บริการ',
-                              body:
-                                  'เมื่อสมัครสมาชิก Pacegasus คุณตกลงที่จะใช้งานแอปตามวัตถุประสงค์ที่กำหนด '
-                                  'ไม่ละเมิดสิทธิ์ผู้อื่น และรับผิดชอบต่อความถูกต้องของข้อมูลที่กรอกเข้าสู่ระบบ',
+                      Semantics(
+                        button: true,
+                        child: InkWell(
+                          onTap: _showTerms,
+                          borderRadius: BorderRadius.circular(20),
+                          child: AppCard(
+                            padding: const EdgeInsets.all(18),
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                _termSection(
+                                  icon: Icons.description_outlined,
+                                  title: 'ข้อกำหนดและเงื่อนไขการใช้งาน',
+                                  body:
+                                      'กดเพื่ออ่านข้อกำหนดและเงื่อนไขการใช้งาน',
+                                ),
+                              ],
                             ),
-                            const SizedBox(height: 18),
-                            _divider(),
-                            const SizedBox(height: 18),
-                            _termSection(
-                              icon: Icons.privacy_tip_outlined,
-                              title: 'นโยบายความเป็นส่วนตัว',
-                              body:
-                                  'เราจะเก็บและใช้ข้อมูล เช่น อีเมล ชื่อที่แสดง และข้อมูลการฝึกซ้อม '
-                                  'เพื่อให้บริการวางแผนการฝึกและวิเคราะห์ผลการวิ่งของคุณเท่านั้น '
-                                  'โดยไม่นำไปเปิดเผยแก่บุคคลที่สามโดยไม่ได้รับอนุญาต',
-                            ),
-                            const SizedBox(height: 18),
-                            _divider(),
-                            const SizedBox(height: 18),
-                            _termSection(
-                              icon: Icons.mark_email_read_outlined,
-                              title: widget.onAcceptedDirectly != null
-                                  ? 'การยืนยันตัวตน'
-                                  : 'การยืนยันตัวตนผ่าน OTP',
-                              body: widget.onAcceptedDirectly != null
-                                  ? 'บัญชีของคุณผ่านการยืนยันตัวตนแล้ว '
-                                      'เมื่อกดยินยอม ระบบจะบันทึกการยอมรับข้อกำหนดของคุณ'
-                                  : 'เมื่อกดยินยอม ระบบจะส่งรหัส OTP ไปยังอีเมลที่คุณระบุ '
-                                      'เพื่อใช้ยืนยันตัวตนและเปิดใช้งานบัญชีให้เสร็จสมบูรณ์',
-                            ),
-                          ],
+                          ),
                         ),
                       ),
                       const SizedBox(height: 18),
@@ -221,7 +207,7 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
                             const SizedBox(width: 10),
                             Expanded(
                               child: Text(
-                                'ฉันได้อ่านและยินยอมตามข้อตกลงการใช้บริการและนโยบายความเป็นส่วนตัวข้างต้น',
+                                'ฉันได้อ่านและยอมรับข้อกำหนดและเงื่อนไขการใช้งาน',
                                 style: AppText.body(
                                     size: 13, color: AppColors.textSecondary),
                               ),
@@ -289,6 +275,108 @@ class _TermsConsentScreenState extends ConsumerState<TermsConsentScreen> {
       ],
     );
   }
+}
 
-  Widget _divider() => Divider(color: AppColors.border, height: 1);
+class _TermsDocumentDialog extends StatefulWidget {
+  const _TermsDocumentDialog();
+  @override
+  State<_TermsDocumentDialog> createState() => _TermsDocumentDialogState();
+}
+
+class _TermsDocumentDialogState extends State<_TermsDocumentDialog> {
+  final _scroll = ScrollController();
+  late Future<String> _document = _load();
+  Future<String> _load() =>
+      rootBundle.loadString('assets/terms/terms_1.0.0.1.md', cache: false);
+
+  @override
+  void dispose() {
+    _scroll.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) => Dialog(
+        backgroundColor: AppColors.bg2,
+        insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+        child: SizedBox(
+          width: 640,
+          height: MediaQuery.sizeOf(context).height * .78,
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.stretch,
+              children: [
+                Text('ข้อกำหนดและเงื่อนไข', style: AppText.heading(size: 18)),
+                const SizedBox(height: 16),
+                Expanded(
+                  child: FutureBuilder<String>(
+                    future: _document,
+                    builder: (context, snapshot) {
+                      if (snapshot.hasError) {
+                        return Center(
+                            child: Column(
+                          mainAxisSize: MainAxisSize.min,
+                          children: [
+                            const Text('โหลดข้อกำหนดไม่สำเร็จ'),
+                            TextButton(
+                              onPressed: () => setState(() {
+                                _document = _load();
+                              }),
+                              child: const Text('ลองใหม่'),
+                            ),
+                          ],
+                        ));
+                      }
+                      if (!snapshot.hasData) {
+                        return const Center(child: CircularProgressIndicator());
+                      }
+                      final paragraphs =
+                          snapshot.data!.trim().split(RegExp(r'\r?\n\s*\r?\n'));
+                      return Scrollbar(
+                        controller: _scroll,
+                        thumbVisibility: true,
+                        child: ListView.builder(
+                          key: const Key('terms-document-scroll'),
+                          controller: _scroll,
+                          padding: const EdgeInsets.only(right: 12),
+                          itemCount: paragraphs.length,
+                          itemBuilder: (_, index) {
+                            final paragraph = paragraphs[index].trim();
+                            final title = paragraph.startsWith('# ');
+                            final heading = paragraph.startsWith('**') &&
+                                paragraph.endsWith('**');
+                            final text = title
+                                ? paragraph.substring(2)
+                                : heading
+                                    ? paragraph.substring(
+                                        2, paragraph.length - 2)
+                                    : paragraph;
+                            return Padding(
+                              padding: const EdgeInsets.only(bottom: 16),
+                              child: SelectableText(
+                                text,
+                                style: title || heading
+                                    ? AppText.heading(size: title ? 18 : 15)
+                                    : AppText.body(
+                                            size: 13,
+                                            color: AppColors.textSecondary)
+                                        .copyWith(height: 1.65),
+                              ),
+                            );
+                          },
+                        ),
+                      );
+                    },
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                    onPressed: () => Navigator.of(context).pop(),
+                    child: const Text('ปิด')),
+              ],
+            ),
+          ),
+        ),
+      );
 }

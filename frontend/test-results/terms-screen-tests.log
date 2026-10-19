@@ -1,0 +1,12 @@
+00:00 +0: loading C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/terms_screen_test.dart
+00:00 +0: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/terms_screen_test.dart: one card opens complete scrollable document; closing never accepts terms
+00:00 +1: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/terms_screen_test.dart: one card opens complete scrollable document; closing never accepts terms
+00:01 +2: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: login Google button requires terms then onboarding for a new account without OTP
+00:01 +3: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: login Google button requires terms then onboarding for a new account without OTP
+00:01 +4: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: login Google button requires terms then onboarding for a new account without OTP
+00:01 +5: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: login Google button requires terms then onboarding for a new account without OTP
+00:01 +6: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: register Google button opens Home for a completed existing account without OTP
+00:01 +7: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: register Google button requires terms then onboarding for a new account without OTP
+00:01 +8: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: declining Google registration terms clears the session and returns to login
+00:01 +9: C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/google_auth_flow_test.dart: returning unfinished Google account continues onboarding without OTP
+00:02 +10: All tests passed!
