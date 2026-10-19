@@ -9,6 +9,7 @@ const { notFound, errorHandler } = require('./middleware/errorHandler');
 const usageLogMiddleware = require('./middleware/usageLog'); 
 const asyncHandler = require('./utils/asyncHandler');
 const { getImage } = require('./services/clubImageService');
+const { getAvatar } = require('./services/avatarImageService');
 
 const app = express();
 
@@ -30,6 +31,16 @@ app.get('/api/club-images/:id', asyncHandler(async (req, res) => {
     return res.status(404).json({ success: false, message: 'ไม่พบรูปคลับ' });
   }
   const image = await getImage(req.params.id);
+  res.set('Content-Type', image.content_type);
+  res.set('Cross-Origin-Resource-Policy', 'cross-origin');
+  res.set('Cache-Control', 'public, max-age=31536000, immutable');
+  return res.send(image.image_data);
+}));
+app.get('/api/user-avatars/:id', asyncHandler(async (req, res) => {
+  if (!/^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(req.params.id)) {
+    return res.status(404).json({ success: false, message: 'ไม่พบรูปโปรไฟล์' });
+  }
+  const image = await getAvatar(req.params.id);
   res.set('Content-Type', image.content_type);
   res.set('Cross-Origin-Resource-Policy', 'cross-origin');
   res.set('Cache-Control', 'public, max-age=31536000, immutable');

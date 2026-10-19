@@ -10,7 +10,7 @@ router.use(requireAuth);
 router.post('/images', asyncHandler(async (req, res) => {
   const id = await saveImage(req.body?.imageBase64);
   const forwardedProto = req.get('x-forwarded-proto')?.split(',')[0].trim();
-  const protocol = forwardedProto === 'https' ? 'https' : req.protocol;
+  const protocol = forwardedProto === 'https' || env.nodeEnv === 'production' ? 'https' : req.protocol;
   const baseUrl = (env.publicBaseUrl || `${protocol}://${req.get('host')}`).replace(/\/$/, '');
   const imageUrl = `${baseUrl}/api/club-images/${id}`;
   res.status(201).json({ success: true, data: { imageUrl } });

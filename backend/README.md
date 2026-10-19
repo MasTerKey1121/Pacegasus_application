@@ -205,7 +205,7 @@ Frontend ต้องเก็บ `otpRef` นี้ไว้ (เช่น ใ�
 | GET | `/users/profile/:uid` | – | หน้า Profile ของผู้ใช้ใดก็ได้จาก UID (เพื่อน/คนอื่น/ตัวเอง): `user` (uid, displayName, avatarUrl, level), `avatar` (skinTone + equipment ที่ใส่อยู่ เรียงตาม layerOrder), `club` (id, name, imageUrl, role, memberCount / `null` ถ้าไม่มีคลับ), `stats` (`totalDistanceKm` จาก session ที่ completed, `totalRuns`), `relationship` = `self`/`friend`/`none` — ไม่พบ UID = 404 |
 | GET | `/users/me` | ข้อมูลโปรไฟล์ของผู้ใช้ปัจจุบัน |
 | PATCH | `/users/me` | แก้ไขโปรไฟล์แบบ partial: `displayName`, `dateOfBirth`, `gender`, `heightCm`, `weightKg`, `timezone` (ส่งอย่างน้อย 1 field; field ของ basic info ต้องทำ onboarding step 1 ก่อน มิฉะนั้นได้ `409`) |
-| PUT | `/users/me/avatar` | เพิ่ม/เปลี่ยนรูปโปรไฟล์ — `multipart/form-data` field `avatar` (JPEG/PNG/WebP ไม่เกิน 5 MB) ไฟล์เก่าจะถูกลบ; รูปเข้าถึงได้ที่ `/uploads/avatars/<file>` |
+| PUT | `/users/me/avatar` | เพิ่ม/เปลี่ยนรูปโปรไฟล์ — `multipart/form-data` field `avatar` (JPEG/PNG/WebP ไม่เกิน 5 MB); ได้ `data.user.avatarUrl` สำหรับเปิดรูปผ่าน `GET /api/user-avatars/:id` โดยรูปเก็บในฐานข้อมูล |
 | DELETE | `/users/me/avatar` | ลบรูปโปรไฟล์ |
 | GET | `/users/me/progress` | coin, level, exp ของผู้ใช้ |
 | DELETE | `/users/me` | ลบบัญชีผู้ใช้โดยผู้ใช้เอง (soft delete: `status = deleted`, เปลี่ยน email เพื่อปล่อยให้สมัครใหม่ได้, revoke refresh token ทั้งหมด, ล็อกอินอีกไม่ได้) |
