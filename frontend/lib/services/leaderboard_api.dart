@@ -10,11 +10,13 @@ class RankingEntry {
   final String? imageUrl, uid;
   final int? rank;
   final double distance;
+  final bool isDemo;
   const RankingEntry(
       {required this.id,
       required this.name,
       required this.rank,
       required this.distance,
+      this.isDemo = false,
       this.imageUrl,
       this.uid});
   factory RankingEntry.fromJson(Map<String, dynamic> json) => RankingEntry(
@@ -30,11 +32,15 @@ class RankingData {
   final List<RankingEntry> entries;
   final RankingEntry? mine;
   final DateTime startsAt, endsAt;
+  final String scope, metric, timezone;
   const RankingData(
       {required this.entries,
       required this.mine,
       required this.startsAt,
-      required this.endsAt});
+      required this.endsAt,
+      this.scope = 'individual',
+      this.metric = 'weekly_distance',
+      this.timezone = 'Asia/Bangkok'});
 }
 
 class LeaderboardApi {
@@ -52,6 +58,9 @@ class LeaderboardApi {
             ? null
             : RankingEntry.fromJson(data['myEntry'] as Map<String, dynamic>),
         startsAt: DateTime.parse(data['period']['startsAt'] as String),
-        endsAt: DateTime.parse(data['period']['endsAt'] as String));
+        endsAt: DateTime.parse(data['period']['endsAt'] as String),
+        scope: data['scope'] as String? ?? scope,
+        metric: data['metric'] as String? ?? 'weekly_distance',
+        timezone: data['period']['timezone'] as String? ?? 'Asia/Bangkok');
   }
 }

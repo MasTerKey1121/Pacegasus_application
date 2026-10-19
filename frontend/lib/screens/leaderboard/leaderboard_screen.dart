@@ -3,6 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../../app_theme.dart';
 import '../../services/api_client.dart';
 import '../../services/leaderboard_api.dart';
+import '../../services/leaderboard_demo.dart';
+import '../../config/leaderboard_demo_config.dart';
 import '../../widgets/player_profile_dialog.dart';
 import '../../widgets/profile_avatar_image.dart';
 
@@ -38,6 +40,18 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
     _data = ref.read(leaderboardApiProvider).load(_scope);
   }
 
+  Future<void> _refresh() async {
+    // A cached provider can retain an old count during development/hot reload.
+    // Refresh both settings and server data when the user explicitly reloads.
+    ref.invalidate(leaderboardDemoConfigProvider);
+    setState(_reload);
+    try {
+      await _data;
+    } catch (_) {
+      // FutureBuilder presents the API error and retry action.
+    }
+  }
+
   @override
   Widget build(BuildContext context) => Scaffold(
         backgroundColor: const Color(0xFF110E20),
@@ -50,10 +64,15 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                   Padding(
                       padding: const EdgeInsets.fromLTRB(16, 12, 16, 0),
                       child: Column(children: [
-                        Text('50 อันดับแรก',
-                            style:
-                                AppText.body(color: AppColors.textSecondary)),
-                        const SizedBox(height: 12),
+                        if (_scope != 'individual' ||
+                            !ref
+                                .watch(leaderboardDemoConfigProvider)
+                                .enabled) ...[
+                          Text('50 อันดับแรก',
+                              style:
+                                  AppText.body(color: AppColors.textSecondary)),
+                          const SizedBox(height: 12),
+                        ],
                         Row(children: [
                           Expanded(
                               child: Text('ประเภทการจัดอันดับ',
@@ -136,8 +155,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                                                     : 'โหลดอันดับไม่สำเร็จ',
                                                 textAlign: TextAlign.center),
                                             TextButton(
-                                                onPressed: () =>
-                                                    setState(_reload),
+                                                onPressed: _refresh,
                                                 child:
                                                     const Text('ลองอีกครั้ง')),
                                           ])));
@@ -147,14 +165,22 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                                   child: CircularProgressIndicator());
                             }
                             final data = snapshot.data!;
-                            final top = data.entries
-                                .where((e) => e.rank! <= 3)
+                            final display = buildLeaderboardDisplay(
+                                data, ref.watch(leaderboardDemoConfigProvider));
+                            final top = display.entries
+                                .where((e) => e.rank != null && e.rank! <= 3)
                                 .toList();
-                            final special = data.entries
-                                .where((e) => e.rank! >= 4 && e.rank! <= 10)
+                            final special = display.entries
+                                .where((e) =>
+                                    e.rank != null &&
+                                    e.rank! >= 4 &&
+                                    e.rank! <= 10)
                                 .toList();
-                            final normal = data.entries
-                                .where((e) => e.rank! >= 11)
+                            final normal = display.entries
+                                .where((e) =>
+                                    e.rank != null &&
+                                    e.rank! >= 11 &&
+                                    e.rank! <= 50)
                                 .toList();
                             final start = data.startsAt
                                 .toUtc()
@@ -166,10 +192,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                             return Column(children: [
                               Expanded(
                                   child: RefreshIndicator(
-                                      onRefresh: () async {
-                                        setState(_reload);
-                                        await _data;
-                                      },
+                                      onRefresh: _refresh,
                                       child: ListView(
                                           controller: _scroll,
                                           physics:
@@ -186,7 +209,7 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                                                         .textSecondary)),
                                             const SizedBox(height: 18),
                                             if (top.isNotEmpty) _podium(top),
-                                            if (data.entries.isEmpty)
+                                            if (display.entries.isEmpty)
                                               const Padding(
                                                   padding: EdgeInsets.symmetric(
                                                       vertical: 56),
@@ -199,15 +222,17 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                                               for (final entry in special)
                                                 _row(entry,
                                                     special: true,
-                                                    mine: entry.id ==
-                                                        data.mine?.id)
+                                                    mine: !entry.entry.isDemo &&
+                                                        entry.entry.id ==
+                                                            data.mine?.id)
                                             ],
                                             if (normal.isNotEmpty) ...[
                                               _heading('อันดับ 11–50'),
                                               for (final entry in normal)
                                                 _row(entry,
-                                                    mine: entry.id ==
-                                                        data.mine?.id)
+                                                    mine: !entry.entry.isDemo &&
+                                                        entry.entry.id ==
+                                                            data.mine?.id)
                                             ],
                                             const SizedBox(height: 24),
                                           ]))),
@@ -230,8 +255,11 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
                                             size: 14, color: _accent)),
                                     const SizedBox(height: 8),
                                     if (data.mine != null)
-                                      _row(data.mine!,
-                                          mine: true, current: true)
+                                      _row(
+                                          LeaderboardDisplayEntry(
+                                              data.mine!, data.mine!.rank),
+                                          mine: true,
+                                          current: true)
                                     else
                                       Padding(
                                           padding: const EdgeInsets.all(10),
@@ -256,8 +284,8 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
         const Expanded(child: Divider(color: AppColors.borderHi))
       ]));
 
-  Widget _podium(List<RankingEntry> entries) {
-    RankingEntry? at(int rank) {
+  Widget _podium(List<LeaderboardDisplayEntry> entries) {
+    LeaderboardDisplayEntry? at(int rank) {
       for (final e in entries) {
         if (e.rank == rank) return e;
       }
@@ -275,118 +303,150 @@ class _LeaderboardScreenState extends ConsumerState<LeaderboardScreen> {
     ]);
   }
 
-  Widget _podiumEntry(RankingEntry entry) {
-    final color = entry.rank == 1
+  Widget _podiumEntry(LeaderboardDisplayEntry row) {
+    final entry = row.entry;
+    final color = row.rank == 1
         ? _diamond
-        : entry.rank == 2
+        : row.rank == 2
             ? _gold
             : _silver;
-    return Column(children: [
-      Icon(
-          entry.rank == 1
-              ? Icons.diamond_outlined
-              : Icons.workspace_premium_outlined,
-          color: color,
-          size: entry.rank == 1 ? 30 : 24),
-      const SizedBox(height: 6),
-      Container(
-          padding: const EdgeInsets.all(4),
-          decoration: BoxDecoration(
-              shape: BoxShape.circle,
-              border: Border.all(color: color, width: 3),
-              boxShadow: [
-                BoxShadow(color: color.withValues(alpha: .22), blurRadius: 18)
-              ]),
-          child: _avatar(entry, 54)),
-      const SizedBox(height: 8),
-      Text(entry.name,
-          maxLines: 2,
-          overflow: TextOverflow.ellipsis,
-          textAlign: TextAlign.center,
-          style: AppText.body(size: 11)),
-      const SizedBox(height: 4),
-      Text('${entry.distance.toStringAsFixed(1)} กม.',
-          textAlign: TextAlign.center,
-          style: AppText.heading(size: 13, color: color)),
-      const SizedBox(height: 12),
-      Container(
-          height: entry.rank == 1
-              ? 104
-              : entry.rank == 2
-                  ? 82
-                  : 65,
-          width: double.infinity,
-          alignment: Alignment.center,
-          decoration: BoxDecoration(
-              borderRadius:
-                  const BorderRadius.vertical(top: Radius.circular(12)),
-              gradient: LinearGradient(
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
-                  colors: [
-                    color.withValues(alpha: .65),
-                    color.withValues(alpha: .1)
+    return GestureDetector(
+        key: ValueKey('ranking-entry-${entry.id}'),
+        onTap: entry.isDemo ? _showDemoMessage : null,
+        child: Column(children: [
+          Icon(
+              row.rank == 1
+                  ? Icons.diamond_outlined
+                  : Icons.workspace_premium_outlined,
+              color: color,
+              size: row.rank == 1 ? 30 : 24),
+          const SizedBox(height: 6),
+          Container(
+              padding: const EdgeInsets.all(4),
+              decoration: BoxDecoration(
+                  shape: BoxShape.circle,
+                  border: Border.all(color: color, width: 3),
+                  boxShadow: [
+                    BoxShadow(
+                        color: color.withValues(alpha: .22), blurRadius: 18)
                   ]),
-              border: Border.all(color: color, width: 2)),
-          child: Text('${entry.rank}',
-              style: AppText.heading(size: 38, color: color))),
-    ]);
+              child: _avatar(entry, 54)),
+          const SizedBox(height: 8),
+          Text(entry.name,
+              maxLines: 2,
+              overflow: TextOverflow.ellipsis,
+              textAlign: TextAlign.center,
+              style: AppText.body(size: 11)),
+          const SizedBox(height: 4),
+          Text('${entry.distance.toStringAsFixed(entry.isDemo ? 2 : 1)} กม.',
+              textAlign: TextAlign.center,
+              style: AppText.heading(size: 13, color: color)),
+          const SizedBox(height: 12),
+          Container(
+              height: row.rank == 1
+                  ? 104
+                  : row.rank == 2
+                      ? 82
+                      : 65,
+              width: double.infinity,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                  borderRadius:
+                      const BorderRadius.vertical(top: Radius.circular(12)),
+                  gradient: LinearGradient(
+                      begin: Alignment.topLeft,
+                      end: Alignment.bottomRight,
+                      colors: [
+                        color.withValues(alpha: .65),
+                        color.withValues(alpha: .1)
+                      ]),
+                  border: Border.all(color: color, width: 2)),
+              child: Text('${row.rank}',
+                  style: AppText.heading(size: 38, color: color))),
+        ]));
   }
 
+  void _showDemoMessage() => ScaffoldMessenger.of(context)
+    ..removeCurrentSnackBar()
+    ..showSnackBar(
+        const SnackBar(content: Text('บัญชีจำลองสำหรับแสดงตัวอย่างอันดับ')));
+
   Widget _avatar(RankingEntry entry, double size) => GestureDetector(
-      onTap: _scope == 'individual' && entry.uid != null
-          ? () => showPlayerProfile(context, entry.uid!)
-          : null,
+      onTap: entry.isDemo
+          ? _showDemoMessage
+          : _scope == 'individual' && entry.uid != null
+              ? () => showPlayerProfile(context, entry.uid!)
+              : null,
       child: ClipOval(
           child: Container(
               width: size,
               height: size,
               color: _panel,
-              child: ProfileAvatarImage(
-                  url: entry.imageUrl,
-                  uid: _scope == 'individual' ? entry.uid : null,
-                  size: size,
-                  fallback: Icon(
-                      _scope == 'guild' ? Icons.groups : Icons.person,
-                      color: _accent)))));
+              child: entry.isDemo
+                  ? Center(
+                      child: Text(entry.name.substring(0, 1).toUpperCase(),
+                          style:
+                              AppText.heading(size: size * .4, color: _accent)))
+                  : ProfileAvatarImage(
+                      url: entry.imageUrl,
+                      uid: _scope == 'individual' ? entry.uid : null,
+                      size: size,
+                      fallback: Icon(
+                          _scope == 'guild' ? Icons.groups : Icons.person,
+                          color: _accent)))));
 
-  Widget _row(RankingEntry entry,
-          {bool special = false, bool mine = false, bool current = false}) =>
-      Container(
-          margin: EdgeInsets.only(bottom: current ? 0 : 10),
-          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
-          decoration: BoxDecoration(
-              color: _panel,
-              borderRadius: BorderRadius.circular(12),
-              border: Border.all(
-                  color: special || mine ? _accent : AppColors.borderHi,
-                  width: special ? 1.5 : 1),
-              boxShadow: special
-                  ? [
-                      BoxShadow(
-                          color: _accent.withValues(alpha: .16), blurRadius: 10)
-                    ]
-                  : null),
-          child: Row(children: [
-            SizedBox(
-                width: entry.rank == null ? 80 : 30,
-                child: Text(entry.rank?.toString() ?? 'ไม่มีอันดับ',
-                    style: AppText.heading(
-                        size: entry.rank == null ? 12 : 20,
-                        color: mine || special
-                            ? _accent
-                            : AppColors.textPrimary))),
-            const SizedBox(width: 6),
-            _avatar(entry, 32),
-            const SizedBox(width: 8),
-            Expanded(
-                child: Text(
-                    current && _scope == 'individual' ? 'คุณ' : entry.name,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: AppText.body(size: 12))),
-            const SizedBox(width: 6),
-            Text('${entry.distance.toStringAsFixed(1)} กม.',
-                style: AppText.heading(size: 12)),
-          ]));
+  Widget _row(LeaderboardDisplayEntry row,
+      {bool special = false, bool mine = false, bool current = false}) {
+    final entry = row.entry;
+    return InkWell(
+        key: current ? null : ValueKey('ranking-entry-${entry.id}'),
+        onTap: entry.isDemo ? _showDemoMessage : null,
+        borderRadius: BorderRadius.circular(12),
+        child: Container(
+            margin: EdgeInsets.only(bottom: current ? 0 : 10),
+            padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 12),
+            decoration: BoxDecoration(
+                color: _panel,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(
+                    color: special || mine ? _accent : AppColors.borderHi,
+                    width: special ? 1.5 : 1),
+                boxShadow: special
+                    ? [
+                        BoxShadow(
+                            color: _accent.withValues(alpha: .16),
+                            blurRadius: 10)
+                      ]
+                    : null),
+            child: Row(children: [
+              SizedBox(
+                  width: row.rank == null ? 80 : 30,
+                  child: Text(
+                      row.rank?.toString() ??
+                          (_scope == 'individual' && entry.distance > 0
+                              ? 'นอก 50 อันดับแรก'
+                              : 'ไม่มีอันดับ'),
+                      style: AppText.heading(
+                          size: row.rank == null ? 12 : 20,
+                          color: mine || special
+                              ? _accent
+                              : AppColors.textPrimary))),
+              const SizedBox(width: 6),
+              _avatar(entry, 32),
+              const SizedBox(width: 8),
+              Expanded(
+                  child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                    Text(current && _scope == 'individual' ? 'คุณ' : entry.name,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: AppText.body(size: 12)),
+                  ])),
+              const SizedBox(width: 6),
+              Text(
+                  '${entry.distance.toStringAsFixed(entry.isDemo ? 2 : 1)} กม.',
+                  style: AppText.heading(size: 12)),
+            ])));
+  }
 }
