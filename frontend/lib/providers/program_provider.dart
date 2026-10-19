@@ -1,3 +1,5 @@
+import 'dart:convert';
+import 'package:flutter_secure_storage/flutter_secure_storage.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
@@ -12,8 +14,51 @@ final programApiProvider = Provider<ProgramApi>(
   (ref) => ProgramApi(ref.read(apiClientProvider)),
 );
 
+enum ProgramAccess { checking, unregistered, unscheduled, ready, failed }
+
 class ProgramNotifier extends ChangeNotifier {
-  ProgramNotifier(this._api, this._onboardingApi);
+  ProgramNotifier(this._api, this._onboardingApi,
+      {String? Function()? owner,
+      FlutterSecureStorage storage = const FlutterSecureStorage()})
+      : _owner = owner,
+        _selectionStorage = storage;
+  final String? Function()? _owner;
+  final FlutterSecureStorage _selectionStorage;
+  int? selectedPlanWeeks;
+  String? get userProgramId => _userProgramId;
+  String? get _selectionKey {
+    final owner = _owner?.call();
+    return owner == null || _userProgramId == null
+        ? null
+        : 'program_selection_v1_${owner}_$_userProgramId';
+  }
+
+  Future<void> rememberPlanWeeks(int weeks) async {
+    selectedPlanWeeks = weeks;
+    final key = _selectionKey;
+    if (key == null) return;
+    await _selectionStorage.write(
+        key: key,
+        value: jsonEncode({
+          'weeks': weeks,
+          'startDate': _programStartDate?.toIso8601String(),
+          'level': selectedTemplateLevel,
+        }));
+  }
+
+  Future<void> restorePlanSelection() async {
+    final key = _selectionKey;
+    final version = _accountVersion;
+    if (key == null) return;
+    final raw = await _selectionStorage.read(key: key);
+    if (version != _accountVersion || key != _selectionKey || raw == null) {
+      return;
+    }
+    final data = jsonDecode(raw) as Map;
+    selectedPlanWeeks ??= int.tryParse('${data['weeks']}');
+    _programStartDate ??= trainingDate(data['startDate']);
+    selectedTemplateLevel ??= data['level']?.toString();
+  }
 
   final ProgramApi _api;
   final OnboardingApi _onboardingApi;
@@ -37,6 +82,29 @@ class ProgramNotifier extends ChangeNotifier {
   /// API 5.1 must only be called after the user explicitly registers a plan.
   bool get isRegistered => _isRegistered;
   bool get isScheduleSaved => _isScheduleSaved;
+  bool _programConfirmed = false;
+  bool _cancelling = false;
+  int _readVersion = 0;
+  Future<bool>? _currentRead;
+  ProgramAccess get access {
+    if (isLoading || isRegistering || isSavingSchedule || _cancelling) {
+      return ProgramAccess.checking;
+    }
+    if (currentWeekErrorMessage != null) return ProgramAccess.failed;
+    if (!_programConfirmed) return ProgramAccess.checking;
+    if (!isRegistered) return ProgramAccess.unregistered;
+    return isScheduleSaved ? ProgramAccess.ready : ProgramAccess.unscheduled;
+  }
+
+  Future<bool> authorizeNewSession() async {
+    if (access != ProgramAccess.ready) return false;
+    final version = _accountVersion;
+    final programId = _userProgramId;
+    await loadCurrentWeek();
+    return version == _accountVersion &&
+        programId == _userProgramId &&
+        access == ProgramAccess.ready;
+  }
 
   /// The day the active program began. Used by the schedule builder to work
   /// out which real calendar week a given "week index" in the UI maps to.
@@ -65,6 +133,10 @@ class ProgramNotifier extends ChangeNotifier {
   /// Clears all account-specific state before a different user signs in.
   void reset() {
     _accountVersion++;
+    _readVersion++;
+    _currentRead = null;
+    _programConfirmed = false;
+    _cancelling = false;
     quests = const [];
     templates = const [];
     isLoading = false;
@@ -78,6 +150,7 @@ class ProgramNotifier extends ChangeNotifier {
     _isRegistered = false;
     _isScheduleSaved = false;
     _programStartDate = null;
+    selectedPlanWeeks = null;
     _hasRestored = false;
     _userProgramId = null;
     notifyListeners();
@@ -86,48 +159,10 @@ class ProgramNotifier extends ChangeNotifier {
   /// Restores state that would otherwise be lost when the app is restarted.
   /// An active program is the source of truth for whether registration is done.
   Future<void> restore({bool force = false}) async {
-    if ((_hasRestored && !force) || isLoading) return;
-
+    if (_hasRestored && !force) return;
     final version = _accountVersion;
-    _hasRestored = true;
-    isLoading = true;
-    errorMessage = null;
-    currentWeekErrorMessage = null;
-    notifyListeners();
-
-    try {
-      final response = await _api.getCurrentWeek();
-      if (version != _accountVersion) return;
-      _setQuests(response);
-      _isRegistered = true;
-    } on ApiException catch (error) {
-      if (version != _accountVersion) return;
-      // A 404 means this user has not registered a program yet; it is not an
-      // error state for the Home screen.
-      if (error.statusCode == 404) {
-        _isRegistered = false;
-        _isScheduleSaved = false;
-        _userProgramId = null;
-        _programStartDate = null;
-        quests = const [];
-      } else {
-        errorMessage = error.message;
-        currentWeekErrorMessage = error.message;
-      }
-    } catch (error) {
-      if (version != _accountVersion) return;
-      errorMessage = error.toString();
-      currentWeekErrorMessage = errorMessage;
-    }
-
-    // The level is needed only when a completed-onboarding user registers a
-    // program. Fetch it again because the in-memory provider is recreated on
-    // every app launch.
-    if (version != _accountVersion) return;
-    await _restoreOnboardingLevel();
-    if (version != _accountVersion) return;
-    isLoading = false;
-    notifyListeners();
+    await loadCurrentWeek();
+    if (version == _accountVersion) await _restoreOnboardingLevel();
   }
 
   Future<void> _restoreOnboardingLevel() async {
@@ -167,89 +202,75 @@ class ProgramNotifier extends ChangeNotifier {
 
   Future<bool> registerPlan({String? level}) async {
     if (isRegistering || isLoading) return false;
+    final version = _accountVersion;
     isRegistering = true;
     errorMessage = null;
     notifyListeners();
-    // Recover an existing program before attempting another registration.
-    // Only an explicit 404 permits creating a new one.
     try {
-      final response = await _api.getCurrentWeek();
-      _setQuests(response);
-      _isRegistered = true;
-      currentWeekErrorMessage = null;
-      isRegistering = false;
-      notifyListeners();
-      return true;
-    } on ApiException catch (error) {
-      if (error.statusCode != 404) {
-        errorMessage = error.message;
-        currentWeekErrorMessage = error.message;
-        isRegistering = false;
-        notifyListeners();
+      await loadCurrentWeek();
+      if (version != _accountVersion) return false;
+      if (_isRegistered && currentWeekErrorMessage == null) return true;
+      if (currentWeekErrorMessage != null || !_programConfirmed) return false;
+      if (level == null &&
+          (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
+        await _restoreOnboardingLevel();
+      }
+      if (version != _accountVersion) return false;
+      final selectedLevel = level ?? _onboardingLevel;
+      if (selectedLevel == null || selectedLevel.isEmpty) {
+        errorMessage = 'ไม่พบระดับการวิ่งจาก Onboarding';
         return false;
       }
-      _isRegistered = false;
-      currentWeekErrorMessage = null;
-    } catch (error) {
-      errorMessage = error.toString();
-      currentWeekErrorMessage = errorMessage;
-      isRegistering = false;
-      notifyListeners();
+      try {
+        final response = await _api.start(level: selectedLevel);
+        if (version != _accountVersion) return false;
+        final data = response['data'] as Map;
+        _userProgramId = data['userProgramId']?.toString();
+        _programStartDate = trainingDate(data['startDate']);
+        selectedTemplateLevel = selectedLevel;
+        selectedPlanWeeks = null;
+        _isRegistered = true;
+        _isScheduleSaved = false;
+        await loadCurrentWeek();
+        return version == _accountVersion;
+      } on ApiException catch (e) {
+        if (version != _accountVersion) return false;
+        if (e.statusCode == 409 ||
+            (e.statusCode == 400 &&
+                e.message.contains('คุณมีโปรแกรมที่กำลังดำเนินการอยู่แล้ว'))) {
+          await loadCurrentWeek();
+          return version == _accountVersion &&
+              _isRegistered &&
+              currentWeekErrorMessage == null;
+        }
+        rethrow;
+      }
+    } catch (e) {
+      if (version == _accountVersion) errorMessage = e.toString();
       return false;
-    }
-    if (level == null &&
-        (_onboardingLevel == null || _onboardingLevel!.isEmpty)) {
-      await _restoreOnboardingLevel();
-    }
-    final selectedLevel = level ?? _onboardingLevel;
-    if (selectedLevel == null || selectedLevel.isEmpty) {
-      errorMessage = 'ไม่พบระดับการวิ่งจาก Onboarding';
-      isRegistering = false;
-      notifyListeners();
-      return false;
-    }
-
-    isRegistering = true;
-    // Keep the registered plan available to the schedule builder immediately
-    // after API 5.1 succeeds (and while the app remains open).
-    selectedTemplateLevel = selectedLevel;
-    errorMessage = null;
-    notifyListeners();
-    try {
-      final response = await _api.start(level: selectedLevel);
-      _setQuests(response);
-      _isRegistered = true;
-      // Creation has committed even if this subsequent read is unavailable.
-      await loadCurrentWeek();
-      isRegistering = false;
-      notifyListeners();
-      return true;
-    } catch (error) {
-      if (error is ApiException &&
-          (error.statusCode == 409 ||
-              (error.statusCode == 400 &&
-                  error.message
-                      .contains('คุณมีโปรแกรมที่กำลังดำเนินการอยู่แล้ว')))) {
-        final restored = await loadCurrentWeek();
+    } finally {
+      if (version == _accountVersion) {
         isRegistering = false;
         notifyListeners();
-        return restored;
       }
-      errorMessage = error.toString();
-      isRegistering = false;
-      notifyListeners();
-      return false;
     }
   }
 
   Future<bool> cancelCurrentProgram() async {
     if (!_isRegistered || isLoading) return false;
 
+    _accountVersion++;
+    _readVersion++;
+    _currentRead = null;
+    final version = _accountVersion;
+    _cancelling = true;
     isLoading = true;
     errorMessage = null;
     notifyListeners();
     try {
       await _api.cancelCurrentProgram();
+      if (version != _accountVersion) return false;
+      _programConfirmed = true;
       quests = const [];
       selectedTemplateLevel = null;
       _isRegistered = false;
@@ -261,10 +282,16 @@ class ProgramNotifier extends ChangeNotifier {
       notifyListeners();
       return true;
     } catch (error) {
+      if (version != _accountVersion) return false;
       errorMessage = error is ApiException ? error.message : error.toString();
       isLoading = false;
       notifyListeners();
       return false;
+    } finally {
+      if (version == _accountVersion) {
+        _cancelling = false;
+        notifyListeners();
+      }
     }
   }
 
@@ -280,25 +307,65 @@ class ProgramNotifier extends ChangeNotifier {
     return null;
   }
 
-  Future<bool> loadCurrentWeek() async {
+  Future<bool> loadCurrentWeek() {
+    if (_cancelling) return Future.value(false);
+    if (_currentRead != null) return _currentRead!;
+    final future = _loadCurrentWeek();
+    _currentRead = future;
+    future.whenComplete(() {
+      if (identical(_currentRead, future)) _currentRead = null;
+    });
+    return future;
+  }
+
+  Future<bool> _loadCurrentWeek() async {
+    _hasRestored = true;
+    _readVersion++;
+    final readVersion = _readVersion;
     final version = _accountVersion;
     isLoading = true;
     errorMessage = null;
     currentWeekErrorMessage = null;
     notifyListeners();
 
+    var foundProgram = false;
     try {
       final response = await _api.getCurrentWeek();
-      if (version != _accountVersion) return false;
-      _setQuests(response);
+      if (version != _accountVersion || readVersion != _readVersion) {
+        return false;
+      }
+      foundProgram = true;
+      await _setQuests(response, readVersion);
+      if (version != _accountVersion || readVersion != _readVersion) {
+        return false;
+      }
       _isRegistered = true;
       isLoading = false;
       notifyListeners();
       return true;
     } catch (error) {
-      if (version != _accountVersion) return false;
-      errorMessage = error.toString();
-      currentWeekErrorMessage = errorMessage;
+      if (version != _accountVersion || readVersion != _readVersion) {
+        return false;
+      }
+      if (!foundProgram &&
+          error is ApiException &&
+          error.statusCode == 404 &&
+          (error.message.contains('ไม่พบโปรแกรมที่กำลังดำเนินการอยู่') ||
+              error.message.toLowerCase().contains('no active plan') ||
+              error.message.toLowerCase().contains('no plan'))) {
+        _programConfirmed = true;
+        _isRegistered = false;
+        _isScheduleSaved = false;
+        _programStartDate = null;
+        _userProgramId = null;
+        selectedPlanWeeks = null;
+        quests = [];
+        errorMessage = null;
+        currentWeekErrorMessage = null;
+      } else {
+        errorMessage = error.toString();
+        currentWeekErrorMessage = errorMessage;
+      }
       isLoading = false;
       notifyListeners();
       return false;
@@ -311,6 +378,8 @@ class ProgramNotifier extends ChangeNotifier {
     required List<SessionType?> week,
   }) async {
     if (isSavingSchedule) return false;
+    final version = _accountVersion;
+    final programId = _userProgramId;
     if (_programStartDate == null) {
       errorMessage = 'ไม่พบวันเริ่มต้นของแผน กรุณาลองเปิดหน้าตารางใหม่';
       notifyListeners();
@@ -325,12 +394,21 @@ class ProgramNotifier extends ChangeNotifier {
       // The backend inserts this single batch in one transaction. A failed
       // rule check therefore cannot leave a partially saved plan behind.
       await _api.addQuestsBatch(quests);
+      if (version != _accountVersion || programId != _userProgramId) {
+        return false;
+      }
       _isScheduleSaved = true;
+      _readVersion++;
+      _currentRead = null;
       await loadCurrentWeek();
+      if (version != _accountVersion || programId != _userProgramId) {
+        return false;
+      }
       isSavingSchedule = false;
       notifyListeners();
       return true;
     } catch (error) {
+      if (version != _accountVersion) return false;
       errorMessage = error.toString();
       isSavingSchedule = false;
       notifyListeners();
@@ -343,6 +421,8 @@ class ProgramNotifier extends ChangeNotifier {
     required List<SessionType?> week,
   }) async {
     if (isSavingSchedule) return false;
+    final version = _accountVersion;
+    final programId = _userProgramId;
     if (_programStartDate == null) {
       errorMessage = 'ไม่พบวันเริ่มต้นของแผน กรุณาลองเปิดหน้าตารางใหม่';
       notifyListeners();
@@ -363,12 +443,21 @@ class ProgramNotifier extends ChangeNotifier {
         weekStart: _dateOnly(weekStart),
         quests: quests,
       );
+      if (version != _accountVersion || programId != _userProgramId) {
+        return false;
+      }
       _isScheduleSaved = true;
+      _readVersion++;
+      _currentRead = null;
       await loadCurrentWeek();
+      if (version != _accountVersion || programId != _userProgramId) {
+        return false;
+      }
       isSavingSchedule = false;
       notifyListeners();
       return true;
     } catch (error) {
+      if (version != _accountVersion) return false;
       errorMessage = error.toString();
       isSavingSchedule = false;
       notifyListeners();
@@ -405,11 +494,13 @@ class ProgramNotifier extends ChangeNotifier {
     required DateTime from,
     required DateTime to,
   }) async {
+    final version = _accountVersion;
     try {
       final response = await _api.getQuestsInRange(
         from: _dateOnly(from),
         to: _dateOnly(to),
       );
+      if (version != _accountVersion) throw StateError('บัญชีเปลี่ยนแล้ว');
       final data = response['data'] as Map<String, dynamic>? ?? const {};
       final rawQuests = data['quests'] as List<dynamic>? ?? const [];
       return rawQuests
@@ -417,30 +508,101 @@ class ProgramNotifier extends ChangeNotifier {
           .map((quest) => Map<String, dynamic>.from(quest))
           .toList(growable: false);
     } catch (_) {
-      return const [];
+      rethrow;
     }
   }
 
-  void _setQuests(Map<String, dynamic> response) {
+  Future<void> _setQuests(
+      Map<String, dynamic> response, int readVersion) async {
+    final version = _accountVersion;
     final data = response['data'] as Map<String, dynamic>? ?? const {};
     final programId = data['userProgramId']?.toString();
-    final wasSaved = programId == _userProgramId && _isScheduleSaved;
+    if (programId == null || programId.isEmpty) {
+      throw const FormatException('ไม่สามารถยืนยันโปรแกรมปัจจุบันได้');
+    }
+    if (programId != _userProgramId) {
+      _programStartDate = null;
+      selectedPlanWeeks = null;
+      selectedTemplateLevel = null;
+    }
     _userProgramId = programId;
     final templateLevel = data['templateLevel']?.toString();
     if (templateLevel != null && templateLevel.isNotEmpty) {
       selectedTemplateLevel = templateLevel;
     }
-    final startDate = trainingDate(data['startDate']);
+    final weekStart = trainingDate(data['weekStart']);
+    final weekNumber = int.tryParse('${data['weekNumber']}');
+    final startDate = trainingDate(data['startDate']) ??
+        (weekStart != null && weekNumber != null && weekNumber >= 1
+            ? weekStart.subtract(Duration(days: (weekNumber - 1) * 7))
+            : null);
     if (startDate != null) _programStartDate = startDate;
+    selectedPlanWeeks ??= int.tryParse('${data['durationWeeks']}');
     final rawQuests = data['quests'] as List<dynamic>? ?? const [];
     quests = rawQuests
         .whereType<Map>()
         .map((quest) => Map<String, dynamic>.from(quest))
         .toList(growable: false);
-    // Older API responses omit scheduleSaved. Existing quests or a successful
-    // write still establish that this program has a saved schedule.
-    _isScheduleSaved =
-        data['scheduleSaved'] as bool? ?? (quests.isNotEmpty || wasSaved);
+    _isScheduleSaved = false;
+    final explicit = data['scheduleSaved'];
+    bool saved;
+    if (explicit is bool) {
+      saved = explicit;
+    } else {
+      final start = _programStartDate;
+      if (start == null) {
+        throw const FormatException('ไม่พบวันเริ่มโปรแกรมสำหรับตรวจตารางซ้อม');
+      }
+      var weeks = int.tryParse('${data['durationWeeks']}');
+      if (weeks == null || weeks < 1) {
+        if (templates.isEmpty) {
+          final response = await _api.getTemplates();
+          if (version != _accountVersion || readVersion != _readVersion) return;
+          final rows = response['data'];
+          if (rows is! List) {
+            throw const FormatException('ตรวจช่วงโปรแกรมไม่ได้');
+          }
+          templates = rows
+              .whereType<Map>()
+              .map((r) => Map<String, dynamic>.from(r))
+              .toList();
+        }
+        final matches = templates.where((t) =>
+            (data['programTemplateId'] != null &&
+                t['id'] == data['programTemplateId']) ||
+            (selectedTemplateLevel != null &&
+                t['level'] == selectedTemplateLevel));
+        if (matches.isEmpty) {
+          throw const FormatException('ไม่พบช่วงเวลาของโปรแกรมปัจจุบัน');
+        }
+        weeks = int.tryParse('${matches.first['duration_weeks_max']}');
+      }
+      if (weeks == null || weeks < 1 || weeks > 520) {
+        throw const FormatException('ไม่สามารถยืนยันช่วงโปรแกรมซ้อมได้');
+      }
+      final end = start.add(Duration(days: weeks * 7 - 1));
+      final response = await _api.getQuestsInRange(
+          from: _dateOnly(start), to: _dateOnly(end));
+      if (version != _accountVersion || readVersion != _readVersion) return;
+      final range = response['data'];
+      if (range is! Map ||
+          range['userProgramId']?.toString() != programId ||
+          range['quests'] is! List) {
+        throw const FormatException(
+            'ไม่สามารถยืนยันตารางของโปรแกรมปัจจุบันได้');
+      }
+      saved = (range['quests'] as List).whereType<Map>().any((q) {
+        final date = trainingDate(q['scheduled_date']);
+        return date != null &&
+            !date.isBefore(start) &&
+            !date.isAfter(end) &&
+            q['id'] != null &&
+            q['session_type'] != null;
+      });
+    }
+    if (version != _accountVersion || readVersion != _readVersion) return;
+    _isScheduleSaved = saved;
+    _programConfirmed = true;
   }
 
   String _sessionTypeValue(SessionType type) => switch (type) {
@@ -465,6 +627,7 @@ final programProvider = ChangeNotifierProvider<ProgramNotifier>((ref) {
   final notifier = ProgramNotifier(
     ref.read(programApiProvider),
     ref.read(onboardingApiProvider),
+    owner: () => ref.read(authProvider).user?['id']?.toString(),
   );
 
   // Riverpod keeps this provider alive while the app remains open. Reset it

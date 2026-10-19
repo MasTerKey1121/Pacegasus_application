@@ -1,3 +1,5 @@
+import 'dart:async';
+import 'package:flutter/gestures.dart';
 import 'dart:math' as math;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -11,13 +13,17 @@ class RunRouteMap extends StatefulWidget {
   final List<RunRoutePoint> points;
   final bool loading, treadmill, loadFailed;
   final VoidCallback? onRetry;
+  final String? sessionId;
+  final Future<String> Function()? styleLoader;
   const RunRouteMap(
       {super.key,
       required this.points,
       this.loading = false,
       this.treadmill = false,
       this.loadFailed = false,
-      this.onRetry});
+      this.onRetry,
+      this.sessionId,
+      this.styleLoader});
   @override
   State<RunRouteMap> createState() => _RunRouteMapState();
 }
@@ -26,46 +32,114 @@ class _RunRouteMapState extends State<RunRouteMap> {
   Future<String>? _style;
   MapLibreMapController? _controller;
   bool _failed = false;
+  bool _styleReady = false, _drawing = false, _drawAgain = false;
+  int _mapVersion = 0;
+  Timer? _loadTimer;
+  int? _routeSignature;
+  int get _signature => Object.hashAll(
+      widget.points.map((p) => Object.hash(p.latitude, p.longitude)));
 
   bool get _nativeSupported =>
       !kIsWeb &&
       (defaultTargetPlatform == TargetPlatform.android ||
           defaultTargetPlatform == TargetPlatform.iOS);
 
+  bool get _canLoad =>
+      _nativeSupported &&
+      (widget.styleLoader != null || gistdaMapApiKey.isNotEmpty) &&
+      widget.points.isNotEmpty &&
+      !widget.treadmill;
   @override
   void initState() {
     super.initState();
-    if (_nativeSupported &&
-        gistdaMapApiKey.isNotEmpty &&
-        widget.points.isNotEmpty &&
-        !widget.treadmill) {
-      _style = loadGistdaDarkStyle();
+    _routeSignature = _signature;
+    _prepareStyle();
+  }
+
+  void _prepareStyle() {
+    if (!_canLoad) return;
+    _failed = false;
+    _styleReady = false;
+    _style = (widget.styleLoader ?? loadGistdaDarkStyle)();
+    _loadTimer?.cancel();
+    final version = _mapVersion;
+    _loadTimer = Timer(const Duration(seconds: 20), () {
+      if (mounted && version == _mapVersion && !_styleReady) {
+        setState(() => _failed = true);
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(covariant RunRouteMap oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.sessionId != widget.sessionId ||
+        oldWidget.treadmill != widget.treadmill) {
+      _controller = null;
+      _style = null;
+      _failed = false;
+      _styleReady = false;
+      _mapVersion++;
+      _loadTimer?.cancel();
+      _prepareStyle();
+    } else if (_style == null && _canLoad) {
+      _prepareStyle();
+    } else if (_routeSignature != _signature && _styleReady) {
+      unawaited(_drawRoute());
     }
+    _routeSignature = _signature;
+  }
+
+  void _retry() {
+    setState(() {
+      _controller = null;
+      _style = null;
+      _mapVersion++;
+      _prepareStyle();
+    });
+  }
+
+  @override
+  void dispose() {
+    _loadTimer?.cancel();
+    super.dispose();
   }
 
   Future<void> _drawRoute() async {
     final controller = _controller;
-    if (controller == null) return;
+    if (controller == null || !_styleReady) return;
+    if (_drawing) {
+      _drawAgain = true;
+      return;
+    }
+    _drawing = true;
+    final version = _mapVersion;
     final route = widget.points
         .map((point) => LatLng(point.latitude, point.longitude))
         .toList();
-    if (route.isEmpty) return;
+    if (route.isEmpty) {
+      _drawing = false;
+      return;
+    }
     try {
+      await controller.clearLines();
+      await controller.clearCircles();
+      if (!mounted || version != _mapVersion) return;
       if (route.length > 1) {
         await controller.addLine(
             LineOptions(geometry: route, lineColor: '#071321', lineWidth: 7));
-        if (!mounted) return;
+        if (!mounted || version != _mapVersion) return;
         await controller.addLine(
             LineOptions(geometry: route, lineColor: '#52B9FF', lineWidth: 4));
       }
-      if (!mounted) return;
+      if (!mounted || version != _mapVersion) return;
       await controller.addCircle(CircleOptions(
           geometry: route.first,
           circleColor: '#34D399',
           circleRadius: 6,
           circleStrokeColor: '#FFFFFF',
           circleStrokeWidth: 2));
-      if (!mounted) return;
+      if (!mounted || version != _mapVersion) return;
       await controller.addCircle(CircleOptions(
           geometry: route.last,
           circleColor: '#52B9FF',
@@ -76,7 +150,7 @@ class _RunRouteMapState extends State<RunRouteMap> {
       final north = route.map((point) => point.latitude).reduce(math.max);
       final west = route.map((point) => point.longitude).reduce(math.min);
       final east = route.map((point) => point.longitude).reduce(math.max);
-      if (!mounted) return;
+      if (!mounted || version != _mapVersion) return;
       if (north - south < .00001 && east - west < .00001) {
         await controller
             .moveCamera(CameraUpdate.newLatLngZoom(route.first, 16));
@@ -90,12 +164,22 @@ class _RunRouteMapState extends State<RunRouteMap> {
             bottom: 40));
       }
     } catch (_) {
-      if (mounted) setState(() => _failed = true);
+      if (mounted && version == _mapVersion) setState(() => _failed = true);
+    } finally {
+      _drawing = false;
+      if (_drawAgain && mounted) {
+        _drawAgain = false;
+        unawaited(_drawRoute());
+      }
     }
   }
 
   Widget _preview({String? caption}) => Stack(fit: StackFit.expand, children: [
-        CustomPaint(painter: _RoutePainter(widget.points)),
+        InteractiveViewer(
+            minScale: .5,
+            maxScale: 8,
+            child: SizedBox.expand(
+                child: CustomPaint(painter: _RoutePainter(widget.points)))),
         if (caption != null)
           Positioned(
               left: 12,
@@ -152,6 +236,7 @@ class _RunRouteMapState extends State<RunRouteMap> {
               FutureBuilder<String>(
                   future: _style,
                   builder: (_, snapshot) {
+                    final version = _mapVersion;
                     if (snapshot.hasError) {
                       return _preview(
                           caption: 'เส้นทาง GPS • โหลดแผนที่พื้นหลังไม่สำเร็จ');
@@ -160,6 +245,11 @@ class _RunRouteMapState extends State<RunRouteMap> {
                       return _preview(caption: 'กำลังโหลดแผนที่…');
                     }
                     return MapLibreMap(
+                        key: ValueKey(_mapVersion),
+                        gestureRecognizers: {
+                          Factory<OneSequenceGestureRecognizer>(
+                              () => EagerGestureRecognizer())
+                        },
                         styleString: snapshot.data!,
                         initialCameraPosition: CameraPosition(
                             target: LatLng(widget.points.first.latitude,
@@ -168,15 +258,45 @@ class _RunRouteMapState extends State<RunRouteMap> {
                         compassEnabled: false,
                         rotateGesturesEnabled: false,
                         tiltGesturesEnabled: false,
-                        scrollGesturesEnabled: false,
-                        zoomGesturesEnabled: false,
+                        scrollGesturesEnabled: true,
+                        zoomGesturesEnabled: true,
                         annotationOrder: const [
                           AnnotationType.line,
                           AnnotationType.circle
                         ],
-                        onMapCreated: (controller) => _controller = controller,
-                        onStyleLoadedCallback: _drawRoute);
+                        onMapCreated: (controller) {
+                          if (mounted && version == _mapVersion) {
+                            _controller = controller;
+                          }
+                        },
+                        onStyleLoadedCallback: () {
+                          if (!mounted || version != _mapVersion) return;
+                          _loadTimer?.cancel();
+                          _styleReady = true;
+                          unawaited(_drawRoute());
+                        });
                   }),
+            if (widget.loadFailed &&
+                widget.onRetry != null &&
+                widget.points.isNotEmpty &&
+                !widget.treadmill)
+              Positioned(
+                  right: 8,
+                  bottom: 32,
+                  child: TextButton(
+                      onPressed: widget.onRetry,
+                      child: const Text('ลองโหลดข้อมูลเส้นทางใหม่'))),
+            if (_canLoad && (_failed || (_style != null)))
+              Positioned(
+                  right: 8,
+                  bottom: 2,
+                  child: FutureBuilder<String>(
+                      future: _style,
+                      builder: (_, snap) => _failed || snap.hasError
+                          ? TextButton(
+                              onPressed: _retry,
+                              child: const Text('ลองโหลดแผนที่ใหม่'))
+                          : const SizedBox.shrink())),
             Positioned(
                 left: 12,
                 top: 10,

@@ -14,6 +14,14 @@ class _Boundaries {
 /// day-by-day placement the person has made so far.
 class TrainingPlanNotifier extends ChangeNotifier {
   int planWeeks = 10;
+  bool _isChangingDuration = false;
+  bool get isChangingDuration => _isChangingDuration;
+  void setChangingDuration(bool changing, {bool notify = true}) {
+    if (_isChangingDuration == changing) return;
+    _isChangingDuration = changing;
+    if (notify) notifyListeners();
+  }
+
   int currentWeek = 0;
   SessionType? selectedType;
   late List<List<SessionType?>> weekSchedules;

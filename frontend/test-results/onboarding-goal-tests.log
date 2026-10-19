@@ -1,0 +1,21 @@
+00:00 +0: loading C:/Users/User/Documents/GitHub/Pacegasus_application/frontend/test/onboarding_goal_contract_test.dart
+00:00 +0: both categories are required even if time is skipped
+00:00 +1: วิ่ง 5K sends one health goal with numeric distance (skipTime=false)
+00:00 +2: วิ่ง 5K sends one health goal with numeric distance (skipTime=true)
+00:01 +3: วิ่ง 10K sends one health goal with numeric distance (skipTime=false)
+00:01 +4: วิ่ง 10K sends one health goal with numeric distance (skipTime=true)
+00:01 +5: Half Marathon sends one health goal with numeric distance (skipTime=false)
+00:01 +6: Half Marathon sends one health goal with numeric distance (skipTime=true)
+00:01 +7: Full Marathon sends one health goal with numeric distance (skipTime=false)
+00:01 +8: Full Marathon sends one health goal with numeric distance (skipTime=true)
+00:01 +9: ลดน้ำหนัก maps to the supported health enum
+00:01 +10: เพิ่มความเร็ว maps to the supported health enum
+00:01 +11: เพิ่มความอึด maps to the supported health enum
+00:02 +12: สร้างวินัย maps to the supported health enum
+00:02 +13: switching distances recalculates pace immediately and invalidates both too-fast and too-slow times
+00:02 +14: incomplete, zero and invalid time block Next; toggling skip clears old pace and visible fields
+00:02 +15: recreating a skipped-time selection clears stale time and pace, including the summary
+00:02 +16: stale valid pace cannot enable Next for an invalid restored finish time
+00:02 +17: API failure retains selection, retries once, and never navigates before confirmation
+00:02 +18: (tearDownAll)
+00:02 +18: All tests passed!

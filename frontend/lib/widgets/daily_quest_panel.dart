@@ -5,6 +5,8 @@ import '../models/training_date.dart';
 import '../providers/daily_quest_provider.dart';
 import '../providers/run_provider.dart';
 import '../providers/run_setup_provider.dart';
+import '../providers/program_provider.dart';
+import 'program_access_notice.dart';
 
 /// Shared Home-style card. During a run only unfinished missions are shown.
 class DailyQuestPanel extends ConsumerWidget {
@@ -13,7 +15,17 @@ class DailyQuestPanel extends ConsumerWidget {
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final state = ref.watch(dailyQuestProvider);
-    if (duringRun && state.completed) return const SizedBox.shrink();
+    final program = ref.watch(programProvider);
+    final accessBlocked = program.access != ProgramAccess.ready;
+    final waiting = state.loading ||
+        (!state.hasLoaded && state.quest == null && state.error == null);
+    if (!accessBlocked &&
+        !waiting &&
+        state.error == null &&
+        duringRun &&
+        state.completed) {
+      return const SizedBox.shrink();
+    }
     final quest = state.quest;
     final run = ref.watch(runProvider);
     final setup = ref.watch(runSetupProvider);
@@ -50,7 +62,17 @@ class DailyQuestPanel extends ConsumerWidget {
             Text('Main Quest วันนี้',
                 style: AppText.body(size: 10, color: const Color(0xFFC5A2FF))),
             const SizedBox(height: 8),
-            if (state.completed)
+            if (accessBlocked)
+              const ProgramAccessNotice()
+            else if (waiting) ...[
+              Text('กำลังโหลดแผนวันนี้…', style: AppText.heading(size: 18)),
+              const LinearProgressIndicator(),
+            ] else if (state.error != null) ...[
+              Text('โหลดสถานะภารกิจไม่สำเร็จ',
+                  style: AppText.heading(size: 18)),
+              TextButton(
+                  onPressed: state.refresh, child: const Text('ลองใหม่')),
+            ] else if (state.completed)
               Text('ทำภารกิจเสร็จสิ้น', style: AppText.heading(size: 18))
             else ...[
               Text(
@@ -95,13 +117,10 @@ class DailyQuestPanel extends ConsumerWidget {
                           size: 11, color: AppColors.textSecondary)),
               ],
             ],
-            if (state.error != null) ...[
+            if (!accessBlocked && state.error != null) ...[
               const SizedBox(height: 8),
               Text(state.error!,
                   style: AppText.body(size: 12, color: AppColors.red1)),
-              TextButton(
-                  onPressed: state.loading ? null : state.refresh,
-                  child: const Text('ลองใหม่')),
             ],
           ]),
     );

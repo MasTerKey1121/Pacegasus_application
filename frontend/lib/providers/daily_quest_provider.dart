@@ -3,13 +3,13 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../models/training_date.dart';
 import '../services/program_api.dart';
-import '../services/api_client.dart';
 import '../services/running_session_api.dart';
 import 'auth_provider.dart';
 import 'program_provider.dart';
 import 'run_setup_provider.dart';
 import 'progress_provider.dart';
 import 'training_day_provider.dart';
+import 'run_rewards_provider.dart';
 
 double? questNumber(Object? value) {
   final n = double.tryParse('$value');
@@ -49,17 +49,20 @@ double savedQuestValue(Map quest, Iterable<Map> sessions, String day) {
 
 class DailyQuestNotifier extends ChangeNotifier {
   DailyQuestNotifier(this.api, this.sessions, this.owner, this.day,
-      {this.onConfirmed, String Function()? currentDay})
+      {this.onConfirmed, this.onRewardReceipt, String Function()? currentDay})
       : _currentDay = currentDay;
   final ProgramApi api;
   final RunningSessionApi sessions;
   final String owner, day;
   final VoidCallback? onConfirmed;
+  final Future<void> Function(RewardReceipt receipt)? onRewardReceipt;
+  Future<void>? _refreshing;
   final String Function()? _currentDay;
   Map<String, dynamic>? quest;
   Map? reward;
   double saved = 0;
   bool loading = false;
+  bool hasLoaded = false;
   String? error;
   bool _alive = true;
   bool get completed => quest?['status'] == 'completed';
@@ -77,7 +80,17 @@ class DailyQuestNotifier extends ChangeNotifier {
     return api.getQuestsInRange(from: day, to: tomorrow);
   }
 
-  Future<void> refresh() async {
+  Future<void> refresh() {
+    if (_refreshing != null) return _refreshing!;
+    final future = _refresh();
+    _refreshing = future;
+    future.whenComplete(() {
+      if (identical(_refreshing, future)) _refreshing = null;
+    });
+    return future;
+  }
+
+  Future<void> _refresh() async {
     if (loading || !_alive) return;
     loading = true;
     error = null;
@@ -89,6 +102,7 @@ class DailyQuestNotifier extends ChangeNotifier {
       if (!_alive) return;
       final list =
           ((response['data'] as Map)['quests'] as List).whereType<Map>();
+      hasLoaded = true;
       final previousQuestId = quest?['id'];
       quest = null;
       for (final item in list) {
@@ -166,6 +180,27 @@ class DailyQuestNotifier extends ChangeNotifier {
         }
         quest = Map<String, dynamic>.from(confirmed);
         reward = data['reward'] is Map ? data['reward'] as Map : null;
+        if (reward?['awarded'] == true && onRewardReceipt != null) {
+          final eligible = details
+              .where((r) => savedQuestValue(quest!, [r], day) > 0)
+              .toList()
+            ..sort((a, b) => '${b['ended_at']}'.compareTo('${a['ended_at']}'));
+          final session = quest!['running_session_id']?.toString() ??
+              (eligible.isEmpty ? null : eligible.first['id']?.toString());
+          if (session != null) {
+            try {
+              await onRewardReceipt!(RewardReceipt(
+                  'Main Quest',
+                  quest!['id'].toString(),
+                  session,
+                  RewardReceipt.amount(reward!['coins']),
+                  RewardReceipt.amount(reward!['exp'])));
+            } catch (_) {
+              error =
+                  'server ยืนยันภารกิจแล้ว แต่เก็บใบยืนยันรางวัลในเครื่องไม่สำเร็จ';
+            }
+          }
+        }
         onConfirmed?.call();
         // Keep confirmed state even if a subsequent read is unavailable.
         try {
@@ -175,9 +210,7 @@ class DailyQuestNotifier extends ChangeNotifier {
         if (_alive) error = 'ครบเป้าหมายแล้ว แต่ยังบันทึกภารกิจไม่สำเร็จ: $e';
       }
     } catch (e) {
-      if (_alive && e is ApiException && e.statusCode == 404) {
-        quest = null;
-      } else if (_alive) {
+      if (_alive) {
         error = 'โหลดสถานะภารกิจไม่สำเร็จ: $e';
       }
     } finally {
@@ -196,15 +229,26 @@ class DailyQuestNotifier extends ChangeNotifier {
 }
 
 final dailyQuestProvider = ChangeNotifierProvider<DailyQuestNotifier>((ref) {
+  ref.watch(programProvider.select((p) => p.userProgramId));
   final owner =
       ref.watch(authProvider.select((s) => s.user?['id']))?.toString() ?? '';
   final day = ref.watch(trainingDayProvider);
   final notifier = DailyQuestNotifier(ref.read(programApiProvider),
       ref.read(runningSessionApiProvider), owner, day,
       currentDay: () => trainingDateKey(trainingToday())!,
+      onRewardReceipt: (receipt) =>
+          ref.read(runRewardsProvider).record(receipt),
       onConfirmed: () {
         ref.invalidate(progressProvider);
       });
-  if (owner.isNotEmpty) scheduleMicrotask(notifier.refresh);
+  if (owner.isNotEmpty &&
+      ref.read(programProvider).access == ProgramAccess.ready) {
+    scheduleMicrotask(notifier.refresh);
+  }
+  ref.listen(programProvider.select((p) => p.access), (_, next) {
+    if (owner.isNotEmpty && next == ProgramAccess.ready) {
+      scheduleMicrotask(notifier.refresh);
+    }
+  });
   return notifier;
 });

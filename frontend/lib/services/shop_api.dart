@@ -13,6 +13,7 @@ class ShopItem {
   final bool equipped;
   final String? code;
   final Map<String, dynamic> renderData;
+  bool get canUnequip => const {'headwear', 'back', 'handheld'}.contains(slot);
   const ShopItem(
       {required this.id,
       required this.name,
@@ -92,12 +93,12 @@ class ShopApi {
         (data['total'] as num).toInt());
   }
 
-  Future<void> saveOutfit(Map<String, ShopItem> changes) async {
+  Future<void> saveOutfit(Map<String, ShopItem?> changes) async {
     await client.put('/api/avatar/me', auth: true, body: {
       'equipment': changes.entries
           .map((entry) => {
                 'slot': entry.key,
-                'itemId': entry.value.id,
+                'itemId': entry.value?.id,
               })
           .toList(),
     });

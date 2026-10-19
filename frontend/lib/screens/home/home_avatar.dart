@@ -10,11 +10,15 @@ class HomeAvatar extends ConsumerStatefulWidget {
   const HomeAvatar(
       {super.key,
       this.rendererBuilder,
+      this.outfit,
       this.outfitPreview = const {},
       this.productAsset,
       this.productVariant});
   final String? productAsset, productVariant;
-  final Map<String, ShopItem> outfitPreview;
+
+  /// Explicit owner data for public profiles; never falls back to my outfit.
+  final AvatarOutfit? outfit;
+  final Map<String, ShopItem?> outfitPreview;
   @visibleForTesting
   final WidgetBuilder? rendererBuilder;
   @override
@@ -41,7 +45,11 @@ class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
   void didPushNext() => setState(() => _visible = false);
   @override
   void didPopNext() {
-    if (widget.rendererBuilder == null) ref.invalidate(avatarOutfitProvider);
+    if (widget.rendererBuilder == null &&
+        widget.outfit == null &&
+        widget.productAsset == null) {
+      ref.invalidate(avatarOutfitProvider);
+    }
     setState(() {
       _visible = true;
       _entry++;
@@ -58,12 +66,15 @@ class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
   @override
   Widget build(BuildContext context) {
     // Test renderer injection avoids networking and platform-view setup.
-    final outfit = widget.rendererBuilder != null || widget.productAsset != null
-        ? const AvatarOutfit({})
-        : ref.watch(avatarOutfitProvider).valueOrNull ?? const AvatarOutfit({});
-    final variant = widget.productAsset != null
-        ? widget.productVariant
-        : outfit.preview(widget.outfitPreview).variant;
+    final outfit = widget.outfit ??
+        (widget.rendererBuilder != null || widget.productAsset != null
+            ? const AvatarOutfit({})
+            : ref.watch(avatarOutfitProvider).valueOrNull ??
+                const AvatarOutfit({}));
+    final preview = outfit.preview(widget.outfitPreview);
+    final assetPath = widget.productAsset ?? preview.assetPath;
+    final variant =
+        widget.productAsset != null ? widget.productVariant : preview.variant;
     return ExcludeSemantics(
         child: GestureDetector(
             key: const Key('avatar-rotation'),
@@ -77,14 +88,12 @@ class _HomeAvatarState extends ConsumerState<HomeAvatar> with RouteAware {
                 Positioned.fill(
                     child: IgnorePointer(
                         child: KeyedSubtree(
-                            key: ValueKey(
-                                '$_entry:${widget.productAsset ?? 'avatar'}'),
+                            key: ValueKey('$_entry:$assetPath'),
                             child: widget.rendererBuilder?.call(context) ??
                                 AvatarRenderer(
                                     orbitDegrees: _orbitDegrees,
                                     variantName: variant,
-                                    assetPath: widget.productAsset ??
-                                        'assets/models/pacegasus_starter_v9.glb',
+                                    assetPath: assetPath,
                                     animated: widget.productAsset == null)))),
             ])));
   }

@@ -3,11 +3,13 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import '../app_theme.dart';
 import '../providers/auth_provider.dart';
+import '../providers/avatar_provider.dart';
 import '../services/api_client.dart';
 import '../services/club_api.dart';
 import '../services/friend_api.dart';
 import '../services/player_profile_api.dart';
 import '../screens/home/home_avatar.dart';
+import 'profile_avatar_image.dart';
 
 Future<bool?> showPlayerProfile(BuildContext context, String identifier) =>
     showDialog<bool>(
@@ -155,17 +157,13 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                               radius: 32,
                               backgroundColor: AppColors.cardHi,
                               child: ClipOval(
-                                  child: data['user']['avatarUrl'] == null
-                                      ? const Icon(Icons.person,
-                                          size: 38, color: AppColors.purple2)
-                                      : Image.network(
-                                          data['user']['avatarUrl'] as String,
-                                          width: 64,
-                                          height: 64,
-                                          fit: BoxFit.cover,
-                                          errorBuilder: (_, __, ___) =>
-                                              const Icon(Icons.person,
-                                                  size: 38)))),
+                                  child: ProfileAvatarImage(
+                                      url: data['user']['avatarUrl'] as String?,
+                                      uid: data['user']['uid'] as String?,
+                                      size: 64,
+                                      fallback: const Icon(Icons.person,
+                                          size: 38,
+                                          color: AppColors.purple2)))),
                           const SizedBox(width: 12),
                           Expanded(
                               child: Column(
@@ -213,52 +211,9 @@ class _PlayerProfileDialogState extends ConsumerState<PlayerProfileDialog> {
                         SizedBox(
                             height: 220,
                             child: HomeAvatar(
+                                outfit: AvatarOutfit.fromEquipment(
+                                    data['avatar']['equipment'] as List),
                                 rendererBuilder: widget.avatarRendererBuilder)),
-                        Text('ตัวละครตัวอย่าง • ของที่สวมแสดงด้านล่าง',
-                            style: AppText.body(
-                                size: 11, color: AppColors.textSecondary)),
-                        const SizedBox(height: 12),
-                        if ((data['avatar']['equipment'] as List).isEmpty)
-                          const Text('ยังไม่มีของที่สวม')
-                        else
-                          Wrap(spacing: 8, runSpacing: 8, children: [
-                            for (final entry
-                                in data['avatar']['equipment'] as List)
-                              SizedBox(
-                                  width: 84,
-                                  child: Column(children: [
-                                    Container(
-                                        height: 68,
-                                        width: 68,
-                                        decoration: BoxDecoration(
-                                            color: AppColors.cardHi,
-                                            borderRadius:
-                                                BorderRadius.circular(12),
-                                            border: Border.all(
-                                                color: AppColors.purple2)),
-                                        child: entry['item']['thumbnailUrl'] ==
-                                                null
-                                            ? const Icon(Icons.checkroom,
-                                                color: AppColors.purple2)
-                                            : ClipRRect(
-                                                borderRadius:
-                                                    BorderRadius.circular(12),
-                                                child: Image.network(
-                                                    entry['item']
-                                                            ['thumbnailUrl']
-                                                        as String,
-                                                    fit: BoxFit.contain,
-                                                    errorBuilder: (_, __,
-                                                            ___) =>
-                                                        const Icon(
-                                                            Icons.checkroom)))),
-                                    Text(entry['item']['name'] as String,
-                                        maxLines: 2,
-                                        overflow: TextOverflow.ellipsis,
-                                        textAlign: TextAlign.center,
-                                        style: AppText.body(size: 11))
-                                  ]))
-                          ]),
                         const SizedBox(height: 16),
                         Container(
                             width: double.infinity,

@@ -6,11 +6,13 @@ import 'navigation/home_route_observer.dart';
 import 'providers/auth_provider.dart';
 import 'screens/auth/login_screen.dart';
 import 'screens/auth/auth_destination.dart';
+import 'services/app_orientation.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
+  await lockMobilePortrait();
   await dotenv.load(fileName: ".env");
-  runApp(const ProviderScope(child: PacegasusApp()));
+  runApp(const MobilePortraitLock(child: ProviderScope(child: PacegasusApp())));
 }
 
 class PacegasusApp extends StatelessWidget {
@@ -46,14 +48,48 @@ class _AuthGateState extends ConsumerState<AuthGate> {
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authProvider, (previous, next) {
+      if (previous?.user?['id'] != null &&
+          previous?.user?['id'] != next.user?['id']) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) Navigator.of(context).popUntil((route) => route.isFirst);
+        });
+      }
+    });
     final auth = ref.watch(authProvider);
     final status = auth.status;
 
     switch (status) {
       case AuthStatus.checking:
         return const Scaffold(
-          body: Center(child: CircularProgressIndicator()),
+          body: Center(
+              child: Column(mainAxisSize: MainAxisSize.min, children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('กำลังเชื่อมต่อและตรวจสอบการเข้าสู่ระบบ…'),
+            Text('การเปิดเซิร์ฟเวอร์ครั้งแรกอาจใช้เวลาสักครู่'),
+          ])),
         );
+      case AuthStatus.connectionRequired:
+        return Scaffold(
+            body: Center(
+                child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(mainAxisSize: MainAxisSize.min, children: [
+                      Text(
+                          auth.connectionMessage ??
+                              'เชื่อมต่อเซิร์ฟเวอร์ไม่ได้',
+                          textAlign: TextAlign.center),
+                      const SizedBox(height: 16),
+                      FilledButton(
+                          onPressed: () =>
+                              ref.read(authProvider.notifier).init(),
+                          child: const Text('ลองเชื่อมต่อใหม่')),
+                      TextButton(
+                          onPressed: () =>
+                              ref.read(authProvider.notifier).logout(),
+                          child: const Text('ออกจากระบบ')),
+                    ]))));
       case AuthStatus.authenticated:
         return authenticatedDestination(context, auth.user!);
       case AuthStatus.unauthenticated:

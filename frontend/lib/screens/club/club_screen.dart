@@ -7,6 +7,7 @@ import '../../services/club_api.dart';
 import '../../services/club_image_picker.dart';
 import '../../widgets/player_profile_dialog.dart';
 import '../../widgets/common.dart';
+import '../../widgets/profile_avatar_image.dart';
 
 const _accent = Color(0xFFC5A2FF);
 const _roles = {
@@ -619,8 +620,11 @@ class _ClubDetailScreenState extends ConsumerState<ClubDetailScreen> {
                                         },
                                         padding: const EdgeInsets.all(12),
                                         child: Row(children: [
-                                          _memberAvatar(member['user']
-                                              ['avatarUrl'] as String?),
+                                          _memberAvatar(
+                                              member['user']['avatarUrl']
+                                                  as String?,
+                                              uid: member['user']['uid']
+                                                  as String?),
                                           const SizedBox(width: 12),
                                           Expanded(
                                               child: Column(
@@ -733,18 +737,15 @@ Widget _editButton(String label, VoidCallback action) => IconButton.filledTonal(
         foregroundColor: AppColors.bg1,
         shape:
             RoundedRectangleBorder(borderRadius: BorderRadius.circular(12))));
-Widget _memberAvatar(String? url) => CircleAvatar(
+Widget _memberAvatar(String? url, {String? uid}) => CircleAvatar(
     radius: 25,
-    backgroundColor: const Color(0xFF493460),
-    child: url == null || url.isEmpty
-        ? const Icon(Icons.person, color: _accent)
-        : ClipOval(
-            child: Image.network(url,
-                width: 50,
-                height: 50,
-                fit: BoxFit.cover,
-                errorBuilder: (_, __, ___) =>
-                    const Icon(Icons.person, color: _accent))));
+    backgroundColor: AppColors.cardHi,
+    child: ClipOval(
+        child: ProfileAvatarImage(
+            url: url,
+            uid: uid,
+            size: 50,
+            fallback: const Icon(Icons.person_outline, color: _accent))));
 
 class _ClubManagementMenu extends StatelessWidget {
   final bool leader;
@@ -849,7 +850,8 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
     });
     try {
       if (_selectedImage != null) {
-        _input.text = await ref.read(clubApiProvider).uploadImage(_selectedImage!);
+        _input.text =
+            await ref.read(clubApiProvider).uploadImage(_selectedImage!);
         _selectedImage = null;
       }
       final value = _input.text.trim();
@@ -872,7 +874,10 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
 
   Future<void> _pickImage() async {
     if (_busy || _picking) return;
-    setState(() { _picking = true; _failure = null; });
+    setState(() {
+      _picking = true;
+      _failure = null;
+    });
     try {
       final bytes = await ref.read(clubImagePickerProvider).pick();
       if (mounted && bytes != null) {
@@ -880,7 +885,8 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
       }
     } catch (e) {
       if (mounted) {
-        setState(() => _failure = e is ApiException ? e.message : 'เลือกรูปไม่สำเร็จ กรุณาลองใหม่');
+        setState(() => _failure =
+            e is ApiException ? e.message : 'เลือกรูปไม่สำเร็จ กรุณาลองใหม่');
       }
     } finally {
       if (mounted) setState(() => _picking = false);
@@ -898,36 +904,54 @@ class _ClubEditDialogState extends ConsumerState<_ClubEditDialog> {
                   child: Column(mainAxisSize: MainAxisSize.min, children: [
                     if (widget.field == 'imageUrl') ...[
                       _selectedImage == null
-                        ? _crest(_input.text.trim(), size: 80)
-                        : ClipRRect(borderRadius: BorderRadius.circular(16), child: Image.memory(_selectedImage!, width: 80, height: 80, fit: BoxFit.cover)),
+                          ? _crest(_input.text.trim(), size: 80)
+                          : ClipRRect(
+                              borderRadius: BorderRadius.circular(16),
+                              child: Image.memory(_selectedImage!,
+                                  width: 80, height: 80, fit: BoxFit.cover)),
                       const SizedBox(height: 12),
-                      OutlinedButton.icon(onPressed: _busy || _picking ? null : _pickImage, icon: const Icon(Icons.add_photo_alternate_outlined), label: Text(_picking ? 'กำลังเลือกรูป…' : 'เลือกรูปโปรไฟล์คลับ')),
-                      Text('JPG, PNG หรือ WebP · ไม่เกิน 2 MB', style: AppText.body(size: 12, color: AppColors.textSecondary)),
+                      OutlinedButton.icon(
+                          onPressed: _busy || _picking ? null : _pickImage,
+                          icon: const Icon(Icons.add_photo_alternate_outlined),
+                          label: Text(_picking
+                              ? 'กำลังเลือกรูป…'
+                              : 'เลือกรูปโปรไฟล์คลับ')),
+                      Text('JPG, PNG หรือ WebP · ไม่เกิน 2 MB',
+                          style: AppText.body(
+                              size: 12, color: AppColors.textSecondary)),
                       if (_selectedImage != null || _input.text.isNotEmpty)
-                        TextButton(onPressed: _busy || _picking ? null : () => setState(() { _selectedImage = null; _input.clear(); }), child: const Text('นำรูปออก')),
+                        TextButton(
+                            onPressed: _busy || _picking
+                                ? null
+                                : () => setState(() {
+                                      _selectedImage = null;
+                                      _input.clear();
+                                    }),
+                            child: const Text('นำรูปออก')),
                     ] else
                       TextFormField(
-                        controller: _input,
-                        enabled: !_busy,
-                        maxLength: widget.field == 'name' ? 40 : 500,
-                        maxLines: widget.field == 'description' ? 4 : 1,
-                        decoration: InputDecoration(
-                            labelText: _label,
-                            border: const OutlineInputBorder()),
-                        validator: (text) {
-                          final value = (text ?? '').trim();
-                          if (widget.field == 'name' && value.length < 3) {
-                            return 'ชื่อคลับต้องมี 3–40 ตัวอักษร';
-                          }
-                          return null;
-                        }),
+                          controller: _input,
+                          enabled: !_busy,
+                          maxLength: widget.field == 'name' ? 40 : 500,
+                          maxLines: widget.field == 'description' ? 4 : 1,
+                          decoration: InputDecoration(
+                              labelText: _label,
+                              border: const OutlineInputBorder()),
+                          validator: (text) {
+                            final value = (text ?? '').trim();
+                            if (widget.field == 'name' && value.length < 3) {
+                              return 'ชื่อคลับต้องมี 3–40 ตัวอักษร';
+                            }
+                            return null;
+                          }),
                     if (_failure != null)
                       Text(_failure!,
                           style: const TextStyle(color: AppColors.red2)),
                   ]))),
           actions: [
             TextButton(
-                onPressed: _busy || _picking ? null : () => Navigator.pop(context),
+                onPressed:
+                    _busy || _picking ? null : () => Navigator.pop(context),
                 child: const Text('ยกเลิก')),
             FilledButton(
                 onPressed: _busy || _picking ? null : _save,
@@ -1057,8 +1081,9 @@ class _ClubMembersScreenState extends ConsumerState<ClubMembersScreen> {
                           context, member['user']['uid'] as String);
                       if (mounted) setState(_reload);
                     },
-                    leading: _crest(member['user']['avatarUrl'] as String?,
-                        size: 44),
+                    leading: _memberAvatar(
+                        member['user']['avatarUrl'] as String?,
+                        uid: member['user']['uid'] as String?),
                     title: Text(
                         member['user']['displayName'] as String? ?? 'นักวิ่ง'),
                     subtitle: Text(

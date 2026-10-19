@@ -5,6 +5,7 @@ import '../../providers/auth_provider.dart';
 import '../../services/api_client.dart';
 import '../../services/friend_api.dart';
 import '../../widgets/player_profile_dialog.dart';
+import '../../widgets/profile_avatar_image.dart';
 
 final friendApiProvider =
     Provider<FriendApi>((ref) => FriendApi(ref.watch(apiClientProvider)));
@@ -252,13 +253,11 @@ class _FriendsScreenState extends ConsumerState<FriendsScreen> {
             },
             child: Row(children: [
               ClipOval(
-                  child: entry.avatarUrl == null || entry.avatarUrl!.isEmpty
-                      ? _avatar()
-                      : Image.network(entry.avatarUrl!,
-                          width: 48,
-                          height: 48,
-                          fit: BoxFit.cover,
-                          errorBuilder: (_, __, ___) => _avatar())),
+                  child: ProfileAvatarImage(
+                      url: entry.avatarUrl,
+                      uid: entry.uid,
+                      size: 48,
+                      fallback: _avatar())),
               const SizedBox(width: 14),
               Expanded(
                   child: Column(

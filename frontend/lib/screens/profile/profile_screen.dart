@@ -8,6 +8,7 @@ import '../../services/api_client.dart';
 import '../../services/own_profile_api.dart';
 import '../../services/profile_image_picker.dart';
 import '../../widgets/common.dart';
+import '../../services/profile_avatar_url.dart';
 import '../home/home_avatar.dart';
 
 class ProfileScreen extends ConsumerStatefulWidget {
@@ -33,9 +34,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
       _loading = true;
       _error = null;
     });
+    final owner = ref.read(authProvider).user?['id'];
     try {
       final data = await ref.read(ownProfileApiProvider).load();
-      if (mounted) setState(() => _data = data);
+      if (mounted && ref.read(authProvider).user?['id'] == owner) {
+        final user = Map<String, dynamic>.from(data['user'] as Map);
+        user['avatarUrl'] = profileAvatarUrl(
+            user['avatarUrl'], ref.read(apiClientProvider).baseUrl);
+        data['user'] = user;
+        setState(() => _data = data);
+        final account = ref.read(authProvider).user;
+        if (account != null) {
+          ref.read(authProvider.notifier).updateUser({...account, ...user});
+        }
+      }
     } catch (e) {
       if (mounted) {
         setState(() =>
@@ -47,16 +59,26 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   }
 
   Future<void> _edit(String field) async {
+    final owner = ref.read(authProvider).user?['id'];
     final updated = await showDialog<Map<String, dynamic>>(
         context: context,
         barrierDismissible: false,
         builder: (_) => _EditProfile(
             field: field, value: _data!['user'][field] as String? ?? ''));
-    if (updated == null || !mounted) return;
+    if (updated == null ||
+        !mounted ||
+        ref.read(authProvider).user?['id'] != owner) {
+      return;
+    }
     _applyUser(updated);
   }
 
   void _applyUser(Map<String, dynamic> updated) {
+    updated = {
+      ...updated,
+      'avatarUrl': profileAvatarUrl(
+          updated['avatarUrl'], ref.read(apiClientProvider).baseUrl)
+    };
     setState(() => _data!['user'] = updated);
     final account = ref.read(authProvider).user;
     if (account != null) {
@@ -69,11 +91,20 @@ class _ProfileScreenState extends ConsumerState<ProfileScreen> {
   Future<void> _changeAvatar() async {
     if (_uploading || _loading || _data == null) return;
     setState(() => _uploading = true);
+    final owner = ref.read(authProvider).user?['id'];
     try {
       final image = await ref.read(profileImagePickerProvider).pick();
-      if (image == null || !mounted) return;
+      if (image == null ||
+          !mounted ||
+          ref.read(authProvider).user?['id'] != owner) {
+        return;
+      }
       final updated = await ref.read(ownProfileApiProvider).uploadAvatar(image);
-      if (!mounted) return;
+      if (!mounted || ref.read(authProvider).user?['id'] != owner) return;
+      final url = profileAvatarUrl(
+          updated['avatarUrl'], ref.read(apiClientProvider).baseUrl);
+      if (url != null) await NetworkImage(url).evict();
+      if (!mounted || ref.read(authProvider).user?['id'] != owner) return;
       _applyUser(updated);
       showAppToast(context, 'บันทึกรูปโปรไฟล์แล้ว');
     } catch (e) {
