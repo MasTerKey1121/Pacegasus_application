@@ -50,13 +50,6 @@ class _TrainingRegistrationScreenState
               children: [
                 Row(
                   children: [
-                    RoundIconButton(
-                      icon: Icons.arrow_back,
-                      onTap: program.isRegistering
-                          ? null
-                          : () => Navigator.of(context).pop(),
-                    ),
-                    const SizedBox(width: 14),
                     Text('ลงทะเบียนตารางซ้อม',
                         style: AppText.heading(size: 19)),
                   ],
