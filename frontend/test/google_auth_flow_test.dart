@@ -236,6 +236,8 @@ void main() {
         data.hasPastInjuries = false;
         data.hasCurrentInjuries = false;
         data.healthGoal = 'เพิ่มความอึด';
+        data.distanceGoal = 'วิ่ง 5K';
+        data.skipTargetFinishTime = true;
         data.hasRunningExperience = false;
         data.longestDistance = 'น้อยกว่า 5 km';
       });
